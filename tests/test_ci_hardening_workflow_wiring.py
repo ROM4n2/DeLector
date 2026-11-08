@@ -35,6 +35,14 @@ PACKAGING_SURFACE_PATHS: tuple[str, ...] = (
     "start.py",
     "requirements.txt",
     "requirements-desktop.txt",
+    # 2026-11-08 补齐：Windows/Android 共同内嵌的前端资产
+    "static/**",
+    # build-release 的 build-android 打包面
+    "android/**",
+    # Android 打包前同步 static + delector 的唯一入口
+    "tools/sync_android_sources.py",
+    # 打包期重算/注入 asset-fingerprint 的模块
+    "delector/core/assets_manifest.py",
     "tools/verify_windows_portable.py",
     ".github/workflows/build-release.yml",
 )

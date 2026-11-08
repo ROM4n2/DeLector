@@ -28,6 +28,7 @@
   "tests/test_cards_state_split.py": 1.6,
   "tests/test_cards_wb_source_probe.py": 0.2,
   "tests/test_cards_workbench_no_review_probe.py": 0.3,
+  "tests/test_check_css_sync.py": 0.5,
   "tests/test_check_index_html_sync.py": 0.5,
   "tests/test_check_layer_invariants.py": 1.1,
   "tests/test_check_mock_drift.py": 0.1,

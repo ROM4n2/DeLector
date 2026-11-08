@@ -1,0 +1,576 @@
+/* ── View: German Vocabulary Workbench（iframe 嵌入）──
+   flex: 1 让 iframe 填满 view 剩余高度，min-height: 0
+   防止 flex 子项被内容撑破视口（iframe 内容高度不受父级约束时默认撑开）。
+   inline style 不写 height:100% —— 高度完全交给 flex 链，避免两处真相漂移。 */
+#view-german.active {
+  display: flex;
+  flex-direction: column;
+}
+#view-german iframe {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: none;
+}
+
+/* ── View 1: Home Library ─────────────────── */
+
+#view-home {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 4rem;
+}
+
+.home-hero {
+  margin-bottom: 1.25rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1.5px solid var(--ink);
+}
+
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  padding: 4px 10px;
+  border: 1px solid var(--ink);
+  border-radius: 3px;
+  background: var(--paper-card);
+  box-shadow: 1.5px 1.5px 0 var(--ink);
+  margin-bottom: 0.9rem;
+}
+
+.hero-eyebrow .dot {
+  width: 6px;
+  height: 6px;
+  background: var(--coral, var(--accent));
+  border-radius: 50%;
+}
+
+.home-hero h1 {
+  font-family: var(--serif-display);
+  font-size: clamp(2.25rem, 4vw, 3.25rem);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  margin-bottom: 0.65rem;
+}
+
+.home-hero h1 .accent-word {
+  color: var(--coral, var(--accent));
+  font-style: italic;
+}
+
+.home-hero p {
+  color: var(--ink-mute);
+  font-size: 1rem;
+  line-height: 1.65;
+  max-width: 680px;
+}
+
+.home-cta {
+  margin-top: 1.1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+/* ── Satz-Labor: first-screen live syntax demo ─────────────── */
+.satz-lab {
+  margin: 0 0 2rem;
+  padding: 1.15rem 1.25rem 1.25rem;
+  background: var(--paper-card);
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.satz-lab-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.satz-lab-eyebrow {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--coral, var(--accent));
+}
+
+.satz-lab h2 {
+  font-family: var(--serif-display);
+  font-size: 1.45rem;
+  line-height: 1.2;
+  margin: 0.25rem 0 0.3rem;
+  color: var(--ink);
+}
+
+.satz-lab-sub {
+  color: var(--ink-mute);
+  font-size: 0.875rem;
+  line-height: 1.55;
+  max-width: 660px;
+}
+
+.satz-lab-badge {
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--ink-mute);
+  border: 1px solid var(--ink);
+  border-radius: 3px;
+  padding: 3px 7px;
+  background: var(--paper-accent);
+  white-space: nowrap;
+}
+
+.satz-lab-samples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0.95rem 0 0.85rem;
+}
+
+.satz-lab-chip {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  border-radius: 3px;
+  padding: 4px 9px;
+  cursor: pointer;
+  transition: box-shadow var(--dur-fast) ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .satz-lab-chip:hover {
+    box-shadow: 1.5px 1.5px 0 var(--ink);
+  }
+}
+
+.satz-lab-chip.is-active {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.satz-lab-output {
+  border-top: 1px dashed var(--rule);
+  padding-top: 0.85rem;
+  min-height: 120px;
+}
+
+.satz-lab-placeholder,
+.satz-lab-loading {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  color: var(--ink-mute);
+  padding: 1rem 0;
+  line-height: 1.7;
+}
+
+.satz-lab-loading-sentence {
+  font-family: var(--serif);
+  font-style: italic;
+}
+
+.satz-lab-error {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  color: #b91c1c;
+  padding: 0.75rem 0;
+  line-height: 1.7;
+}
+
+.satz-lab-retry {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  margin-left: 0.35rem;
+  padding: 2px 7px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.satz-lab-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.satz-lab-meta-tag {
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 1px 6px;
+}
+
+.satz-lab-sentence {
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  line-height: 2.1;
+  color: var(--ink);
+  margin-bottom: 0.65rem;
+}
+
+.satz-tok {
+  border-radius: 2px;
+  padding: 1px;
+  transition: background 120ms ease;
+}
+
+.satz-tok[data-case]::after {
+  content: attr(data-case);
+  font-family: var(--mono);
+  font-size: 0.5625rem;
+  font-weight: 700;
+  vertical-align: super;
+  margin-left: 1px;
+  color: var(--coral, var(--accent));
+  letter-spacing: 0;
+}
+
+.satz-tok.clause-highlight {
+  background: #fef08a;
+  box-shadow: 0 0 0 1px #f59e0b;
+}
+
+.satz-case-note {
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  color: var(--ink-mute);
+  margin-top: 0.35rem;
+}
+
+.satz-fields .feld-pill {
+  min-width: 78px;
+}
+
+.satz-tree {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.satz-lab .clause-node-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.empty-state-extra {
+  margin-top: 0.85rem;
+}
+
+@media (max-width: 640px) {
+  .satz-lab {
+    padding: 1rem;
+  }
+
+  .satz-lab h2 {
+    font-size: 1.2rem;
+  }
+
+  .satz-lab-sentence {
+    font-size: 1rem;
+  }
+
+  .satz-fields .feld-pill {
+    flex: 1 1 calc(50% - 0.35rem);
+  }
+}
+
+/* CEFR Legend — broadsheet typewriter pill bar */
+
+.cefr-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 2rem;
+  padding: 0.85rem 1.125rem;
+  background: var(--paper-card);
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.cefr-legend strong {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.hl-pill {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hl-A1 {
+  background: var(--hl-A1);
+  color: var(--hl-A1-ink);
+}
+
+.hl-A2 {
+  background: var(--hl-A2);
+  color: var(--hl-A2-ink);
+}
+
+.hl-B1 {
+  background: var(--hl-B1);
+  color: var(--hl-B1-ink);
+}
+
+.hl-B2 {
+  background: var(--hl-B2);
+  color: var(--hl-B2-ink);
+}
+
+.hl-C1 {
+  background: var(--hl-C1);
+  color: var(--hl-C1-ink);
+}
+
+.section-label {
+  display: flex;
+
+  justify-content: space-between;
+
+  align-items: baseline;
+
+  margin-bottom: 0.875rem;
+}
+
+.section-title {
+  font-family: var(--mono);
+
+  font-size: 0.6875rem;
+
+  font-weight: 600;
+
+  letter-spacing: 0.16em;
+
+  text-transform: uppercase;
+
+  color: var(--pencil);
+}
+
+/* ── Ruled Article Rows (Classic Editorial Broadsheet) ── */
+
+#article-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 0.5rem;
+}
+
+.article-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.125rem 0.5rem;
+  border-bottom: 1px solid var(--rule);
+  cursor: pointer;
+  transition: all var(--dur-fast) ease;
+  position: relative;
+}
+
+.article-row:first-child {
+  border-top: 1px solid var(--rule);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .article-row:hover {
+    background: var(--paper-tint);
+  }
+}
+
+.article-row-title {
+  font-family: var(--serif-display, var(--serif));
+  font-size: 1.28rem;
+  font-weight: 700;
+  font-style: italic;
+  color: var(--ink);
+  line-height: 1.35;
+  transition: color var(--dur-fast) ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .article-row:hover .article-row-title {
+    color: var(--accent);
+  }
+}
+
+.article-row-meta {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--pencil);
+  margin-top: 0.25rem;
+  margin-bottom: 0.35rem;
+}
+
+.article-row-arrow {
+  color: var(--pencil);
+  font-size: 1.25rem;
+  opacity: 0.35;
+  transition: all var(--dur-fast) ease;
+  flex-shrink: 0;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .article-row:hover .article-row-arrow {
+    opacity: 1;
+    color: var(--accent);
+  }
+}
+
+.article-row-del {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--pencil);
+  font-size: 0.95rem;
+  padding: 0.2rem 0.35rem;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0.2;
+  transition: all var(--dur-fast) ease;
+  line-height: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .article-row:hover .article-row-del {
+    opacity: 0.6;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .article-row-del:hover {
+    opacity: 1 !important;
+    color: var(--danger) !important;
+    background: rgba(176, 48, 48, 0.08);
+    border-color: rgba(176, 48, 48, 0.2);
+    transform: scale(1.1);
+  }
+}
+
+/* Mini CEFR Bar on Article Rows & Cards */
+
+.mini-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.mini-cefr-bar {
+  display: flex;
+  height: 6px;
+  width: 100px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--rule);
+  border: 0.5px solid var(--line);
+}
+
+.mini-seg {
+  height: 100%;
+  min-width: 1px;
+  flex-shrink: 0;
+}
+.mini-seg.A1 {
+  background: var(--hl-A1-ink);
+}
+.mini-seg.A2 {
+  background: var(--hl-A2-ink);
+}
+.mini-seg.B1 {
+  background: var(--hl-B1-ink);
+}
+.mini-seg.B2 {
+  background: var(--hl-B2-ink);
+}
+.mini-seg.C1 {
+  background: var(--hl-C1-ink);
+}
+
+.mini-level-badge {
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.06em;
+  border: 1px solid currentColor;
+}
+
+.mini-level-A1 {
+  background: var(--hl-A1);
+  color: var(--hl-A1-ink);
+  border-color: var(--hl-A1-ink);
+}
+.mini-level-A2 {
+  background: var(--hl-A2);
+  color: var(--hl-A2-ink);
+  border-color: var(--hl-A2-ink);
+}
+.mini-level-B1 {
+  background: var(--hl-B1);
+  color: var(--hl-B1-ink);
+  border-color: var(--hl-B1-ink);
+}
+.mini-level-B2 {
+  background: var(--hl-B2);
+  color: var(--hl-B2-ink);
+  border-color: var(--hl-B2-ink);
+}
+.mini-level-C1 {
+  background: var(--hl-C1);
+  color: var(--hl-C1-ink);
+  border-color: var(--hl-C1-ink);
+}
+
+.empty-state {
+  padding: 3.5rem 1rem;
+  text-align: center;
+  border: 1.5px dashed var(--rule);
+  border-radius: 8px;
+  color: var(--ink-mute);
+  font-family: var(--mono);
+  font-size: 0.875rem;
+  background: rgba(255, 255, 255, 0.6);
+  grid-column: 1 / -1;
+}
+
+/* ── View 2: Reader Workspace ────────────── */
+

@@ -1,0 +1,514 @@
+#view-reader {
+  max-width: 760px;
+
+  margin: 0 auto;
+
+  padding: 2rem 1.5rem 6rem; /* extra bottom: cassette deck clearance */
+
+  box-sizing: border-box;
+
+  width: 100%;
+
+  transition:
+    transform 0.36s cubic-bezier(0.16, 1, 0.3, 1),
+    margin 0.36s cubic-bezier(0.16, 1, 0.3, 1),
+    max-width 0.36s cubic-bezier(0.16, 1, 0.3, 1),
+    padding 0.36s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 首页点入文稿时的拉开/展卷效果 */
+
+#view-reader.active {
+  animation: readerUnfold 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes readerUnfold {
+  0% {
+    opacity: 0;
+
+    transform: translateY(18px) scale(0.985);
+  }
+
+  100% {
+    opacity: 1;
+
+    transform: translateY(0) scale(1);
+  }
+}
+
+body.drawer-open {
+  --reader-usable-width: calc(100vw - var(--drawer-width) - var(--drawer-gap));
+
+  --reader-content-width: min(760px, var(--reader-usable-width));
+}
+
+body.drawer-open #view-reader {
+  width: var(--reader-content-width);
+
+  max-width: var(--reader-content-width);
+
+  margin-left: max(
+    0px,
+    calc((var(--reader-usable-width) - var(--reader-content-width)) / 2)
+  );
+
+  margin-right: 0;
+
+  margin-top: 0;
+
+  margin-bottom: 0;
+
+  position: relative;
+
+  left: 0;
+}
+
+.reader-topbar {
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  margin-bottom: 2rem;
+
+  padding-bottom: 1rem;
+
+  border-bottom: 2px solid var(--ink);
+}
+
+.reader-topbar h2 {
+  font-family: var(--serif);
+
+  font-size: 1.375rem;
+
+  font-style: italic;
+
+  font-weight: 700;
+
+  color: var(--ink);
+
+  max-width: 480px;
+
+  overflow: hidden;
+
+  white-space: nowrap;
+
+  text-overflow: ellipsis;
+}
+
+/* Typography & Meta Controls */
+
+.reader-controls {
+  display: flex;
+
+  align-items: center;
+
+  gap: 0.625rem;
+}
+
+.typo-pill {
+  display: inline-flex;
+
+  align-items: center;
+
+  background: var(--paper-tint);
+
+  border: 1px solid var(--rule);
+
+  border-radius: 6px;
+
+  padding: 2px;
+
+  gap: 2px;
+}
+
+.typo-btn {
+  font-family: var(--sans);
+
+  font-size: 0.6875rem;
+
+  font-weight: 600;
+
+  padding: 3px 7px;
+
+  border-radius: 4px;
+
+  color: var(--pencil);
+
+  background: transparent;
+
+  border: none;
+
+  cursor: pointer;
+
+  transition: all 0.12s ease;
+
+  line-height: 1.2;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .typo-btn:hover {
+    color: var(--ink);
+    background: rgba(255, 255, 255, 0.6);
+  }
+}
+
+.typo-btn.active {
+  background: var(--ink);
+
+  color: #fef9ee;
+}
+
+.typo-sep {
+  width: 1px;
+
+  height: 12px;
+
+  background: var(--rule);
+
+  margin: 0 1px;
+}
+
+/* Reader CEFR Distribution Heatbar — ledger format */
+
+.reader-heatbar-wrap {
+  margin-bottom: 1.75rem;
+
+  background: var(--paper-tint);
+
+  border: 1px solid var(--rule);
+
+  border-radius: 0;
+
+  border-left: 3px solid var(--ink);
+
+  padding: 0.75rem 1rem;
+}
+
+.heatbar-label {
+  display: flex;
+
+  justify-content: space-between;
+
+  align-items: center;
+
+  font-family: var(--mono);
+
+  font-size: 0.6875rem;
+
+  font-weight: 600;
+
+  letter-spacing: 0.12em;
+
+  text-transform: uppercase;
+
+  color: var(--pencil);
+
+  margin-bottom: 0.5rem;
+}
+
+.reader-heatbar {
+  display: flex;
+
+  height: 20px;
+
+  border-radius: 0;
+
+  overflow: hidden;
+
+  border: 1px solid var(--rule);
+
+  background: var(--paper-deep);
+
+  /* gap removed: integer-percent segments don't need gaps and overflow can accumulate */
+}
+
+.heatbar-seg {
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  font-family: var(--mono);
+
+  font-size: 0.6875rem;
+
+  font-weight: 700;
+
+  cursor: pointer;
+
+  user-select: none;
+
+  transition:
+    opacity 0.15s,
+    transform 0.15s;
+
+  white-space: nowrap;
+
+  padding: 0 4px;
+
+  /* Prevent tiny segments from collapsing entirely */
+  min-width: 1px;
+  flex-shrink: 0;
+
+  /* Hairline right-border acts as visual divider (replaces gap) */
+  border-right: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.heatbar-seg:last-child {
+  border-right: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .heatbar-seg:hover {
+    opacity: 0.85;
+  }
+}
+
+.heatbar-seg.A1 {
+  background: var(--hl-A1);
+  color: var(--hl-A1-ink);
+}
+
+.heatbar-seg.A2 {
+  background: var(--hl-A2);
+  color: var(--hl-A2-ink);
+}
+
+.heatbar-seg.B1 {
+  background: var(--hl-B1);
+  color: var(--hl-B1-ink);
+}
+
+.heatbar-seg.B2 {
+  background: var(--hl-B2);
+  color: var(--hl-B2-ink);
+}
+
+.heatbar-seg.C1 {
+  background: var(--hl-C1);
+  color: var(--hl-C1-ink);
+}
+
+/* Focus Filter Mode */
+
+.heatbar-seg.focused {
+  outline: 2px solid var(--ink);
+
+  outline-offset: -2px;
+
+  font-weight: 800;
+
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+
+  transform: scaleY(1.08);
+}
+
+body.focus-mode .tok {
+  opacity: 0.28;
+
+  transition:
+    opacity 0.22s,
+    transform 0.22s;
+}
+
+body.focus-mode .tok.focus-active {
+  opacity: 1 !important;
+
+  transform: scale(1.06);
+
+  display: inline-block;
+
+  box-shadow: 0 0 0 2px var(--ink);
+
+  /* 聚焦标记只保留静态 scale(1.06) + 2px ink ring；不再呼吸。
+     正文词元不得持续抢占注意力（ADR-0029 §8 / 停止门 #2）。 */
+}
+
+/* Paper Reading Canvas */
+
+#reader-content {
+  background: var(--paper-card);
+
+  border: 2px solid var(--ink);
+
+  border-radius: 0;
+
+  padding: 2.5rem 2.25rem;
+
+  box-shadow: 4px 5px 0 var(--paper-deep);
+
+  font-family: var(--sans);
+
+  font-size: var(--reader-fs, 1.125rem);
+
+  font-weight: 450;
+
+  line-height: 1.85;
+
+  color: var(--ink);
+
+  letter-spacing: 0.005em;
+
+  box-sizing: border-box;
+
+  max-width: 100%;
+
+  width: 100%;
+
+  overflow-wrap: break-word;
+
+  word-wrap: break-word;
+
+  hyphens: auto;
+
+  -webkit-hyphens: auto;
+}
+
+#reader-content.font-serif {
+  font-family: var(--serif-text);
+
+  font-weight: 400;
+
+  line-height: 1.95;
+
+  letter-spacing: 0.012em;
+}
+
+.reader-p {
+  margin-bottom: 1.5rem;
+
+  text-align: justify;
+
+  text-justify: inter-word;
+
+  hyphens: auto;
+
+  -webkit-hyphens: auto;
+
+  overflow-wrap: break-word;
+}
+
+.reader-p:last-child {
+  margin-bottom: 0;
+}
+
+/* Marker Highlighter Tokens */
+
+.tok {
+  display: inline;
+
+  position: relative;
+
+  cursor: pointer;
+
+  padding: 2px 3px;
+
+  margin: 0 1px;
+
+  border-radius: 3px;
+
+  transition: all 0.12s ease;
+
+  box-decoration-break: clone;
+
+  -webkit-box-decoration-break: clone;
+
+  white-space: normal;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tok:hover {
+    background: rgba(233, 132, 37, 0.2);
+  }
+}
+
+/* ── CEFR 词阶透视：三档模式（ADR-0026 决策 2C） ─────────────────────────────
+   分级初衷是「难度预警」，不是「给每个词上色」。德语散文里 A1/A2 基础词（冠词、
+   代词、介词、连词）占 70%~80%，无差别上色后背景噪声压过正文，形成碎花布效应。
+   故默认档＝沉浸精读：基石词零铺色，进阶词只留一道极细下沿，难词留一处柔和点缀。
+   `.tok.sel`（划词选中）与 hover 反馈永远拥有最高优先级。 */
+
+/* 沉浸精读（默认）：A1/A2 完全不铺色 */
+.tok.A1,
+.tok.A2 {
+  background: transparent;
+}
+
+/* B1/B2：不铺色，只在下沿留一道极淡的墨线，作为可感知但不打扰的难度刻度 */
+.tok.B1,
+.tok.B2 {
+  background: transparent;
+
+  box-shadow: inset 0 -1px 0 var(--cefr-edge-weak);
+}
+
+/* C1：考纲核心难词，保留唯一的柔和点缀色 */
+.tok.C1 {
+  background: var(--hl-C1);
+}
+
+/* 考点聚焦：只留 B2 / C1，其余全部归零 */
+#reader-content.cefr-mode-exam .tok.A1,
+#reader-content.cefr-mode-exam .tok.A2,
+#reader-content.cefr-mode-exam .tok.B1 {
+  background: transparent;
+
+  box-shadow: none;
+}
+
+#reader-content.cefr-mode-exam .tok.B2 {
+  background: transparent;
+
+  box-shadow: inset 0 -2px 0 var(--cefr-edge-exam);
+}
+
+/* 全景热力：恢复全量 CEFR 彩色图谱，供考前地毯式扫读 */
+#reader-content.cefr-mode-heatmap .tok.A1 {
+  background: var(--hl-A1);
+}
+
+#reader-content.cefr-mode-heatmap .tok.A2 {
+  background: var(--hl-A2);
+}
+
+#reader-content.cefr-mode-heatmap .tok.B1 {
+  background: var(--hl-B1);
+
+  box-shadow: none;
+}
+
+#reader-content.cefr-mode-heatmap .tok.B2 {
+  background: var(--hl-B2);
+
+  box-shadow: none;
+}
+
+#reader-content.cefr-mode-heatmap .tok.C1 {
+  background: var(--hl-C1);
+}
+
+/* 交互反馈压过一切静态词阶色（含全景热力档） */
+@media (hover: hover) and (pointer: fine) {
+  /* 交互反馈压过一切静态词阶色（含全景热力档） */
+  #reader-content .reader-p .tok:hover {
+    background: rgba(233, 132, 37, 0.2);
+    box-shadow: none;
+    /* 交互反馈压过一切静态词阶色（含全景热力档） */
+  }
+}
+
+.tok.sel {
+  background: var(--ink) !important;
+
+  color: #fef9ee !important;
+
+  border-radius: 3px;
+
+  box-shadow: 0 0 0 2px var(--ink) !important;
+}
+
+/* ── Sticky Note Drawer (Analysis Hub) ───── */
+

@@ -51,6 +51,7 @@ SHARDS: dict[str, tuple[str, ...]] = {
         "tests/test_cards_state_split.py",
         "tests/test_cards_wb_source_probe.py",
         "tests/test_cards_workbench_no_review_probe.py",
+        "tests/test_check_css_sync.py",
         "tests/test_check_index_html_sync.py",
         "tests/test_check_layer_invariants.py",
         "tests/test_check_mock_drift.py",
