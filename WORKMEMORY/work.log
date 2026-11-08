@@ -695,3 +695,18 @@ Status: PR_OPEN —— P2 组件族第五轮（写作 writer，最后一族）�
 - 校验：build_css + check_css_sync PASS；visual_gates 505/99/7/4.63 全 PASS；reduced-motion 下新元素 1e-05s、无动画。
 - PR #302 已开（base master，不自动合并）；PR CI 13 pass / 0 failure / 0 cancelled / 1 skipped（Master Direct-Push Scope Gate 按设计在 PR 上 skipping）。
 - 收尾：8781–8785 服务已停；临时 worktree D:\Code\DeLector-visual-before 已移除。
+
+### 2026-11-08 18:48 | deepseek-v4-1-flash__traecode | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+目标：全站换皮 P2 五族的文档定稿与经验沉淀（docs/design-system.md 定稿、五族收口记录、Obsidian 草稿续写）。
+不做：不改任何 CSS/JS/HTML/Python/测试，不发版本号，不动闸门阈值，不合并 PR。
+并行声明：在独立 worktree D:\Code\DeLector-docs-reskin + 分支 docs/reskin-finalization 上进行，不占主工作树；work.log 若与代码线冲突，两边事件都保留。
+
+### 2026-11-08 18:48 | deepseek-v4-1-flash__traecode | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+产出：
+- docs/design-system.md 定稿：§4.1 token 分层与双份镜像、§4.2 状态不得只靠颜色（含 9 个正例）、§4.3 命中区（44px + 伪元素/行距互斥）、§4.4 字面量预算与闸门、§4.5 动效分层与禁用；§8.1/8.2 标注历史稿并指向 ADR-0030，§8.3 改为真实判定；文首与文末 SSoT 改为双源镜像。
+- docs/reviews/2026-11-08-full-site-visual-reskin-closeout.md：五族文件/解决/刻意不做/遗留 + 跨族清单 + 数字来源。
+- Obsidian 99-Inbox：更新《44px 热区不能靠撑大行高》补充伪元素+行距实测；新增 5 篇（类名零规则三桶、同特异性静默覆盖、视觉回归假差异四源、var() 自引用、合成数值≠像素判据）。
+数字（实跑）：origin/master 00b6e58 上 python tools/visual_gates.py → hex 505 / rgba 99 / infinite 7 / 最低对比 4.63 / mustard 0；P2 消耗 hex −61、rgba −16。五族各自 36 张矩阵未在合并后复跑，closeout 已标待回填。
+验证：docs 标题结构与代码围栏配对检查通过；未跑构建（本任务无代码改动）。
