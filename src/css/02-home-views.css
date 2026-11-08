@@ -41,7 +41,7 @@
   border: 1px solid var(--ink);
   border-radius: 3px;
   background: var(--paper-card);
-  box-shadow: 1.5px 1.5px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
   margin-bottom: 0.9rem;
 }
 
@@ -88,7 +88,7 @@
   background: var(--paper-card);
   border: 1.5px solid var(--ink);
   border-radius: 6px;
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
 }
 
 .satz-lab-head {
@@ -158,7 +158,7 @@
 
 @media (hover: hover) and (pointer: fine) {
   .satz-lab-chip:hover {
-    box-shadow: 1.5px 1.5px 0 var(--ink);
+    box-shadow: var(--sticker-2) var(--ink);
   }
 }
 
@@ -254,7 +254,7 @@
 
 .satz-tok.clause-highlight {
   background: #fef08a;
-  box-shadow: 0 0 0 1px #f59e0b;
+  box-shadow: var(--ring-amber);
 }
 
 .satz-case-note {
@@ -315,7 +315,7 @@
   background: var(--paper-card);
   border: 1.5px solid var(--ink);
   border-radius: 6px;
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
 }
 
 .cefr-legend strong {

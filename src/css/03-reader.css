@@ -301,7 +301,7 @@ body.drawer-open #view-reader {
 
   font-weight: 800;
 
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--ring-inset-track);
 
   transform: scaleY(1.08);
 }
@@ -321,7 +321,7 @@ body.focus-mode .tok.focus-active {
 
   display: inline-block;
 
-  box-shadow: 0 0 0 2px var(--ink);
+  box-shadow: var(--ring-ink);
 
   /* 聚焦标记只保留静态 scale(1.06) + 2px ink ring；不再呼吸。
      正文词元不得持续抢占注意力（ADR-0029 §8 / 停止门 #2）。 */
@@ -507,7 +507,7 @@ body.focus-mode .tok.focus-active {
 
   border-radius: 3px;
 
-  box-shadow: 0 0 0 2px var(--ink) !important;
+  box-shadow: var(--ring-ink) !important;
 }
 
 /* ── Sticky Note Drawer (Analysis Hub) ───── */

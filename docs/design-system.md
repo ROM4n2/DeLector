@@ -49,7 +49,7 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
 
 ### v3.0 核心设计原则
 1. **真实物理基底（Substantive Paper & Physical Grain）**：
-   杜绝生硬纯黑或千篇一律的冷白。使用含有微细纤维/噪点微质感（SVG Fractal Noise Overlay）的温润纸张色（现行为 `--paper: #faf8f5`；`#EFE7D2` 系 Artifact 4 历史纸色、本仓 grep 零命中，见 §2），让长文阅读如沉浸于欧洲古典图书。
+   杜绝生硬纯黑或千篇一律的冷白。使用温润纸张色（现行为 `--paper: #faf8f5`；`#EFE7D2` 系 Artifact 4 历史纸色、本仓 grep 零命中，见 §2），以暖墨阴影与 1px 受光边提供纸感；全屏噪点层因对比度与合成代价被否决，见 §3.2.1。
 2. **严谨印刷墨线（German Print Linework）**：
    用清晰、笃定的硬质线条（`1.5px solid var(--ink)` 与 `1px solid var(--rule)`）建立视觉网格体系，彻底告别模糊无边界的阴影溢出。
 3. **数据走字与元数据对齐（Editorial Ticker & Metadata Density）**：
@@ -103,23 +103,12 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
    高度仅 `36px`，全大写等宽字体，通过 `letter-spacing: 0.18em` 形成精密仪器仪表盘式的专业感。
 
 ### 3.2 拟物印刷质感与微物理细节
-1. **全景纸张纤维噪点层（SVG Fractal Noise Overlay）**：
-   ```css
-   body::before {
-     content: '';
-     position: fixed;
-     inset: 0;
-     pointer-events: none;
-     z-index: 1;
-     background-image:
-       radial-gradient(circle at 12% 18%, rgba(106, 92, 56, 0.07) 0, transparent 28%),
-       radial-gradient(circle at 88% 72%, rgba(106, 92, 56, 0.06) 0, transparent 32%),
-       url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.18 0 0 0 0 0.16 0 0 0 0 0.12 0 0 0 0.06 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-     mix-blend-mode: multiply;
-     opacity: 0.92;
-   }
-   ```
-   这种极轻微的正片叠底噪点让整个屏幕从冰冷的数字发光像素转化为“透气、温润、可触摸”的重磅书籍纸面。
+1. **纸张纤维噪点层：已评估，不落地（2026-11 材质轮）**：
+   候选手段是 `body::before` + `position: fixed` + `mix-blend-mode: multiply` 的 SVG `feTurbulence` 噪点。结论：**不做全屏噪点**，原因有三，均可实测：
+   - **文字对比度会被吃掉**：暗噪点等价于把纸面压暗。按设计稿的 0.06 alpha 叠在 `--paper` 上，`--muted` 实测从 4.76 掉到 **4.40**（低于正文 4.5 门槛），`--ink-faint` 4.98 → 4.59；即使把 alpha 压到几乎看不见的 0.02，`--muted` 也只剩 4.64，等于提前花光 P1 刚修出来的余量。
+   - **暗色插槽语义冲突**：`multiply` 只适用于浅底；暗色主题需要换成 `screen`/`lighten` 或换一套噪点图，等于每个主题维护两份混合逻辑，和「暗色只重绑值层」的约定冲突。
+   - **滚动/低端 Android 代价**：`fixed` 全屏层 + `mix-blend-mode` 会持续参与合成与混合，滚动时每帧都要整屏混合；这正是低端 Android 最容易掉帧的组合，收益却只是 2% 以内的纹理感。
+   **替代方案（已落地）**：纸感改由材质层级承担——暖墨色阴影阶梯（`--shadow-tint-*`）+ 卡片顶沿 1px 受光边（`--ring-paper-lip`）。它们只作用于边缘像素，不压暗文字背景、不新增合成层、暗色下重绑一个 token 即可关闭。
 2. **四角定位标尺与图版元数据（Plate Corner Marks & Annotations）**：
    在 Hero 图片与展台卡片四角，使用 `corner tl/tr/bl/br` 绘制 L 形细黑线，并在四角打上打字机元数据：`[FIG. 01 / OD-26]`、`[Plate Nº 08]`、`[SHA · a1b2c3d]`、`[52.5200° N · 13.4050° E]`。
 3. **固定双侧边垂直轨道（Fixed Side Rails）**：
@@ -206,10 +195,55 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
   --note-green:     #edf7ec;
   --note-blue:      #ecf3fb;
 
-  /* ──────── 7. 物理投影与阴影 (Tactile Shadows) ──────── */
+  /* ──────── 7. 物理投影与阴影 (Tactile Shadows) ────────
+     旧三档（--shadow-sm / --shadow-card / --shadow-hard）保留给 static/js
+     内联样式与历史文档；新规则一律用下方 P3 阶梯，不得在规则体手写阴影色。 */
   --shadow-sm:      0 2px 4px rgba(21, 20, 15, 0.06);
   --shadow-card:    0 14px 28px -12px rgba(21, 20, 15, 0.12);
   --shadow-hard:    3px 3px 0 var(--ink); /* 实体硬印章投影（纯墨色实投影） */
+
+  /* 值层：阴影色。暗色主题只重绑这一层。 */
+  --shadow-tint-1:  rgba(21, 20, 15, 0.08); /* 贴面接触：内嵌条、小方块静息 */
+  --shadow-tint-2:  rgba(21, 20, 15, 0.12); /* 轻抬升：可点卡片静息 */
+  --shadow-tint-3:  rgba(21, 20, 15, 0.16); /* 明显抬升：抽屉 / 底部弹层 / 浮层 */
+  --shadow-tint-4:  rgba(21, 20, 15, 0.35); /* 深色浮层：选中工具条、模态深色块 */
+
+  /* 语义层：方向无关的抬升 */
+  --elevation-1:          0 2px 4px var(--shadow-tint-1);
+  --elevation-2:          0 4px 12px var(--shadow-tint-3);
+  --elevation-3:          0 10px 30px var(--shadow-tint-3);
+  --elevation-4:          0 8px 24px var(--shadow-tint-4);
+  /* 语义层：方向专属 */
+  --elevation-drawer:     -8px 0 36px var(--shadow-tint-3); /* 右侧抽屉 */
+  --elevation-sheet:      0 -8px 24px var(--shadow-tint-3); /* 底部弹层 / 移动端抽屉 */
+  --elevation-sheet-quiet:0 -2px 10px var(--shadow-tint-1); /* 常驻底栏 */
+  /* 语义例外：不并入中性阶梯 */
+  --elevation-amber:      0 2px 6px rgba(245, 158, 11, 0.25);
+  --elevation-accent:     0 2px 8px rgba(41, 128, 185, 0.12);
+
+  /* 边环：不占布局 */
+  --ring-ink:            0 0 0 2px var(--ink);
+  --ring-inset-track:    inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  --ring-amber:          0 0 0 1px #f59e0b;
+  --ring-linked:         0 0 0 2px #3b82f6, 0 2px 6px rgba(59, 130, 246, 0.35);
+  --ring-clause:         0 0 0 2px #f97316, 0 2px 6px rgba(249, 115, 22, 0.3);
+  --ring-paper-lip:      inset 0 1px 0 rgba(255, 255, 255, 0.6); /* 纸页顶沿受光 */
+
+  /* 硬偏移阶梯：只给偏移量，颜色由规则体给语义色
+     用法：box-shadow: var(--sticker-2) var(--ink); */
+  --sticker-1:      1px 1px 0;
+  --sticker-2:      2px 2px 0;
+  --sticker-3:      3px 3px 0;
+  --sticker-4:      4px 4px 0;
+  --sticker-6:      6px 6px 0;
+  --sticker-8:      8px 8px 0;
+  --sticker-card:   3px 4px 0; /* 便签卡「手摆纸片」：非对称 */
+  --sticker-card-hover: 5px 6px 0;
+
+  /* 使用纪律：
+     - 抬升/浮层 → --elevation-*；边线 → --ring-*；硬印章 → --sticker-*。
+     - 规则体不得再写 box-shadow 的 rgba()/hex；新增颜色先进 :root 值层。
+     - 旧值 1.5 / 2.5 / 3.5 / 5px 硬偏移已归并到 2 / 3 / 4 / 6（2026-11 材质轮）。 */
 
   /* ──────── 8. 缓动与动画时间 (Motion & Transitions) ──────── */
   --ease-editorial: cubic-bezier(0.22, 1, 0.36, 1); /* 顶级杂志回弹曲线 */

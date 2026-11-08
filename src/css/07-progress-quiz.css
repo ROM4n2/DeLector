@@ -169,7 +169,7 @@
   border: 1px solid var(--rule);
   padding: 0.45rem 1rem;
   letter-spacing: 0.08em;
-  box-shadow: 1.5px 1.5px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
 }
 
 .dossier-ticker b {
@@ -257,7 +257,7 @@
   border: 1.5px solid var(--ink);
   border-left: 5px solid var(--coral, var(--accent, #ed6f5c));
   padding: 1.15rem 1.35rem;
-  box-shadow: 2.5px 2.5px 0 var(--ink);
+  box-shadow: var(--sticker-3) var(--ink);
   margin-top: 0.25rem;
   position: relative;
 }
@@ -332,7 +332,7 @@
 .folio-hero-plate {
   background: var(--paper-card, #fff);
   border: 1.5px solid var(--ink);
-  box-shadow: 3.5px 3.5px 0 var(--ink);
+  box-shadow: var(--sticker-4) var(--ink);
   padding: 1.35rem 1.5rem;
   position: relative;
   display: flex;
@@ -415,7 +415,7 @@
   padding: 0.75rem 0.8rem;
   background: var(--paper-deep);
   border: 1.2px solid var(--ink);
-  box-shadow: 1.5px 1.5px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
   box-sizing: border-box;
   min-width: 0;
   overflow: hidden;
@@ -427,7 +427,7 @@
 @media (hover: hover) and (pointer: fine) {
   .stat-badge:hover {
     transform: translateY(-2px);
-    box-shadow: 2.5px 2.5px 0 var(--ink);
+    box-shadow: var(--sticker-3) var(--ink);
     background: #fff;
   }
 }
@@ -658,7 +658,7 @@
   background: var(--paper-card, #fff);
   border: 1.5px solid var(--ink);
   padding: 1.35rem 1.5rem;
-  box-shadow: 2.5px 2.5px 0 var(--ink);
+  box-shadow: var(--sticker-3) var(--ink);
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -803,7 +803,7 @@
   background: #fff;
   border: 1.5px solid var(--ink);
   border-left: 5px solid var(--coral, var(--cherry, #ed6f5c));
-  box-shadow: 1.5px 1.5px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
   transition:
     background-color var(--dur-fast) ease,
     border-color var(--dur-fast) ease,
@@ -815,7 +815,7 @@
     background: var(--paper-tint);
     border-color: var(--ink);
     border-left-color: var(--coral, var(--cherry, #ed6f5c));
-    box-shadow: 3px 3px 0 var(--ink);
+    box-shadow: var(--sticker-3) var(--ink);
   }
 }
 
@@ -873,7 +873,7 @@
 .dossier-stamp.unlocked {
   border: 1.5px solid var(--ink);
   background: #fff;
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
   transform: rotate(-0.5deg);
 }
 
@@ -1014,7 +1014,7 @@
   width: 100%;
   max-width: 620px;
   padding: 2rem;
-  box-shadow: 6px 6px 0 var(--ink);
+  box-shadow: var(--sticker-6) var(--ink);
   position: relative;
 }
 
@@ -1073,12 +1073,12 @@
   text-align: center;
   cursor: pointer;
   transition: all var(--dur-fast) ease;
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .quiz-mode-card:hover {
-    box-shadow: 4px 4px 0 var(--ink);
+    box-shadow: var(--sticker-4) var(--ink);
     background: #fff;
   }
 }
@@ -1146,7 +1146,7 @@
   min-height: 220px;
   background: #fff;
   border: 2px solid var(--ink);
-  box-shadow: 4px 4px 0 var(--ink);
+  box-shadow: var(--sticker-4) var(--ink);
   padding: 2rem 1.5rem;
   display: flex;
   flex-direction: column;
@@ -1163,7 +1163,7 @@
 @media (hover: hover) and (pointer: fine) {
   .quiz-flashcard:hover {
     background: #fffdf6;
-    box-shadow: 6px 6px 0 var(--ink);
+    box-shadow: var(--sticker-6) var(--ink);
   }
 }
 
@@ -1257,7 +1257,7 @@
   background: #fff;
   border: 2px solid var(--ink);
   padding: 2rem 1.5rem;
-  box-shadow: 4px 4px 0 var(--ink);
+  box-shadow: var(--sticker-4) var(--ink);
 }
 
 .quiz-dict-prompt-label {
@@ -1328,7 +1328,7 @@
   background: #fff;
   border: 2px solid var(--ink);
   padding: 2rem 1.5rem;
-  box-shadow: 4px 4px 0 var(--ink);
+  box-shadow: var(--sticker-4) var(--ink);
 }
 
 .quiz-choice-question {
@@ -1440,7 +1440,7 @@
   font-family: var(--mono);
   font-size: 0.8125rem;
   z-index: 1000;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--elevation-2);
   animation: slideUpToast 0.2s ease;
 }
 
@@ -1499,7 +1499,7 @@
 .cloze-modal {
   background: var(--paper);
   border: 2px solid var(--ink);
-  box-shadow: 8px 8px 0 var(--ink);
+  box-shadow: var(--sticker-8) var(--ink);
   width: 100%;
   max-width: 820px;
   max-height: 90vh;
@@ -1678,7 +1678,7 @@
   cursor: pointer;
   transition: all 0.12s ease;
   text-align: center;
-  box-shadow: 1.5px 1.5px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1687,7 +1687,7 @@
 
 @media (hover: hover) and (pointer: fine) {
   .sm2-btn:hover {
-    box-shadow: 2.5px 2.5px 0 var(--ink);
+    box-shadow: var(--sticker-3) var(--ink);
   }
 }
 
@@ -1762,13 +1762,13 @@
   font-weight: 700;
   text-decoration: none;
   white-space: nowrap;
-  box-shadow: 1.5px 1.5px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
   transition: all var(--dur-fast) ease;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .deck-workbench-link:hover {
-    box-shadow: 2.5px 2.5px 0 var(--ink);
+    box-shadow: var(--sticker-3) var(--ink);
   }
 }
 
@@ -1809,7 +1809,7 @@
     border-top: 1.5px solid var(--ink) !important;
     z-index: 1000 !important;
     padding-bottom: env(safe-area-inset-bottom, 0) !important;
-    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.06) !important;
+    box-shadow: var(--elevation-sheet-quiet) !important;
   }
 
   .mobile-bottom-nav.hidden,
@@ -1942,7 +1942,7 @@
     right: 0 !important;
     border-left: none !important;
     border-top: 2px solid var(--ink) !important;
-    box-shadow: 0 -8px 24px rgba(26, 23, 20, 0.2) !important;
+    box-shadow: var(--elevation-sheet) !important;
     transform: translateY(100%);
     border-radius: 14px 14px 0 0;
     /* Allow inner vertical scroll without propagating to page */
@@ -2298,7 +2298,7 @@
   background: var(--paper-card);
   border: 1.5px solid var(--ink);
   border-radius: 6px;
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
   transition:
     background-color var(--dur-fast) ease,
     box-shadow var(--dur-fast) ease;
@@ -2306,7 +2306,7 @@
 
 @media (hover: hover) and (pointer: fine) {
   .feed-item-card:hover {
-    box-shadow: 3px 3px 0 var(--ink);
+    box-shadow: var(--sticker-3) var(--ink);
   }
 }
 
@@ -2374,13 +2374,13 @@
   border: 1.5px solid var(--ink);
   border-radius: 4px;
   cursor: pointer;
-  box-shadow: 1.5px 1.5px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
   transition: all var(--dur-fast) ease;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .btn-feed-ingest:hover {
-    box-shadow: 2.5px 2.5px 0 var(--ink);
+    box-shadow: var(--sticker-3) var(--ink);
   }
 }
 
@@ -2579,9 +2579,7 @@
   background-color: #dbeafe !important;
   color: #1e3a8a !important;
   border-radius: 3px;
-  box-shadow:
-    0 0 0 2px #3b82f6,
-    0 2px 6px rgba(59, 130, 246, 0.35);
+  box-shadow: var(--ring-linked);
   font-weight: 600;
   /* 降级为静态 2px 蓝边：正文词元不新增一次性/循环动画（停止门 #2）。 */
 }
@@ -2843,7 +2841,7 @@
 @media (hover: hover) and (pointer: fine) {
   .clause-node-box:hover {
     border-color: var(--accent, #2980b9);
-    box-shadow: 0 2px 8px rgba(41, 128, 185, 0.12);
+    box-shadow: var(--elevation-accent);
   }
 }
 
@@ -2937,9 +2935,7 @@
   background-color: #fed7aa !important;
   color: #7c2d12 !important;
   border-radius: 2px;
-  box-shadow:
-    0 0 0 2px #f97316,
-    0 2px 6px rgba(249, 115, 22, 0.3);
+  box-shadow: var(--ring-clause);
   font-weight: 600;
   /* 降级为静态 2px 橙边：正文词元不新增一次性/循环动画（停止门 #2）。 */
 }

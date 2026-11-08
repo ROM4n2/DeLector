@@ -325,7 +325,7 @@
   display: inline-flex;
   border: 1.5px solid var(--ink);
   background: var(--paper-deep);
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
 }
 
 .cards-mode-btn {
@@ -513,7 +513,7 @@
   border: 1px solid var(--rule);
   padding: 0.25rem 0.65rem;
   letter-spacing: 0.05em;
-  box-shadow: 1px 1px 0 var(--ink);
+  box-shadow: var(--sticker-1) var(--ink);
 }
 
 /* Card Stack Container */
@@ -544,14 +544,14 @@
   transform: translateY(12px) scale(0.95);
   opacity: 0.35;
   background: var(--paper-deep);
-  box-shadow: 4px 4px 0 var(--ink);
+  box-shadow: var(--sticker-4) var(--ink);
 }
 
 .deck-card-layer-2 {
   transform: translateY(6px) scale(0.975);
   opacity: 0.65;
   background: var(--paper-tint);
-  box-shadow: 5px 5px 0 var(--ink);
+  box-shadow: var(--sticker-6) var(--ink);
 }
 
 /* Active 3D Flipping Card */
@@ -596,7 +596,7 @@
   background: #ffffff;
   border: 2px solid var(--ink);
   border-radius: 4px;
-  box-shadow: 6px 6px 0 var(--ink);
+  box-shadow: var(--sticker-6) var(--ink);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -621,7 +621,7 @@
 
 @media (hover: hover) and (pointer: fine) {
   .deck-active-card:hover .deck-card-face {
-    box-shadow: 8px 8px 0 var(--ink);
+    box-shadow: var(--sticker-8) var(--ink);
   }
 }
 
@@ -793,7 +793,7 @@
   font-weight: 700;
   color: var(--ink);
   cursor: pointer;
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
   transition: all var(--dur-fast) ease;
   display: flex;
   align-items: center;
@@ -803,7 +803,7 @@
 @media (hover: hover) and (pointer: fine) {
   .deck-btn-nav:hover:not(:disabled) {
     background: var(--paper-deep);
-    box-shadow: 3px 3px 0 var(--ink);
+    box-shadow: var(--sticker-3) var(--ink);
   }
 }
 
@@ -839,7 +839,7 @@
   font-weight: 700;
   color: var(--ink);
   cursor: pointer;
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
   transition: all var(--dur-fast) cubic-bezier(0.16, 1, 0.3, 1);
   user-select: none;
 }
@@ -847,20 +847,20 @@
 @media (hover: hover) and (pointer: fine) {
   .deck-nav-btn:hover {
     background: var(--paper-deep);
-    box-shadow: 3px 3px 0 var(--ink);
+    box-shadow: var(--sticker-3) var(--ink);
   }
 }
 
 .deck-nav-btn:active {
   transform: translateY(1px);
-  box-shadow: 1px 1px 0 var(--ink);
+  box-shadow: var(--sticker-1) var(--ink);
 }
 
 .deck-nav-btn.deck-btn-flip {
   background: var(--ink);
   color: var(--paper);
   border-color: var(--ink);
-  box-shadow: 2px 2px 0 var(--amber);
+  box-shadow: var(--sticker-2) var(--amber);
   padding: 0.65rem 1.5rem;
 }
 
@@ -869,7 +869,7 @@
     background: var(--accent);
     color: #ffffff;
     border-color: var(--accent);
-    box-shadow: 3px 3px 0 var(--ink);
+    box-shadow: var(--sticker-3) var(--ink);
   }
 }
 

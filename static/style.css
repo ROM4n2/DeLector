@@ -136,10 +136,60 @@
   --mono: "IBM Plex Mono", "JetBrains Mono", Consolas, monospace;
   --hand: "Caveat", "Patrick Hand", cursive;
 
-  /* Shadows */
+  /* Shadows（旧三档保留给 static/js 内联样式与历史文档；新规则只用下方阶梯） */
   --shadow-sm: 0 2px 4px rgba(21, 20, 15, 0.06);
   --shadow-card: 0 14px 28px -12px rgba(21, 20, 15, 0.12);
   --shadow-hard: 3px 3px 0 var(--ink);
+
+  /* ── P3 Material ladder（材质轮）：阴影只认这一套有名字的层级 ──
+     值层只放阴影色，暗色主题重绑这一层；规则体不写阴影 rgba/hex。
+       tint-1 贴面接触（0.08）：内嵌条、小方块静息
+       tint-2 轻抬升（0.12）：可点卡片静息
+       tint-3 明显抬升（0.16）：抽屉 / 底部弹层 / 浮层
+       tint-4 深色浮层（0.35）：选中工具条、模态上的深色块
+     层级命名：
+       elevation-1..4    方向无关的抬升（x=0）
+       elevation-drawer  右侧抽屉（负 x）
+       elevation-sheet   底部弹层（负 y）
+       ring-*            1–2px 边环，不占布局
+       sticker-*         硬偏移阶梯（无模糊），颜色由使用处给语义色 */
+  --shadow-tint-1: rgba(21, 20, 15, 0.08);
+  --shadow-tint-2: rgba(21, 20, 15, 0.12);
+  --shadow-tint-3: rgba(21, 20, 15, 0.16);
+  --shadow-tint-4: rgba(21, 20, 15, 0.35);
+
+  --elevation-1: 0 2px 4px var(--shadow-tint-1);
+  --elevation-2: 0 4px 12px var(--shadow-tint-3);
+  --elevation-3: 0 10px 30px var(--shadow-tint-3);
+  --elevation-4: 0 8px 24px var(--shadow-tint-4);
+  --elevation-drawer: -8px 0 36px var(--shadow-tint-3);
+  --elevation-sheet: 0 -8px 24px var(--shadow-tint-3);
+  --elevation-sheet-quiet: 0 -2px 10px var(--shadow-tint-1);
+  /* 语义例外：琥珀提示、蓝色悬浮勾边；不并入中性阶梯 */
+  --elevation-amber: 0 2px 6px rgba(245, 158, 11, 0.25);
+  --elevation-accent: 0 2px 8px rgba(41, 128, 185, 0.12);
+
+  --ring-ink: 0 0 0 2px var(--ink);
+  --ring-inset-track: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  --ring-amber: 0 0 0 1px #f59e0b;
+  /* 阅读器联动词高亮：环 + 同色柔影，两色各自成对 */
+  --ring-linked: 0 0 0 2px #3b82f6, 0 2px 6px rgba(59, 130, 246, 0.35);
+  --ring-clause: 0 0 0 2px #f97316, 0 2px 6px rgba(249, 115, 22, 0.3);
+
+  /* 硬偏移阶梯：只给偏移量，颜色由规则体决定（var(--sticker-2) var(--ink)） */
+  --sticker-1: 1px 1px 0;
+  --sticker-2: 2px 2px 0;
+  --sticker-3: 3px 3px 0;
+  --sticker-4: 4px 4px 0;
+  --sticker-6: 6px 6px 0;
+  --sticker-8: 8px 8px 0;
+  /* 便签卡的非对称「手摆纸片」偏移 */
+  --sticker-card: 3px 4px 0;
+  --sticker-card-hover: 5px 6px 0;
+
+  /* 纸边：卡片顶沿的 1px 受光边，模拟纸页厚度；不占布局、不改文字对比。
+     暗色插槽重绑为低透明度白色或 none。 */
+  --ring-paper-lip: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 
   /* Motion */
   --ease-editorial: cubic-bezier(0.22, 1, 0.36, 1);
@@ -529,13 +579,13 @@ a {
 
   color: #fef9ee;
 
-  box-shadow: 2px 2px 0 var(--pencil);
+  box-shadow: var(--sticker-2) var(--pencil);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .btn-dark:hover {
     background: #2d2722;
-    box-shadow: 3px 3px 0 var(--pencil);
+    box-shadow: var(--sticker-3) var(--pencil);
   }
 }
 
@@ -544,7 +594,7 @@ a {
 
   color: #fff;
 
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -612,7 +662,7 @@ a {
   border: 1px solid var(--ink);
   border-radius: 3px;
   background: var(--paper-card);
-  box-shadow: 1.5px 1.5px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
   margin-bottom: 0.9rem;
 }
 
@@ -659,7 +709,7 @@ a {
   background: var(--paper-card);
   border: 1.5px solid var(--ink);
   border-radius: 6px;
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
 }
 
 .satz-lab-head {
@@ -729,7 +779,7 @@ a {
 
 @media (hover: hover) and (pointer: fine) {
   .satz-lab-chip:hover {
-    box-shadow: 1.5px 1.5px 0 var(--ink);
+    box-shadow: var(--sticker-2) var(--ink);
   }
 }
 
@@ -825,7 +875,7 @@ a {
 
 .satz-tok.clause-highlight {
   background: #fef08a;
-  box-shadow: 0 0 0 1px #f59e0b;
+  box-shadow: var(--ring-amber);
 }
 
 .satz-case-note {
@@ -886,7 +936,7 @@ a {
   background: var(--paper-card);
   border: 1.5px solid var(--ink);
   border-radius: 6px;
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
 }
 
 .cefr-legend strong {
@@ -1448,7 +1498,7 @@ body.drawer-open #view-reader {
 
   font-weight: 800;
 
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--ring-inset-track);
 
   transform: scaleY(1.08);
 }
@@ -1468,7 +1518,7 @@ body.focus-mode .tok.focus-active {
 
   display: inline-block;
 
-  box-shadow: 0 0 0 2px var(--ink);
+  box-shadow: var(--ring-ink);
 
   /* 聚焦标记只保留静态 scale(1.06) + 2px ink ring；不再呼吸。
      正文词元不得持续抢占注意力（ADR-0029 §8 / 停止门 #2）。 */
@@ -1654,7 +1704,7 @@ body.focus-mode .tok.focus-active {
 
   border-radius: 3px;
 
-  box-shadow: 0 0 0 2px var(--ink) !important;
+  box-shadow: var(--ring-ink) !important;
 }
 
 /* ── Sticky Note Drawer (Analysis Hub) ───── */
@@ -1678,7 +1728,7 @@ body.focus-mode .tok.focus-active {
 
   border-left: 2px solid var(--ink);
 
-  box-shadow: -8px 0 36px rgba(26, 23, 20, 0.16);
+  box-shadow: var(--elevation-drawer);
 
   display: flex;
 
@@ -1986,7 +2036,7 @@ body.drawer-resizing #drawer {
 
   padding: 1.25rem;
 
-  box-shadow: 3px 3px 0 rgba(26, 23, 20, 0.1);
+  box-shadow: var(--sticker-3) var(--shadow-tint-1);
 }
 
 .sticky-word-headline {
@@ -2215,7 +2265,7 @@ body.drawer-resizing #drawer {
 
   padding: 1.25rem;
 
-  box-shadow: 3px 3px 0 rgba(26, 23, 20, 0.1);
+  box-shadow: var(--sticker-3) var(--shadow-tint-1);
 
   display: flex;
 
@@ -2344,7 +2394,9 @@ body.drawer-resizing #drawer {
   border: 1.5px solid var(--ink);
   border-radius: 8px;
   padding: 1.125rem;
-  box-shadow: 3px 4px 0 rgba(26, 23, 20, 0.12);
+  box-shadow:
+    var(--sticker-card) var(--shadow-tint-2),
+    var(--ring-paper-lip);
   position: relative;
   transition:
     box-shadow var(--dur-fast),
@@ -2367,7 +2419,9 @@ body.drawer-resizing #drawer {
 @media (hover: hover) and (pointer: fine) {
   .memo-card:hover {
     background: #fffdf0;
-    box-shadow: 5px 6px 0 rgba(26, 23, 20, 0.16);
+    box-shadow:
+      var(--sticker-card-hover) var(--shadow-tint-3),
+      var(--ring-paper-lip);
   }
 }
 
@@ -2442,7 +2496,7 @@ body.drawer-resizing #drawer {
 
   margin-bottom: 0.875rem;
 
-  box-shadow: 3px 4px 0 rgba(26, 23, 20, 0.1);
+  box-shadow: var(--sticker-card) var(--shadow-tint-1);
 }
 
 .grammar-memo-head {
@@ -2556,7 +2610,7 @@ body.drawer-resizing #drawer {
   padding: 1.75rem;
   width: 100%;
   max-width: 620px;
-  box-shadow: 6px 6px 0 var(--ink);
+  box-shadow: var(--sticker-6) var(--ink);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -2740,7 +2794,7 @@ body.drawer-resizing #drawer {
 
 .modal-input:focus {
   border-color: var(--ink);
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
 }
 
 .modal-textarea {
@@ -3029,7 +3083,7 @@ body.drawer-open .shadow-player {
 
   border-radius: 2px;
 
-  box-shadow: var(--shadow-hard);
+  box-shadow: var(--sticker-3) var(--ink);
 }
 
 .voice-option {
@@ -3328,7 +3382,7 @@ body.drawer-open .shadow-player {
 @media (hover: hover) and (pointer: fine) {
   .margin-note-badge:hover {
     background: #fde68a;
-    box-shadow: 0 2px 6px rgba(245, 158, 11, 0.25);
+    box-shadow: var(--elevation-amber);
   }
 }
 
@@ -3357,7 +3411,7 @@ body.drawer-open .shadow-player {
 
   border-radius: 10px;
 
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--elevation-4);
 
   transform: translate(-50%, -100%);
 
@@ -3657,7 +3711,7 @@ body.drawer-open .shadow-player {
 @media (hover: hover) and (pointer: fine) {
   .margin-note-badge:hover {
     background: #fde68a;
-    box-shadow: 0 2px 6px rgba(245, 158, 11, 0.25);
+    box-shadow: var(--elevation-amber);
   }
 }
 
@@ -3674,7 +3728,7 @@ body.drawer-open .shadow-player {
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--elevation-4);
   transform: translate(-50%, -100%);
   margin-top: -10px;
   transition:
@@ -4121,7 +4175,7 @@ body.drawer-open .shadow-player {
   display: inline-flex;
   border: 1.5px solid var(--ink);
   background: var(--paper-deep);
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
 }
 
 .cards-mode-btn {
@@ -4309,7 +4363,7 @@ body.drawer-open .shadow-player {
   border: 1px solid var(--rule);
   padding: 0.25rem 0.65rem;
   letter-spacing: 0.05em;
-  box-shadow: 1px 1px 0 var(--ink);
+  box-shadow: var(--sticker-1) var(--ink);
 }
 
 /* Card Stack Container */
@@ -4340,14 +4394,14 @@ body.drawer-open .shadow-player {
   transform: translateY(12px) scale(0.95);
   opacity: 0.35;
   background: var(--paper-deep);
-  box-shadow: 4px 4px 0 var(--ink);
+  box-shadow: var(--sticker-4) var(--ink);
 }
 
 .deck-card-layer-2 {
   transform: translateY(6px) scale(0.975);
   opacity: 0.65;
   background: var(--paper-tint);
-  box-shadow: 5px 5px 0 var(--ink);
+  box-shadow: var(--sticker-6) var(--ink);
 }
 
 /* Active 3D Flipping Card */
@@ -4392,7 +4446,7 @@ body.drawer-open .shadow-player {
   background: #ffffff;
   border: 2px solid var(--ink);
   border-radius: 4px;
-  box-shadow: 6px 6px 0 var(--ink);
+  box-shadow: var(--sticker-6) var(--ink);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -4417,7 +4471,7 @@ body.drawer-open .shadow-player {
 
 @media (hover: hover) and (pointer: fine) {
   .deck-active-card:hover .deck-card-face {
-    box-shadow: 8px 8px 0 var(--ink);
+    box-shadow: var(--sticker-8) var(--ink);
   }
 }
 
@@ -4589,7 +4643,7 @@ body.drawer-open .shadow-player {
   font-weight: 700;
   color: var(--ink);
   cursor: pointer;
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
   transition: all var(--dur-fast) ease;
   display: flex;
   align-items: center;
@@ -4599,7 +4653,7 @@ body.drawer-open .shadow-player {
 @media (hover: hover) and (pointer: fine) {
   .deck-btn-nav:hover:not(:disabled) {
     background: var(--paper-deep);
-    box-shadow: 3px 3px 0 var(--ink);
+    box-shadow: var(--sticker-3) var(--ink);
   }
 }
 
@@ -4635,7 +4689,7 @@ body.drawer-open .shadow-player {
   font-weight: 700;
   color: var(--ink);
   cursor: pointer;
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
   transition: all var(--dur-fast) cubic-bezier(0.16, 1, 0.3, 1);
   user-select: none;
 }
@@ -4643,20 +4697,20 @@ body.drawer-open .shadow-player {
 @media (hover: hover) and (pointer: fine) {
   .deck-nav-btn:hover {
     background: var(--paper-deep);
-    box-shadow: 3px 3px 0 var(--ink);
+    box-shadow: var(--sticker-3) var(--ink);
   }
 }
 
 .deck-nav-btn:active {
   transform: translateY(1px);
-  box-shadow: 1px 1px 0 var(--ink);
+  box-shadow: var(--sticker-1) var(--ink);
 }
 
 .deck-nav-btn.deck-btn-flip {
   background: var(--ink);
   color: var(--paper);
   border-color: var(--ink);
-  box-shadow: 2px 2px 0 var(--amber);
+  box-shadow: var(--sticker-2) var(--amber);
   padding: 0.65rem 1.5rem;
 }
 
@@ -4665,7 +4719,7 @@ body.drawer-open .shadow-player {
     background: var(--accent);
     color: #ffffff;
     border-color: var(--accent);
-    box-shadow: 3px 3px 0 var(--ink);
+    box-shadow: var(--sticker-3) var(--ink);
   }
 }
 
@@ -4960,7 +5014,7 @@ body.drawer-open .shadow-player {
   border: 1px solid var(--rule);
   padding: 0.45rem 1rem;
   letter-spacing: 0.08em;
-  box-shadow: 1.5px 1.5px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
 }
 
 .dossier-ticker b {
@@ -5048,7 +5102,7 @@ body.drawer-open .shadow-player {
   border: 1.5px solid var(--ink);
   border-left: 5px solid var(--coral, var(--accent, #ed6f5c));
   padding: 1.15rem 1.35rem;
-  box-shadow: 2.5px 2.5px 0 var(--ink);
+  box-shadow: var(--sticker-3) var(--ink);
   margin-top: 0.25rem;
   position: relative;
 }
@@ -5123,7 +5177,7 @@ body.drawer-open .shadow-player {
 .folio-hero-plate {
   background: var(--paper-card, #fff);
   border: 1.5px solid var(--ink);
-  box-shadow: 3.5px 3.5px 0 var(--ink);
+  box-shadow: var(--sticker-4) var(--ink);
   padding: 1.35rem 1.5rem;
   position: relative;
   display: flex;
@@ -5206,7 +5260,7 @@ body.drawer-open .shadow-player {
   padding: 0.75rem 0.8rem;
   background: var(--paper-deep);
   border: 1.2px solid var(--ink);
-  box-shadow: 1.5px 1.5px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
   box-sizing: border-box;
   min-width: 0;
   overflow: hidden;
@@ -5218,7 +5272,7 @@ body.drawer-open .shadow-player {
 @media (hover: hover) and (pointer: fine) {
   .stat-badge:hover {
     transform: translateY(-2px);
-    box-shadow: 2.5px 2.5px 0 var(--ink);
+    box-shadow: var(--sticker-3) var(--ink);
     background: #fff;
   }
 }
@@ -5449,7 +5503,7 @@ body.drawer-open .shadow-player {
   background: var(--paper-card, #fff);
   border: 1.5px solid var(--ink);
   padding: 1.35rem 1.5rem;
-  box-shadow: 2.5px 2.5px 0 var(--ink);
+  box-shadow: var(--sticker-3) var(--ink);
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -5594,7 +5648,7 @@ body.drawer-open .shadow-player {
   background: #fff;
   border: 1.5px solid var(--ink);
   border-left: 5px solid var(--coral, var(--cherry, #ed6f5c));
-  box-shadow: 1.5px 1.5px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
   transition:
     background-color var(--dur-fast) ease,
     border-color var(--dur-fast) ease,
@@ -5606,7 +5660,7 @@ body.drawer-open .shadow-player {
     background: var(--paper-tint);
     border-color: var(--ink);
     border-left-color: var(--coral, var(--cherry, #ed6f5c));
-    box-shadow: 3px 3px 0 var(--ink);
+    box-shadow: var(--sticker-3) var(--ink);
   }
 }
 
@@ -5664,7 +5718,7 @@ body.drawer-open .shadow-player {
 .dossier-stamp.unlocked {
   border: 1.5px solid var(--ink);
   background: #fff;
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
   transform: rotate(-0.5deg);
 }
 
@@ -5805,7 +5859,7 @@ body.drawer-open .shadow-player {
   width: 100%;
   max-width: 620px;
   padding: 2rem;
-  box-shadow: 6px 6px 0 var(--ink);
+  box-shadow: var(--sticker-6) var(--ink);
   position: relative;
 }
 
@@ -5864,12 +5918,12 @@ body.drawer-open .shadow-player {
   text-align: center;
   cursor: pointer;
   transition: all var(--dur-fast) ease;
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .quiz-mode-card:hover {
-    box-shadow: 4px 4px 0 var(--ink);
+    box-shadow: var(--sticker-4) var(--ink);
     background: #fff;
   }
 }
@@ -5937,7 +5991,7 @@ body.drawer-open .shadow-player {
   min-height: 220px;
   background: #fff;
   border: 2px solid var(--ink);
-  box-shadow: 4px 4px 0 var(--ink);
+  box-shadow: var(--sticker-4) var(--ink);
   padding: 2rem 1.5rem;
   display: flex;
   flex-direction: column;
@@ -5954,7 +6008,7 @@ body.drawer-open .shadow-player {
 @media (hover: hover) and (pointer: fine) {
   .quiz-flashcard:hover {
     background: #fffdf6;
-    box-shadow: 6px 6px 0 var(--ink);
+    box-shadow: var(--sticker-6) var(--ink);
   }
 }
 
@@ -6048,7 +6102,7 @@ body.drawer-open .shadow-player {
   background: #fff;
   border: 2px solid var(--ink);
   padding: 2rem 1.5rem;
-  box-shadow: 4px 4px 0 var(--ink);
+  box-shadow: var(--sticker-4) var(--ink);
 }
 
 .quiz-dict-prompt-label {
@@ -6119,7 +6173,7 @@ body.drawer-open .shadow-player {
   background: #fff;
   border: 2px solid var(--ink);
   padding: 2rem 1.5rem;
-  box-shadow: 4px 4px 0 var(--ink);
+  box-shadow: var(--sticker-4) var(--ink);
 }
 
 .quiz-choice-question {
@@ -6231,7 +6285,7 @@ body.drawer-open .shadow-player {
   font-family: var(--mono);
   font-size: 0.8125rem;
   z-index: 1000;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--elevation-2);
   animation: slideUpToast 0.2s ease;
 }
 
@@ -6290,7 +6344,7 @@ body.drawer-open .shadow-player {
 .cloze-modal {
   background: var(--paper);
   border: 2px solid var(--ink);
-  box-shadow: 8px 8px 0 var(--ink);
+  box-shadow: var(--sticker-8) var(--ink);
   width: 100%;
   max-width: 820px;
   max-height: 90vh;
@@ -6469,7 +6523,7 @@ body.drawer-open .shadow-player {
   cursor: pointer;
   transition: all 0.12s ease;
   text-align: center;
-  box-shadow: 1.5px 1.5px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -6478,7 +6532,7 @@ body.drawer-open .shadow-player {
 
 @media (hover: hover) and (pointer: fine) {
   .sm2-btn:hover {
-    box-shadow: 2.5px 2.5px 0 var(--ink);
+    box-shadow: var(--sticker-3) var(--ink);
   }
 }
 
@@ -6553,13 +6607,13 @@ body.drawer-open .shadow-player {
   font-weight: 700;
   text-decoration: none;
   white-space: nowrap;
-  box-shadow: 1.5px 1.5px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
   transition: all var(--dur-fast) ease;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .deck-workbench-link:hover {
-    box-shadow: 2.5px 2.5px 0 var(--ink);
+    box-shadow: var(--sticker-3) var(--ink);
   }
 }
 
@@ -6600,7 +6654,7 @@ body.drawer-open .shadow-player {
     border-top: 1.5px solid var(--ink) !important;
     z-index: 1000 !important;
     padding-bottom: env(safe-area-inset-bottom, 0) !important;
-    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.06) !important;
+    box-shadow: var(--elevation-sheet-quiet) !important;
   }
 
   .mobile-bottom-nav.hidden,
@@ -6733,7 +6787,7 @@ body.drawer-open .shadow-player {
     right: 0 !important;
     border-left: none !important;
     border-top: 2px solid var(--ink) !important;
-    box-shadow: 0 -8px 24px rgba(26, 23, 20, 0.2) !important;
+    box-shadow: var(--elevation-sheet) !important;
     transform: translateY(100%);
     border-radius: 14px 14px 0 0;
     /* Allow inner vertical scroll without propagating to page */
@@ -7089,7 +7143,7 @@ body.drawer-open .shadow-player {
   background: var(--paper-card);
   border: 1.5px solid var(--ink);
   border-radius: 6px;
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
   transition:
     background-color var(--dur-fast) ease,
     box-shadow var(--dur-fast) ease;
@@ -7097,7 +7151,7 @@ body.drawer-open .shadow-player {
 
 @media (hover: hover) and (pointer: fine) {
   .feed-item-card:hover {
-    box-shadow: 3px 3px 0 var(--ink);
+    box-shadow: var(--sticker-3) var(--ink);
   }
 }
 
@@ -7165,13 +7219,13 @@ body.drawer-open .shadow-player {
   border: 1.5px solid var(--ink);
   border-radius: 4px;
   cursor: pointer;
-  box-shadow: 1.5px 1.5px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
   transition: all var(--dur-fast) ease;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .btn-feed-ingest:hover {
-    box-shadow: 2.5px 2.5px 0 var(--ink);
+    box-shadow: var(--sticker-3) var(--ink);
   }
 }
 
@@ -7370,9 +7424,7 @@ body.drawer-open .shadow-player {
   background-color: #dbeafe !important;
   color: #1e3a8a !important;
   border-radius: 3px;
-  box-shadow:
-    0 0 0 2px #3b82f6,
-    0 2px 6px rgba(59, 130, 246, 0.35);
+  box-shadow: var(--ring-linked);
   font-weight: 600;
   /* 降级为静态 2px 蓝边：正文词元不新增一次性/循环动画（停止门 #2）。 */
 }
@@ -7634,7 +7686,7 @@ body.drawer-open .shadow-player {
 @media (hover: hover) and (pointer: fine) {
   .clause-node-box:hover {
     border-color: var(--accent, #2980b9);
-    box-shadow: 0 2px 8px rgba(41, 128, 185, 0.12);
+    box-shadow: var(--elevation-accent);
   }
 }
 
@@ -7728,9 +7780,7 @@ body.drawer-open .shadow-player {
   background-color: #fed7aa !important;
   color: #7c2d12 !important;
   border-radius: 2px;
-  box-shadow:
-    0 0 0 2px #f97316,
-    0 2px 6px rgba(249, 115, 22, 0.3);
+  box-shadow: var(--ring-clause);
   font-weight: 600;
   /* 降级为静态 2px 橙边：正文词元不新增一次性/循环动画（停止门 #2）。 */
 }
@@ -7760,7 +7810,7 @@ body.drawer-open .shadow-player {
   background: var(--paper, #fff);
   border-radius: 8px;
   padding: 1.5rem;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--elevation-3);
 }
 
 .settings-section-title {
@@ -7946,7 +7996,7 @@ body.drawer-open .shadow-player {
   position: relative;
   background: var(--paper-card, #ffffff);
   border: 1.5px solid var(--ink, #1a1a1a);
-  box-shadow: 3px 3px 0 var(--ink, #1a1a1a);
+  box-shadow: var(--sticker-3) var(--ink);
   padding: 0;
   overflow: hidden;
 }
@@ -7988,7 +8038,7 @@ body.drawer-open .shadow-player {
   position: relative;
   background: var(--paper, #faf8f5);
   border: 1.5px solid var(--ink, #1a1a1a);
-  box-shadow: 2px 2px 0 var(--ink, #1a1a1a);
+  box-shadow: var(--sticker-2) var(--ink);
   padding: 0.75rem 1rem;
   border-radius: 4px;
   margin-bottom: 1rem;
@@ -8074,7 +8124,7 @@ body.drawer-open .shadow-player {
 .mascot-choice-btn {
   background: var(--paper, #faf8f5);
   border: 1.5px solid var(--ink, #1a1a1a);
-  box-shadow: 2px 2px 0 var(--ink, #1a1a1a);
+  box-shadow: var(--sticker-2) var(--ink);
   padding: 0.45rem 0.85rem;
   font-family: var(--font-sans, -apple-system, sans-serif);
   font-size: 0.8125rem;
@@ -8095,7 +8145,7 @@ body.drawer-open .shadow-player {
   background: var(--ink, #1a1a1a);
   color: #ffffff;
   transform: translate(1px, 1px);
-  box-shadow: 1px 1px 0 var(--ink, #1a1a1a);
+  box-shadow: var(--sticker-1) var(--ink);
 }
 
 .mascot-upload-btn {
@@ -8283,7 +8333,7 @@ body.drawer-open .shadow-player {
   border-radius: 50%;
   background: var(--paper, #faf8f5);
   border: 1.5px solid var(--ink, #1a1a1a);
-  box-shadow: 2px 2px 0 var(--ink, #1a1a1a);
+  box-shadow: var(--sticker-2) var(--ink);
   align-items: center;
   justify-content: center;
   font-size: 1.25rem;
@@ -8306,7 +8356,7 @@ body.drawer-open .shadow-player {
   max-width: 280px;
   background: var(--paper, #faf8f5);
   border: 1.5px solid var(--ink, #1a1a1a);
-  box-shadow: 3px 3px 0 var(--ink, #1a1a1a);
+  box-shadow: var(--sticker-3) var(--ink);
   padding: 0.65rem 0.9rem;
   border-radius: 4px;
   pointer-events: none;
@@ -8397,7 +8447,7 @@ body.drawer-open .shadow-player {
   width: 250px;
   background: var(--paper, #faf8f5);
   border: 1.5px solid var(--ink, #1a1a1a);
-  box-shadow: 4px 4px 0 var(--ink, #1a1a1a);
+  box-shadow: var(--sticker-4) var(--ink);
   padding: 0.85rem;
   border-radius: 4px;
   pointer-events: auto;
@@ -8452,7 +8502,7 @@ body.drawer-open .shadow-player {
 
 .panel-char-btn.active {
   background: var(--ink, #1a1a1a);
-  box-shadow: 1px 1px 0 var(--ink, #1a1a1a);
+  box-shadow: var(--sticker-1) var(--ink);
 }
 
 /* 角色按钮注入的是与浮球/舞台同一套 .companion-svg（模板默认 width/height:100%）。
@@ -10861,7 +10911,7 @@ body.drawer-open .companion {
 .a1-hoeren-header {
   background: var(--paper);
   border: 1.5px solid var(--ink);
-  box-shadow: 3px 3px 0 var(--ink);
+  box-shadow: var(--sticker-3) var(--ink);
   padding: 1rem 1.25rem;
   margin-bottom: 1.5rem;
 }
@@ -11092,7 +11142,7 @@ body.drawer-open .companion {
 .a1-hoeren-side-card {
   background: var(--paper);
   border: 1.5px solid var(--ink);
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--sticker-2) var(--ink);
   padding: 1rem;
 }
 
@@ -11331,7 +11381,7 @@ body.drawer-open .companion {
 
 .a1-web-card.selected-web {
   border-color: var(--ink);
-  box-shadow: 0 0 0 2px var(--ink);
+  box-shadow: var(--ring-ink);
   background: rgba(43, 90, 160, 0.04);
 }
 
@@ -11449,7 +11499,7 @@ body.drawer-open .companion {
   background: var(--ink);
   border: 1px solid var(--ink);
   border-radius: 6px;
-  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.25);
+  box-shadow: var(--sticker-2) var(--shadow-tint-3);
   opacity: 0;
   pointer-events: none;
   transition:
@@ -11494,7 +11544,7 @@ body.drawer-open .companion {
   background: var(--ink);
   border: 1px solid var(--ink);
   border-radius: 6px;
-  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.25);
+  box-shadow: var(--sticker-2) var(--shadow-tint-3);
   pointer-events: auto;
 }
 
@@ -11573,17 +11623,17 @@ body.drawer-open .companion {
   border: 1.5px solid var(--ink, #15140f);
   border-radius: 3px;
   background: var(--paper-card, #fff);
-  box-shadow: 3px 3px 0 rgba(21, 20, 15, 0.15);
+  box-shadow: var(--sticker-3) var(--shadow-tint-3);
   cursor: pointer;
   transition: box-shadow var(--dur-fast, 180ms) var(--ease-editorial, ease);
 }
 .encounter-entry-card:focus-visible{
-  box-shadow: 5px 5px 0 rgba(21, 20, 15, 0.18);
+  box-shadow: var(--sticker-6) var(--shadow-tint-3);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .encounter-entry-card:hover {
-    box-shadow: 5px 5px 0 rgba(21, 20, 15, 0.18);
+    box-shadow: var(--sticker-6) var(--shadow-tint-3);
   }
 }
 .encounter-entry-emoji { font-size: 1.15rem; line-height: 1; filter: saturate(0.9); }
@@ -11649,7 +11699,7 @@ body.drawer-open .companion {
   border-radius: 3px;
   background: var(--coral, #ed6f5c);
   color: #fff;
-  box-shadow: 3px 3px 0 rgba(21, 20, 15, 0.18);
+  box-shadow: var(--sticker-3) var(--shadow-tint-3);
   transition: box-shadow var(--dur-fast, 180ms) var(--ease-editorial, ease);
 }
 @media (hover: hover) and (pointer: fine) {
@@ -11841,7 +11891,7 @@ body.drawer-open .companion {
   padding: 1.25rem 1.35rem;
   margin-top: 1rem;
   background: var(--paper-tint, #f2ece1);
-  box-shadow: 3px 3px 0 rgba(21, 20, 15, 0.12);
+  box-shadow: var(--sticker-3) var(--shadow-tint-2);
 }
 .encounter-add-form.open { display: flex; }
 .encounter-add-form label {
@@ -12015,7 +12065,7 @@ body.drawer-open .companion {
   border-radius: 2px;
   background: var(--coral, #ed6f5c);
   color: #fff;
-  box-shadow: 3px 3px 0 rgba(21, 20, 15, 0.18);
+  box-shadow: var(--sticker-3) var(--shadow-tint-3);
   cursor: pointer;
 }
 .enc-pop-status { font-family: var(--enc-mono); font-size: 0.72rem; margin-top: 0.45rem; min-height: 1em; }
@@ -12036,7 +12086,7 @@ body.drawer-open .companion {
   padding: 1rem 1.1rem;
   margin-top: 0.75rem;
   background: var(--note-green, #edf7ec);
-  box-shadow: 3px 3px 0 rgba(21, 20, 15, 0.12);
+  box-shadow: var(--sticker-3) var(--shadow-tint-2);
 }
 .enc-review-head { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem; }
 .enc-review-head h4 {
@@ -12237,7 +12287,7 @@ body.drawer-open .companion {
   max-width: 85%;
   background: var(--paper-card, #ffffff);
   border: 1.5px solid var(--ink, #1a1a1a);
-  box-shadow: 2px 2px 0 var(--ink, #1a1a1a);
+  box-shadow: var(--sticker-2) var(--ink);
   padding: 0.6rem 0.85rem;
   border-radius: 6px 6px 0 6px;
 }
@@ -12315,7 +12365,7 @@ body.drawer-open .companion {
 .companion-text-body pre {
   background: var(--paper-card, #ffffff);
   border: 1.5px solid var(--ink, #1a1a1a);
-  box-shadow: 2px 2px 0 var(--ink, #1a1a1a);
+  box-shadow: var(--sticker-2) var(--ink);
   border-radius: 4px;
   padding: 0.6rem 0.8rem;
   overflow-x: auto;
@@ -12337,7 +12387,7 @@ body.drawer-open .companion {
   font-size: 0.82rem;
   background: var(--paper-card, #ffffff);
   border: 1.5px solid var(--ink, #1a1a1a);
-  box-shadow: 2px 2px 0 var(--ink, #1a1a1a);
+  box-shadow: var(--sticker-2) var(--ink);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -12549,7 +12599,7 @@ body.drawer-open .companion {
   margin-top: 0.5rem;
   background: var(--paper-card, #ffffff);
   border: 1.5px solid var(--ink, #1a1a1a);
-  box-shadow: 3px 3px 0 var(--ink, #1a1a1a);
+  box-shadow: var(--sticker-3) var(--ink);
   padding: 0.85rem;
   border-radius: 4px;
 }
@@ -13060,7 +13110,7 @@ body.drawer-open .companion {
   max-width: calc(100vw - 16px);
   background: var(--paper-card);
   border: 1.5px solid var(--ink);
-  box-shadow: 3px 3px 0 var(--ink);
+  box-shadow: var(--sticker-3) var(--ink);
   border-radius: 4px;
 }
 
@@ -13116,7 +13166,7 @@ body.drawer-open .companion {
   max-height: min(42vh, 320px);
   background: var(--paper-card);
   border: 1.5px solid var(--ink);
-  box-shadow: 4px 4px 0 var(--ink);
+  box-shadow: var(--sticker-4) var(--ink);
   border-radius: 4px;
 }
 

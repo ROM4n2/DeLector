@@ -157,6 +157,35 @@ python tools/visual_gates.py --json   # 机器读
 
 **双份镜像**：主应用只加载 `static/style.css`（`:root` 在 `src/css/01-tokens-base.css`），workbench iframe 只加载 `static/css/tokens.css`，iframe 不继承父文档 `:root`。两处 MUST 同步；`test_token_mirrors_agree_for_p1_pairs` 会逐 token 比对解析值。暗色插槽沿用 workbench 既有 `[data-theme="dark"]`，本轮只保证 `--hard` 在暗色下仍指向文字安全色，不实现暗色。
 
+### 材质层级（P3，阴影 / 纸感）
+
+阴影从「每处手写」收敛成三组有名字的层级，全部定义在 `:root`（两份镜像同步）：
+
+```css
+/* 值层：阴影色，暗色主题只重绑这四行 */
+--shadow-tint-1..4: rgba(21, 20, 15, .08 / .12 / .16 / .35);
+
+/* 语义层：抬升 */
+--elevation-1          0 2px 4px  tint-1   /* 贴面接触 */
+--elevation-2          0 4px 12px tint-3   /* 抬起：toast / 下拉 */
+--elevation-3          0 10px 30px tint-3  /* 浮层：设置模态 */
+--elevation-4          0 8px 24px tint-4   /* 深色浮层：选中工具条 */
+--elevation-drawer     -8px 0 36px tint-3  /* 右侧抽屉 */
+--elevation-sheet      0 -8px 24px tint-3  /* 底部弹层 */
+--elevation-sheet-quiet 0 -2px 10px tint-1 /* 常驻底栏 */
+
+/* 边环：不占布局 */
+--ring-ink / --ring-inset-track / --ring-amber / --ring-linked / --ring-clause
+--ring-paper-lip      inset 0 1px 0 rgba(255,255,255,.6)  /* 纸页顶沿受光 */
+
+/* 硬偏移：只给偏移量，颜色由规则体给语义色 */
+--sticker-1 / 2 / 3 / 4 / 6 / 8 / --sticker-card(3px 4px) / --sticker-card-hover(5px 6px)
+```
+
+使用纪律：新增规则不得再写 `box-shadow` 的 rgba/hex，阴影色先进值层 token；writer 工具栏区（`08-settings-writer.css` ≥1000 行）与少量语义例外（coral / amber / paper-deep 描边影）本轮刻意保留。旧硬偏移 1.5 / 2.5 / 3.5 / 5px 已归并到 2 / 3 / 4 / 6。writer 区未动是为了避免与并行分支同区间冲突。
+
+**全屏噪点（纸纹）经评估否决**：固定层 + `mix-blend-mode: multiply` 会把 `--muted` 从 4.76 压到 4.40（0.06 alpha），且暗色需换混合模式、滚动每帧整屏混合。替代方案是暖墨阴影 + 1px 受光边，代价见 `docs/design-system.md` §3.2.1。
+
 ### P1 验证记录
 
 - 矩阵：改前 / 改后各 36/36 张，失败 0、控件缺失 0；改后再跑一遍作为噪声基线。
@@ -167,7 +196,7 @@ python tools/visual_gates.py --json   # 机器读
 
 ## 3.2 字面量上限：为什么是 700 / 150
 
-**上限是硬顶，不是目标值。** 当前实测仍是 **hex 581、rgba 118**（2026-11-08，`origin/master` `0ec6dfd`），距离硬顶分别还有 119 / 32 的余量，占用约 83.0% / 78.7%。本轮调整闸门只是把「只剩 1 格」的旧预算换成可容纳后续工作的硬顶，**没有把任何现有规则体字面量转成 token**——那是后续组件族迁移的独立工作。
+**上限是硬顶，不是目标值。** P1 结束时实测 **hex 581、rgba 118**（2026-11-08，`origin/master` `0ec6dfd`），距离硬顶分别还有 119 / 32 的余量，占用约 83.0% / 78.7%；P3 材质轮把阴影字面量迁进 `:root` 后进一步降到 **566 / 115**。调整闸门只是把「只剩 1 格」的旧预算换成可容纳后续工作的硬顶，实际值仍远低于新上限。
 
 余量按即将到来的工作面预分，不是开放额度：
 
