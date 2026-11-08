@@ -10,7 +10,7 @@ flashcard / dictation 两个分支（均走 formatCardDefinition）口径不一�
 探针形态：切片 cards.js 的 renderCurrentQuizCard + cd-state.js 的 cardState /
 formatCardDefinition 真源码进 node:vm 沙箱真跑（同 cards_workbench_no_review_probe
 的支架），读回 quiz-choice-options 的真 innerHTML，解析 onclick 的
-submitChoice(idx, correctIdx) 验证正确项索引映射。
+selectChoiceOption(idx, correctIdx) 验证正确项索引映射。
 变异实证（2026-11-03）：revert cards.js 修复后探针 exit 1，B1/B2/C1/C2/D2 具名红
 ——守卫对缺陷本体有判别力，不是恒绿。
 """

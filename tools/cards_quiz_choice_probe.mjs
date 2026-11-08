@@ -11,7 +11,7 @@
  * 连同 static/js/cd-state.js 的 cardState 容器与 formatCardDefinition 切片一起丢进
  * node:vm 沙箱真跑（状态与实现都来自真源码，探针内无手写替身），只桩 document /
  * esc / playGermanAudio，读回 quiz-choice-options 容器的**真 innerHTML** 再断言，
- * 并解析 onclick="submitChoice(idx, correctIdx)" 验证正确项索引映射。
+ * 并解析 onclick="selectChoiceOption(idx, correctIdx)" 验证正确项索引映射。
  *
  * 硬约束（与 cards_workbench_no_review_probe.mjs 同款）：
  *   - 探针里 MUST NOT 重抄一份被测实现。被测逻辑一律来自 cards.js / cd-state.js
@@ -208,10 +208,12 @@ function renderChoice(card, allVocab) {
   return { html: els.get("quiz-choice-options").innerHTML, els };
 }
 
-/** 解析渲染出的选项按钮：[{idx, correctIdx, label}]（label 已剥序号 span）。 */
+/** 解析渲染出的选项按钮：[{idx, correctIdx, label}]（label 已剥序号 span）。
+ *  onclick 必须调用 window 上真实暴露的桥名 selectChoiceOption（见 main.js），
+ *  写成模块内导出名 submitChoice 会在浏览器里抛 ReferenceError。 */
 function parseOptions(html) {
   const out = [];
-  const re = /<button class="quiz-choice-btn" onclick="submitChoice\((\d+), (\d+)\)">([\s\S]*?)<\/button>/g;
+  const re = /<button class="quiz-choice-btn" onclick="selectChoiceOption\((\d+), (\d+)\)">([\s\S]*?)<\/button>/g;
   let m;
   while ((m = re.exec(html)) !== null) {
     const inner = m[3].replace(/<span[\s\S]*?<\/span>/, "").trim();

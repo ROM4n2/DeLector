@@ -603,3 +603,25 @@ Status: DONE —— 组件族 P2（阅读器 + 词卡抽屉）PR #298 已合并 
 - CI（PR #298）：13 job 全 pass，1 job（Master Direct-Push Scope Gate）按设计 skipped；mergeable=CLEAN 后 merge commit。
 - CI（master `16a00fd` push）：13 job 全 success（含 Windows Portable Smoke）。
 - 临时 base worktree `D:\Code\DeLector-visual-before` 已清理；`D:\Code\DeLector-visual-p4` 保留待回收。
+
+
+### 2026-11-08 16:56 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+P2 组件族换肤第二轮：卡盒 + 闪卡。worktree D:\Code\DeLector-visual-p4，分支 feat/cards-flash-skin，基线 origin/master c2e9e60。
+- 范围：05 卡区(1-190)、06 卡控/牌盒/已掌握(1-120,491-1000)、07 测验闪卡(994-1490)。
+- 不做：06 exam 区(121-490)、08 设置/写作、android/、visual_gates 阈值、抽屉复习状态入口。
+
+### 2026-11-08 16:56 | deepseek-v4.1-flash__trae | WORK_END
+Status: PR_OPEN —— P2 组件族第二轮（卡盒 + 闪卡），分支 feat/cards-flash-skin。
+- 字面量：hex 550→528（−22/配额32）、唯一 rgba 109→108（−1/配额8）；infinite 7；闸内最低对比 4.63 不变。
+- token 收敛：卡面/背面/已掌握底/删除 hover/掌握按钮文字/闪卡/听写/选项/正误底色全部换语义 token；语法卡阴影 tint-1→tint-2 与词汇卡同档。
+- 非颜色状态：掌握态 = ↺ 文案 + 3px 苔绿左轨 + opacity .75（实测命中高 48.4px 未改）；选项正误 = ✓/✗ 图标 + 700 字重 + 1px 语义边框。
+- 对比度：掌握 5.68；正确 5.48（旧 5.50）；错误 5.72（旧 5.40）；纸色 on coral 4.63（旧 #fff 4.90）。
+- 矩阵：受控同源数据（33 卡/0 已掌握）三次运行；噪声组与信号组均 6/36 且 bbox 重合（drawer tab/german 随机词/抽屉计数），**本族矩阵信号为 0**——改动集中在 hover/掌握/作答态，静态矩阵不覆盖。computed 基线 0 项更新（基线不覆盖这些态），已逐项确认无漂移。
+- 交互 CDP：卡盒点击掌握后文案变「↺ 重返待复习」、moss 底/纸字/3px 左轨；选项点击后 ✓/✗ + 700；闪卡翻面背面与作答按钮同时出现。
+- 材质例外 2 处：ink 底计数薄纱 rgba(255,255,255,.2)、测验遮罩 rgba(246,245,240,.96)，无同义 token。
+- 修复（单独 commit，可回滚）：cards.js 内联 onclick 的 submitChoice 改为已暴露的 selectChoiceOption，见 PITFALL。
+
+### 2026-11-08 16:56 | deepseek-v4.1-flash__trae | PITFALL
+Caps: filesystem-read, filesystem-write, shell-exec
+内联 onclick 取不到 ES module 作用域：cards.js 渲染 onclick="submitChoice(...)"，但 main.js 只把同函数以 window.selectChoiceOption 暴露，点击抛 ReferenceError，正误反馈样式从未生效且无报错。这是「代码看着在、其实没接线」的第二例（前一例 window.showUndoToast）。排查手段：CDP 里 typeof window.<handler> + 真实 click 后看 class 是否落地。修复：改用桥名并就地注释；check_frontend_api_contract.py / check_silent_degradation.py 只扫 py，不覆盖此入口。
