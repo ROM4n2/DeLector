@@ -1,5 +1,5 @@
 #view-reader {
-  max-width: 760px;
+  max-width: 700px;
 
   margin: 0 auto;
 
@@ -39,7 +39,7 @@
 body.drawer-open {
   --reader-usable-width: calc(100vw - var(--drawer-width) - var(--drawer-gap));
 
-  --reader-content-width: min(760px, var(--reader-usable-width));
+  --reader-content-width: min(700px, var(--reader-usable-width));
 }
 
 body.drawer-open #view-reader {

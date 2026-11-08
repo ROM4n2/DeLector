@@ -3416,3 +3416,34 @@
   right: auto;
   left: 0;
 }
+
+/* ── P2 触摸目标：触屏 / 窄视口下按钮族命中区 ≥44px ───────────────────
+   44px 是触摸基线（Apple HIG / Fluent）。这里只放大命中区、不改按钮盒模型，
+   避免为了触摸基线重排移动端布局；桌面 pointer:fine 不参与。
+   抽屉 tab 在 overflow:auto 容器里，外扩命中区会被裁掉，只能实高 44。 */
+@media (max-width: 640px), (pointer: coarse) {
+  .btn {
+    position: relative;
+  }
+
+  .btn::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 48px);
+    height: max(100%, 48px);
+    transform: translate(-50%, -50%);
+  }
+
+  #drawer .drawer-tab-btn {
+    min-height: 44px;
+  }
+
+  /* .drawer-close 被设置/导入/润色/填空等多个 modal 复用；
+     本轮只改抽屉，避免顺手把其它 modal 的头部撑高。 */
+  #drawer .drawer-close {
+    width: 44px;
+    height: 44px;
+  }
+}

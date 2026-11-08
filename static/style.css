@@ -462,7 +462,7 @@ a {
 
 /* 尺寸第三档。必须重置 min-height —— .btn 的 36px 是 .btn-sm 唯一没盖住的
    属性，所以 index.html:95-97,610,678 才不得不各写一遍 inline style。
-   26px 而非 24px：留出 WCAG 2.5.5 的最小可点高度余量。 */
+   26px 是桌面 pointer:fine 的密度档；触摸视口由 09 末尾的 44px 规则覆盖。 */
 .btn-xs {
   min-height: 26px !important;
 
@@ -1146,7 +1146,7 @@ a {
 /* ── View 2: Reader Workspace ────────────── */
 
 #view-reader {
-  max-width: 760px;
+  max-width: 700px;
 
   margin: 0 auto;
 
@@ -1186,7 +1186,7 @@ a {
 body.drawer-open {
   --reader-usable-width: calc(100vw - var(--drawer-width) - var(--drawer-gap));
 
-  --reader-content-width: min(760px, var(--reader-usable-width));
+  --reader-content-width: min(700px, var(--reader-usable-width));
 }
 
 body.drawer-open #view-reader {
@@ -1746,7 +1746,7 @@ body.drawer-resizing #drawer {
 .drawer-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
@@ -1817,7 +1817,7 @@ body.drawer-resizing #drawer {
 
   justify-content: space-between;
 
-  padding: 1rem 1.25rem 0.75rem;
+  padding: 1rem 1.5rem 0.75rem;
 
   border-bottom: 1.5px dashed rgba(26, 23, 20, 0.2);
 
@@ -1846,7 +1846,7 @@ body.drawer-resizing #drawer {
   font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.04em;
-  padding: 5px 8px;
+  padding: 4px 8px;
   border-radius: 0;
   border: none;
   border-right: 1px solid rgba(26, 23, 20, 0.15);
@@ -1911,13 +1911,13 @@ body.drawer-resizing #drawer {
 
   overflow-x: hidden;
 
-  padding: 1.25rem 1.5rem 5rem;
+  padding: 1rem 1.5rem 5rem;
 
   display: flex;
 
   flex-direction: column;
 
-  gap: 1.25rem;
+  gap: 1rem;
 
   -webkit-overflow-scrolling: touch;
 
@@ -1949,10 +1949,10 @@ body.drawer-resizing #drawer {
 .companion-chat-stream {
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: 1rem 1.25rem;
+  padding: 1rem 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
+  gap: 0.75rem;
 }
 
 .drawer-body::-webkit-scrollbar {
@@ -6820,7 +6820,7 @@ body.drawer-open .shadow-player {
 
   /* 移动端更紧凑的抽屉头部与标签横向平滑滚动 */
   .drawer-header {
-    padding: 0.35rem 0.85rem 0.5rem !important;
+    padding: 0.25rem 0.75rem 0.5rem !important;
   }
 
   .drawer-tabs {
@@ -6830,7 +6830,7 @@ body.drawer-open .shadow-player {
   }
 
   .drawer-tab-btn {
-    padding: 6px 9px !important;
+    padding: 8px !important;
     font-size: 0.72rem !important;
   }
 
@@ -6856,7 +6856,7 @@ body.drawer-open .shadow-player {
      底部 sheet 不占横向空间，这里复位两个自定义属性即可（699 行那条规则随之恢复全宽）。 */
   body.drawer-open {
     --reader-usable-width: 100vw;
-    --reader-content-width: min(760px, 100vw);
+    --reader-content-width: min(700px, 100vw);
   }
 
   /* 3D Poker Card on Mobile */
@@ -13575,4 +13575,35 @@ body.drawer-open .companion {
 .companion.panel-align-left .companion-panel {
   right: auto;
   left: 0;
+}
+
+/* ── P2 触摸目标：触屏 / 窄视口下按钮族命中区 ≥44px ───────────────────
+   44px 是触摸基线（Apple HIG / Fluent）。这里只放大命中区、不改按钮盒模型，
+   避免为了触摸基线重排移动端布局；桌面 pointer:fine 不参与。
+   抽屉 tab 在 overflow:auto 容器里，外扩命中区会被裁掉，只能实高 44。 */
+@media (max-width: 640px), (pointer: coarse) {
+  .btn {
+    position: relative;
+  }
+
+  .btn::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 48px);
+    height: max(100%, 48px);
+    transform: translate(-50%, -50%);
+  }
+
+  #drawer .drawer-tab-btn {
+    min-height: 44px;
+  }
+
+  /* .drawer-close 被设置/导入/润色/填空等多个 modal 复用；
+     本轮只改抽屉，避免顺手把其它 modal 的头部撑高。 */
+  #drawer .drawer-close {
+    width: 44px;
+    height: 44px;
+  }
 }
