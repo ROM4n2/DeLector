@@ -502,3 +502,27 @@ P0 视觉回归基建完成（本地跑通，未接 CI）。
 ### 2026-11-08 10:02 | deepseek-v4.1-flash__trae | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 P0 视觉回归基建已提交并开 PR：commit `05e2c0e`（feat/visual-regression-p0，基线 origin/master a7f1b40），PR #293 https://github.com/ROM4n2/DeLector/pull/293（OPEN，未合并）。worktree `D:\Code\DeLector-visual-p0` 保留供后续 P1 复用。
+
+### 2026-11-08 10:40 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+P1 只动 token 清 5 处对比度欠账（独立 worktree `D:\Code\DeLector-visual-p1`，分支 `feat/token-contrast-p1`，基线 origin/master `0ec6dfd`）。
+- 目标：coral / mustard / muted / ink-faint 四组 token 达标；token 拆值层+语义层（暗色只留插槽）；用 P0 闸与基线证明「颜色变了、结构没变」。
+- 不做：不碰布局/结构/动画；不新增规则体 hex/rgba 字面量；不实现暗色；不跑全量 pytest；不自动合并。
+- 方法：先跑一次改前矩阵留档 → 改 tokens.css 与 01-tokens-base.css 双镜像 + workbench 映射 → build_css → 闸门升级 → 改后矩阵与 computed-style 比对。
+
+### 2026-11-08 11:05 | deepseek-v4.1-flash__trae | WORK_END
+Status: DONE —— P1 只动 token 清 5 处对比度欠账；commit `a72bc63`，PR #294（OPEN，未合并）。
+- 实测（paper #faf8f5 / white #ffffff）：coral 2.82→5.26、white/coral 2.99→5.58、muted 3.49→4.76、ink-faint 3.43→4.98；mustard 保持 1.72 仅装饰，新 `--mustard-ink: #825c00` 5.69。
+- 决策：coral 单值重选 `#b44322` 不拆——所有 coral 底色都压白色小字，底色自身须对白 ≥4.5，拆分只会得到两个同亮度值；mustard 拆装饰/文字两 token，workbench `--hard` 改指 `--mustard-ink`，新增 mustard decorative-only 闸。
+- 分层：值层 `--color-*` → 语义层 `--color-accent-* / --text-*` → 兼容层 `--coral / --mustard / --muted / --ink-faint`；`src/css/01-tokens-base.css` 与 `static/css/tokens.css` 双镜像，测试逐 token 比对。
+- 矩阵：36/36 × 改前/改后/噪声基线；35/36 可判定变化，`15-drawer-360` 全落噪声区；差异仅 coral/muted/ink-faint 三族色值及抗锯齿混合。
+- computed-style 只更新 3 条（mobile-nav-active.border-top-color、stat-ring-coral.border-top-color、stat-ring-coral.color），其余控件 20 属性不变 ⇒ 结构未动。
+- 闸门：hex 581≤582、rgba 118≤118、infinite 7==7、闸内对比度最低 4.63、mustard 文字声明 0；pytest 39 passed、Ruff/Mypy strict、check_css_sync 全绿。
+
+### 2026-11-08 11:35 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+P1 PR #294 追加「抬高字面量硬顶」提交（未转任何现有字面量为 token）。
+- 新预算：hex 700 / rgba 150（原 582 / 118）；实测仍 581 / 118，占用 83.0% / 78.7%，余量 119 / 32。
+- 余量预分：P2 组件族 ≤48/14、P3 收口 ≤24/8、T3–T9 动效阴影 ≤12/6、并行合并机动 ≤35/4。
+- 逼近告警：达预算 90%（hex 630 / rgba 135）打印 `[WARN] ... 新增字面量应优先改成 token`，不阻断；选 90% 是为了留一轮 PR 的改 token 提前量。
+- 验证：`visual_gates.py` 全 PASS（581/118）；pytest 41 passed；Ruff / Mypy strict 全绿；文档新增 §3.2 记录理由与实测。

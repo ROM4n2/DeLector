@@ -5,6 +5,22 @@
 /* ── Design System v3.0 — Academic Modern Editorial & Continuous Exhibition ── */
 
 :root {
+  /* ── P1 Value layer（只放色值；未来暗色主题只替换这一层）──
+     与 css/tokens.css 保持镜像：workbench iframe 只加载 tokens.css，
+     主应用只加载 style.css，两处 MUST 同步。 */
+  --color-coral-700: #b44322;
+  --color-mustard-400: #e9b94a;
+  --color-mustard-700: #825c00;
+  --color-gray-500: #756e61;
+  --color-gray-450: #726b5e;
+
+  /* ── P1 Semantic layer（规则体只认这一层；暗色只重绑语义，不动值层）── */
+  --color-accent-coral: var(--color-coral-700);
+  --color-accent-mustard: var(--color-mustard-400);
+  --color-accent-mustard-ink: var(--color-mustard-700);
+  --text-muted: var(--color-gray-500);
+  --text-faint: var(--color-gray-450);
+
   /* 移动端写作页：writer.js 用 visualViewport 覆盖成实时 px 值；
      这里的默认值保证 JS 未执行/老 WebView 下仍能按 dvh 布局。 */
   --writer-vvh: 100dvh;
@@ -26,7 +42,7 @@
   /* Ink */
   --ink: #15140f;
   --pencil: #5c554b;
-  --muted: #8c8477;
+  --muted: var(--text-muted);
   --rule: #d8d0c2;
   --rule-light: #ebe5da;
   /* --border 是 --rule 的语义别名：卡片/按钮 1px 描边全走这一档，
@@ -40,11 +56,13 @@
   --tape-border: rgba(26, 23, 20, 0.18);
 
   /* Accents */
-  --coral: #ed6f5c;
+  --coral: var(--color-accent-coral);
   --coral-soft: #f08e7c;
   --accent: #c14a2b;
   --accent-hover: #a83b1f;
-  --mustard: #e9b94a;
+  --mustard: var(--color-accent-mustard);
+  /* 仅装饰用 --mustard；任何文字色 MUST 用 --mustard-ink。 */
+  --mustard-ink: var(--color-accent-mustard-ink);
   --amber: #d9771c;
   --amber-soft: rgba(217, 119, 28, 0.12);
   --cherry: #b03030;
@@ -58,7 +76,7 @@
   /* Editorial Ink & Line Tokens */
   --ink-soft: #2a2620;
   --ink-mute: #5a5448;
-  --ink-faint: #8b8676;
+  --ink-faint: var(--text-faint);
   --line: rgba(21, 20, 15, 0.16);
   --line-soft: rgba(21, 20, 15, 0.08);
   --line-faint: rgba(21, 20, 15, 0.05);

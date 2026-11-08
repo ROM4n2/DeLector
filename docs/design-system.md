@@ -69,7 +69,7 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
 | **视觉流派** | 现代移动卡片 + 拟物暗色展台 | 包豪斯工坊 + 纸质手账批注 | 古腾堡报刊 (Gutenberg Broadsheet) | 现代高端社论杂志 (Atelier Editorial) |
 | **主纸张基底** | 纯白 `#ffffff` 嵌入暗夜舞台 `#0e0d0c` | 暖米黄方格纸 `#fbf6ec` + 点阵 | 经典牛皮纸色 `#f4ede0` + 面板纯色 | 重磅温润纸色 `#efe7d2` + SVG 噪点层 |
 | **墨水与线条** | 浅灰分割线 `#ebe6dd` | 铅笔灰 `#4d473d` + 2px/3px 实线 | 纯黑墨水 `#1f1c14` + 1px 实线 | 德国铸字墨黑 `#15140f` + 0.16 透明度墨线 |
-| **强调色彩** | 琥珀橙 `#e98425` + 珊瑚橘 `#ff6b3d` | 朱砂红 `#d8482b` + 高亮黄 `#f9d27c` | 哥德朱砂红 `#c14a2b` + 森林绿 `#406b3a` | 朱砂珊瑚红 `--coral: #ed6f5c` + 芥末黄 `#e9b94a` |
+| **强调色彩** | 琥珀橙 `#e98425` + 珊瑚橘 `#ff6b3d` | 朱砂红 `#d8482b` + 高亮黄 `#f9d27c` | 哥德朱砂红 `#c14a2b` + 森林绿 `#406b3a` | 朱砂珊瑚红 `--coral: #b44322` + 芥末黄 `#e9b94a`（仅装饰） |
 | **字体组合** | Instrument Serif + Inter + IBM Plex Mono | DM Serif Display + Patrick Hand + Mono | DM Serif Display/Text + IBM Plex Mono | Playfair Display + Inter Tight + JetBrains Mono |
 | **标志性组件** | 3D 拟真手机框、柔和马卡龙胶囊 | 和纸胶带、打孔夹、手写便签、回形针 | 顶栏 Ticker、左侧边栏导轨、台账明细表 | 双侧边文字轨道、环形指标圆环、双向走字带、倾斜展台 |
 | **给 DeLector 的贡献** | 卡片翻折质感、CEFR 马卡龙高亮阶梯 | 词法抽屉便签、语法打字机卡片、手写心得 | 顶栏元数据 Ticker、单色台账结构、词汇列表 | 落地页 Hero 不对称排版、环形数据徽章、现代杂志式台账 |
@@ -166,9 +166,9 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
   --ink:            #15140f;   /* 德国铸字墨黑，主文字与主边框（1.5px 实线） */
   --ink-soft:       #2a2620;   /* 柔墨黑，大段精读正文 */
   --ink-mute:       #5a5448;   /* 铅笔暖灰，副标题、辅助说明文字 */
-  --ink-faint:      #8b8676;   /* 极淡灰元数据、占位符、标尺定位文字 */
+  --ink-faint:      #726b5e;   /* 极淡灰元数据、占位符、标尺定位文字（纸面 ≥4.5） */
   --pencil:         #5c554b;   /* 铅笔灰（次要正文/标注） */
-  --muted:          #8c8477;   /* 次要说明文本 */
+  --muted:          #756e61;   /* 次要说明文本（纸面 ≥4.5） */
 
   /* ──────── 3. 分割线与网格标线 (Linework & Rules) ──────── */
   --line:           rgba(21, 20, 15, 0.16); /* 核心分割线（1px solid） */
@@ -180,11 +180,12 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
   --grid-dot:       rgba(21, 20, 15, 0.05); /* 点阵网格 */
 
   /* ──────── 4. 经典学术强调色 (Editorial Accents) ──────── */
-  --coral:          #ed6f5c;   /* 珊瑚朱砂红：主焦点、操作按钮、重点考点 */
+  --coral:          #b44322;   /* 珊瑚朱砂红：主焦点、操作按钮、重点考点（纸面 5.26 / 白字 5.58） */
   --coral-soft:     #f08e7c;   /* 柔珊瑚红：悬浮态与微高亮 */
   --accent:         #c14a2b;   /* 歌德朱砂红 */
   --accent-hover:   #a83b1f;   /* 强调色悬浮态 */
-  --mustard:        #e9b94a;   /* 暖芥末黄/琥珀色：发音磁带进度、复习高亮 */
+  --mustard:        #e9b94a;   /* 暖芥末黄：仅装饰（边框/描边/阴影），禁止承载文字 */
+  --mustard-ink:    #825c00;   /* 芥末文字色：任何文字 MUST 用这个（纸面 ≥4.5） */
   --amber:          #d9771c;   /* 琥珀色 */
   --moss:           #3b6e3f;   /* 苔绿：语法正解、良性指标 */
   --olive:          #6e7448;   /* 冷杉绿/橄榄绿：掌握测试、良性指标、语法正解 */
@@ -560,7 +561,7 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
   text-align: center;
   font-family: var(--mono);
 }
-.tape-counter { font-size: 11px; color: var(--mustard); letter-spacing: 0.12em; }
+.tape-counter { font-size: 11px; color: var(--mustard-ink); letter-spacing: 0.12em; }
 .tape-title { font-size: 12px; color: #fff; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cassette-controls {
   display: flex;

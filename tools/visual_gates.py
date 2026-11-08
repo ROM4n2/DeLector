@@ -3,8 +3,9 @@
 
 所有数值都从当前 CSS **现算**，不读取手抄统计；阈值是产品约定：
 
-- `static/style.css` 规则体（`:root` 以外）的 hex 字面量 <= 582
-- `static/style.css` 的 rgba/rgb 唯一值 <= 118
+- `static/style.css` 规则体（`:root` 以外）的 hex 字面量 <= 700
+- `static/style.css` 的 rgba/rgb 唯一值 <= 150
+- 上述两项达到预算的 90% 时打印逼近告警（不阻断，提示优先改 token）
 - `static/**/*.css` 中 `animation*: ... infinite` 的循环动画 == 7
 - 语义颜色对：正文 >= 4.5:1；大字与图形 >= 3:1
 
@@ -27,8 +28,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 STYLE_CSS = REPO_ROOT / "static" / "style.css"
 STATIC_ROOT = REPO_ROOT / "static"
 
-HEX_BUDGET = 582
-RGBA_BUDGET = 118
+# 硬顶，不是目标值。P1 实测 hex 581 / rgba 118，仍保留约 17% / 21% 余量；
+# 余量只给 P2 组件族与 P3 边界收口里确实无法 token 化的单次用色，见
+# docs/agents/visual-regression.md §3.2。达到 90% 时告警但不阻断。
+HEX_BUDGET = 700
+RGBA_BUDGET = 150
+NEAR_LIMIT_RATIO = 0.90
 INFINITE_BUDGET = 7
 
 _COMMENT_RE = re.compile(r"/\*.*?\*/", re.S)
@@ -38,9 +43,9 @@ _HEX_RE = re.compile(r"#[0-9a-fA-F]{3,8}\b")
 _RGBA_RE = re.compile(r"rgba?\(\s*[^)]*\)", re.I)
 _INFINITE_RE = re.compile(r"\binfinite\b")
 
-# (id, 前景 token, 背景 token, 角色, 阈值, 是否纳入闸门)
-# `advisory=True` 的项属于已登记的存量欠账（调研报告 §4），P0 只报告不阻断；
-# P1 换皮必须把它们清零后移入闸门清单。
+# (id, 前景 token, 背景 token, 角色, 阈值, 是否 advisory)
+# P1：原 5 项欠账已实测清零，前 4 对移入闸门；`--mustard` 仅装饰，
+# 单列为 decorative，由 `mustard decorative-only` 闸保证它不承载文字。
 CONTRAST_PAIRS: tuple[tuple[str, str, str, str, float, bool], ...] = (
     ("ink-on-paper", "ink", "paper", "body", 4.5, False),
     ("ink-mute-on-paper", "ink-mute", "paper", "body", 4.5, False),
@@ -53,12 +58,19 @@ CONTRAST_PAIRS: tuple[tuple[str, str, str, str, float, bool], ...] = (
     ("ink-on-mustard", "ink", "mustard", "large", 3.0, False),
     ("white-on-moss", "paper-card", "moss", "large", 3.0, False),
     ("ink-on-paper-graphic", "ink", "paper", "graphic", 3.0, False),
-    ("muted-on-paper", "muted", "paper", "body", 4.5, True),
-    ("ink-faint-on-paper", "ink-faint", "paper", "body", 4.5, True),
-    ("coral-on-paper", "coral", "paper", "graphic", 3.0, True),
-    ("white-on-coral", "paper-card", "coral", "large", 3.0, True),
-    ("mustard-on-paper", "mustard", "paper", "graphic", 3.0, True),
+    ("muted-on-paper", "muted", "paper", "body", 4.5, False),
+    ("ink-faint-on-paper", "ink-faint", "paper", "body", 4.5, False),
+    ("coral-on-paper", "coral", "paper", "body", 4.5, False),
+    ("white-on-coral", "paper-card", "coral", "body", 4.5, False),
+    ("mustard-ink-on-paper", "mustard-ink", "paper", "body", 4.5, False),
+    ("mustard-on-paper", "mustard", "paper", "decorative", 3.0, True),
 )
+
+_MUSTARD_VAR_RE = re.compile(r"var\(\s*--mustard\s*[,)]")
+_TEXT_COLOR_PROPERTIES = frozenset(
+    {"color", "caret-color", "text-decoration-color", "text-emphasis-color"}
+)
+_DECLARATION_RE = re.compile(r"([-\w]+)\s*:\s*([^;{}]+)(?=;|})")
 
 
 @dataclass
@@ -69,6 +81,17 @@ class GateResult:
     budget: Any
     unit: str = ""
     detail: str = ""
+    warning: str = ""
+
+
+def literal_gate_warning(actual: int, budget: int) -> str:
+    """字面量逼近上限时返回提示；未达阈值返回空串（告警不阻断）。"""
+    if budget <= 0 or actual < budget * NEAR_LIMIT_RATIO:
+        return ""
+    return (
+        f"{actual}/{budget}（{actual / budget:.0%}）已达逼近阈值 "
+        f"{NEAR_LIMIT_RATIO:.0%}：新增字面量应优先改成 token"
+    )
 
 
 def strip_comments(text: str) -> str:
@@ -124,6 +147,21 @@ def count_infinite_animations(css_files: Iterable[Path]) -> int:
         text = strip_comments(path.read_text(encoding="utf-8"))
         total += len(_INFINITE_RE.findall(text))
     return total
+
+
+def find_mustard_text_usage(css: str) -> list[str]:
+    """`--mustard` 仅允许装饰；出现在文字色声明里即为违规。"""
+    text = strip_comments(css)
+    roots = _root_ranges(text)
+    violations: list[str] = []
+    for match in _DECLARATION_RE.finditer(text):
+        if _inside(match.start(), roots):
+            continue
+        prop = match.group(1).strip().lower()
+        value = match.group(2)
+        if prop in _TEXT_COLOR_PROPERTIES and _MUSTARD_VAR_RE.search(value):
+            violations.append(f"{prop}: {value.strip()}")
+    return violations
 
 
 def _parse_color(raw: str) -> tuple[int, int, int] | None:
@@ -219,22 +257,30 @@ def evaluate(css_path: Path = STYLE_CSS, static_root: Path = STATIC_ROOT) -> dic
     css_files = sorted(static_root.rglob("*.css"))
     contrast = evaluate_contrast(css)
     gated = [item for item in contrast if not item["advisory"]]
-    advisory = [item for item in contrast if item["advisory"]]
+    decorative = [item for item in contrast if item["role"] == "decorative"]
+    advisory = [
+        item for item in contrast if item["advisory"] and item["role"] != "decorative"
+    ]
+    mustard_text_usage = find_mustard_text_usage(css)
+    hex_actual = count_hex_outside_root(css)
+    rgba_actual = len(unique_rgba_values(css))
 
     gates = [
         GateResult(
             name="hex literals outside :root",
-            ok=count_hex_outside_root(css) <= HEX_BUDGET,
-            actual=count_hex_outside_root(css),
+            ok=hex_actual <= HEX_BUDGET,
+            actual=hex_actual,
             budget=HEX_BUDGET,
             unit="occurrences",
+            warning=literal_gate_warning(hex_actual, HEX_BUDGET),
         ),
         GateResult(
             name="unique rgba literals",
-            ok=len(unique_rgba_values(css)) <= RGBA_BUDGET,
-            actual=len(unique_rgba_values(css)),
+            ok=rgba_actual <= RGBA_BUDGET,
+            actual=rgba_actual,
             budget=RGBA_BUDGET,
             unit="unique values",
+            warning=literal_gate_warning(rgba_actual, RGBA_BUDGET),
         ),
         GateResult(
             name="infinite animations",
@@ -255,12 +301,21 @@ def evaluate(css_path: Path = STYLE_CSS, static_root: Path = STATIC_ROOT) -> dic
             )
             or "all gated pairs pass",
         ),
+        GateResult(
+            name="mustard decorative-only",
+            ok=not mustard_text_usage,
+            actual=len(mustard_text_usage),
+            budget=0,
+            unit="text declarations",
+            detail="; ".join(mustard_text_usage) or "--mustard 未承载文字",
+        ),
     ]
     return {
         "source": str(css_path.relative_to(REPO_ROOT)),
         "gates": [asdict(gate) for gate in gates],
         "contrast": contrast,
         "advisory_failures": [item for item in advisory if not item["ok"]],
+        "decorative": decorative,
         "ok": all(gate.ok for gate in gates),
     }
 
@@ -270,6 +325,8 @@ def _print_report(report: dict[str, Any]) -> None:
     for gate in report["gates"]:
         status = "PASS" if gate["ok"] else "FAIL"
         print(f"[{status}] {gate['name']}: {gate['actual']} (预算 {gate['budget']})")
+        if gate.get("warning"):
+            print(f"       [WARN] {gate['warning']}")
         if gate.get("detail"):
             print(f"       {gate['detail']}")
     print("对比度（纳入闸门）：")
@@ -282,12 +339,16 @@ def _print_report(report: dict[str, Any]) -> None:
             f">= {item['threshold']} ({item['role']})"
         )
     if report["advisory_failures"]:
-        print("对比度欠账（P0 只报告，P1 换皮必须清零）：")
+        print("对比度欠账（advisory，不阻断）：")
         for item in report["advisory_failures"]:
             print(
                 f"  [WARN] {item['id']:<26} {item['ratio']:>5.2f} "
                 f"< {item['threshold']} ({item['role']})"
             )
+    if report["decorative"]:
+        print("仅装饰（不参与可读性判定）：")
+        for item in report["decorative"]:
+            print(f"  [DECO] {item['id']:<26} {item['ratio']:>5.2f} ({item['role']})")
 
 
 def main(argv: list[str] | None = None) -> int:

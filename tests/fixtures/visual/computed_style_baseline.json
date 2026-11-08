@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-11-08T01:49:25.618Z",
+  "capturedAt": "2026-11-08T02:37:25.938Z",
   "controls": {
     "article-row": {
       "error": null,
@@ -182,7 +182,7 @@
         "animation-name": "none",
         "background-color": "rgb(255, 255, 255)",
         "border-radius": "0px",
-        "border-top-color": "rgb(237, 111, 92)",
+        "border-top-color": "rgb(180, 67, 34)",
         "border-top-width": "3px",
         "box-shadow": "none",
         "color": "rgb(0, 0, 0)",
@@ -269,10 +269,10 @@
         "animation-name": "none",
         "background-color": "rgba(237, 111, 92, 0.08)",
         "border-radius": "50%",
-        "border-top-color": "rgb(237, 111, 92)",
+        "border-top-color": "rgb(180, 67, 34)",
         "border-top-width": "1px",
         "box-shadow": "none",
-        "color": "rgb(237, 111, 92)",
+        "color": "rgb(180, 67, 34)",
         "display": "flex",
         "font-family": "\"IBM Plex Mono\", \"JetBrains Mono\", Consolas, monospace",
         "font-size": "13px",
