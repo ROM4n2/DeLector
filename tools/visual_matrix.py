@@ -28,6 +28,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TOOLS_ROOT = REPO_ROOT / "tools"
@@ -56,7 +57,7 @@ def _free_port(preferred: int) -> int:
         return int(probe.getsockname()[1])
 
 
-def _request_json(url: str, method: str = "GET", payload: dict | None = None) -> object:
+def _request_json(url: str, method: str = "GET", payload: dict[str, object] | None = None) -> object:
     data = None
     headers = {}
     if payload is not None:
@@ -68,7 +69,9 @@ def _request_json(url: str, method: str = "GET", payload: dict | None = None) ->
     return json.loads(body) if body else None
 
 
-def _wait_health(base_url: str, process: subprocess.Popen, log_path: Path, timeout: float = 45.0) -> None:
+def _wait_health(
+    base_url: str, process: subprocess.Popen[str], log_path: Path, timeout: float = 45.0
+) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if process.poll() is not None:
@@ -102,7 +105,7 @@ def _seed(base_url: str) -> None:
         )
 
 
-def _start_server(data_dir: Path, port: int, log_path: Path) -> subprocess.Popen:
+def _start_server(data_dir: Path, port: int, log_path: Path) -> subprocess.Popen[str]:
     env = dict(os.environ)
     env["DELECTOR_DATA_DIR"] = str(data_dir)
     # 矩阵只读预置 processed_json，不需要 spaCy 预热；关掉可显著缩短启动时间。
@@ -125,13 +128,14 @@ def _start_server(data_dir: Path, port: int, log_path: Path) -> subprocess.Popen
         env=env,
         stdout=log_file,
         stderr=subprocess.STDOUT,
+        text=True,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     process._visual_log_handle = log_file  # type: ignore[attr-defined]
     return process
 
 
-def _stop_server(process: subprocess.Popen) -> None:
+def _stop_server(process: subprocess.Popen[str]) -> None:
     handle = getattr(process, "_visual_log_handle", None)
     if process.poll() is None:
         process.terminate()
@@ -143,13 +147,18 @@ def _stop_server(process: subprocess.Popen) -> None:
         handle.close()
 
 
-def _print_gate_report(report: dict) -> None:
+def _print_gate_report(report: dict[str, Any]) -> None:
     visual_gates._print_report(report)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="DeLector P0 视觉回归一键编排")
-    parser.add_argument("--out", type=Path, default=None, help="截图与导出目录（默认 _artifacts/visual-matrix/<时间戳>）")
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="截图与导出目录（默认 _artifacts/visual-matrix/<时间戳>）",
+    )
     parser.add_argument("--widths", default=DEFAULT_WIDTHS, help="逗号分隔宽度，默认 393,360,1280")
     parser.add_argument("--only", default=None, help="只跑指定场景 key（逗号分隔）")
     parser.add_argument("--port", type=int, default=8765)
@@ -232,7 +241,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"已更新基线：{visual_baseline.DEFAULT_BASELINE}")
 
         summary_path = out_dir / "summary.json"
-        summary = {}
+        summary: dict[str, Any] = {}
         if summary_path.exists():
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
         duration = time.monotonic() - started
