@@ -1079,7 +1079,7 @@
 @media (hover: hover) and (pointer: fine) {
   .quiz-mode-card:hover {
     box-shadow: var(--sticker-4) var(--ink);
-    background: #fff;
+    background: var(--paper-card);
   }
 }
 
@@ -1144,7 +1144,7 @@
 /* Flashcard */
 .quiz-flashcard {
   min-height: 220px;
-  background: #fff;
+  background: var(--paper-card);
   border: 2px solid var(--ink);
   box-shadow: var(--sticker-4) var(--ink);
   padding: 2rem 1.5rem;
@@ -1162,7 +1162,7 @@
 
 @media (hover: hover) and (pointer: fine) {
   .quiz-flashcard:hover {
-    background: #fffdf6;
+    background: var(--paper-warm);
     box-shadow: var(--sticker-6) var(--ink);
   }
 }
@@ -1227,7 +1227,7 @@
 }
 
 .quiz-btn-wrong {
-  background: #fde8e8;
+  background: var(--note-pink);
   color: var(--cherry);
   border-color: var(--cherry);
 }
@@ -1235,12 +1235,12 @@
 @media (hover: hover) and (pointer: fine) {
   .quiz-btn-wrong:hover {
     background: var(--cherry);
-    color: #fff;
+    color: var(--paper);
   }
 }
 
 .quiz-btn-correct {
-  background: #eef7ee;
+  background: var(--note-green);
   color: var(--moss);
   border-color: var(--moss);
 }
@@ -1248,13 +1248,13 @@
 @media (hover: hover) and (pointer: fine) {
   .quiz-btn-correct:hover {
     background: var(--moss);
-    color: #fff;
+    color: var(--paper);
   }
 }
 
 /* Dictation */
 .quiz-dictation-card {
-  background: #fff;
+  background: var(--paper-card);
   border: 2px solid var(--ink);
   padding: 2rem 1.5rem;
   box-shadow: var(--sticker-4) var(--ink);
@@ -1300,7 +1300,7 @@
 
 .quiz-dict-input:focus {
   outline: none;
-  background: #fff;
+  background: var(--paper-card);
   border-color: var(--accent);
 }
 
@@ -1312,20 +1312,20 @@
 }
 
 .quiz-dict-feedback.correct {
-  background: #eef7ee;
+  background: var(--note-green);
   color: var(--moss);
   border-color: var(--moss);
 }
 
 .quiz-dict-feedback.wrong {
-  background: #fde8e8;
+  background: var(--note-pink);
   color: var(--cherry);
   border-color: var(--cherry);
 }
 
 /* Choice */
 .quiz-choice-card {
-  background: #fff;
+  background: var(--paper-card);
   border: 2px solid var(--ink);
   padding: 2rem 1.5rem;
   box-shadow: var(--sticker-4) var(--ink);
@@ -1359,22 +1359,34 @@
 
 @media (hover: hover) and (pointer: fine) {
   .quiz-choice-btn:hover:not(:disabled) {
-    background: #fff;
+    background: var(--paper-card);
     border-color: var(--accent);
   }
 }
 
 .quiz-choice-btn.is-correct {
-  background: #eef7ee !important;
+  background: var(--note-green) !important;
   color: var(--moss) !important;
   border-color: var(--moss) !important;
   font-weight: 700;
 }
 
+/* 正误不靠颜色：✓/✗ 走图标层，字重再加一道形状差。 */
+.quiz-choice-btn.is-correct::before {
+  content: "✓ ";
+  font-weight: 700;
+}
+
 .quiz-choice-btn.is-wrong {
-  background: #fde8e8 !important;
+  background: var(--note-pink) !important;
   color: var(--cherry) !important;
   border-color: var(--cherry) !important;
+  font-weight: 700;
+}
+
+.quiz-choice-btn.is-wrong::before {
+  content: "✗ ";
+  font-weight: 700;
 }
 
 /* Completion */
@@ -1446,7 +1458,7 @@
 
 .undo-btn {
   background: var(--accent);
-  color: #fff;
+  color: var(--paper);
   border: none;
   padding: 0.2rem 0.6rem;
   font-family: var(--mono);

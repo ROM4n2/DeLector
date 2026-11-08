@@ -2448,7 +2448,7 @@ body.drawer-resizing #drawer {
 
 @media (hover: hover) and (pointer: fine) {
   .memo-card:hover {
-    background: #fffdf0;
+    background: var(--paper-card);
     box-shadow:
       var(--sticker-card-hover) var(--shadow-tint-3),
       var(--ring-paper-lip);
@@ -2504,7 +2504,7 @@ body.drawer-resizing #drawer {
 
   color: var(--pencil);
 
-  border-top: 1px dashed rgba(26, 23, 20, 0.2);
+  border-top: 1px dashed var(--line);
 
   margin-top: 0.75rem;
 
@@ -2526,7 +2526,8 @@ body.drawer-resizing #drawer {
 
   margin-bottom: 0.875rem;
 
-  box-shadow: var(--sticker-card) var(--shadow-tint-1);
+  /* 与 .memo-card 同档 elevation：同族卡片不因语法/词汇分叉出两种阴影深度。 */
+  box-shadow: var(--sticker-card) var(--shadow-tint-2);
 }
 
 .grammar-memo-head {
@@ -2558,7 +2559,7 @@ body.drawer-resizing #drawer {
 
   color: var(--accent);
 
-  background: rgba(255, 255, 255, 0.7);
+  background: var(--paper-card);
 
   padding: 0.35rem 0.6rem;
 
@@ -3987,7 +3988,7 @@ body.drawer-open .shadow-player {
   display: inline-block;
   padding: 0.1rem 0.4rem;
   border-radius: 2px;
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--line-faint);
   /* 计数元数据统一 mono 12px（方向 A 校准口径），与 .exam-module-count 同档。 */
   font-size: 0.75rem;
   letter-spacing: 0.02em;
@@ -4473,7 +4474,7 @@ body.drawer-open .shadow-player {
   min-height: 380px;
   height: 100%;
   box-sizing: border-box;
-  background: #ffffff;
+  background: var(--paper-card);
   border: 2px solid var(--ink);
   border-radius: 4px;
   box-shadow: var(--sticker-6) var(--ink);
@@ -4495,7 +4496,8 @@ body.drawer-open .shadow-player {
 
 .deck-card-face.card-back {
   transform: rotateY(180deg);
-  background: #fdfbf7;
+  /* 背面用纸本底色：正面是白卡、背面是纸，翻面本身即有一层材质区分。 */
+  background: var(--paper);
   border-color: var(--ink);
 }
 
@@ -4747,7 +4749,7 @@ body.drawer-open .shadow-player {
 @media (hover: hover) and (pointer: fine) {
   .deck-nav-btn.deck-btn-flip:hover {
     background: var(--accent);
-    color: #ffffff;
+    color: var(--paper);
     border-color: var(--accent);
     box-shadow: var(--sticker-3) var(--ink);
   }
@@ -4789,7 +4791,7 @@ body.drawer-open .shadow-player {
 .memo-card.is-mastered,
 .grammar-memo-card.is-mastered {
   opacity: 0.75;
-  background: #fbfbf8;
+  background: var(--paper);
   border-left: 3px solid var(--moss);
 }
 
@@ -4821,7 +4823,7 @@ body.drawer-open .shadow-player {
 
 @media (hover: hover) and (pointer: fine) {
   .card-del-btn:hover {
-    background: rgba(176, 48, 48, 0.1);
+    /* 危险底色不再铺一层红纱：边框与文字已由 --danger 承担语义。 */
     color: var(--danger);
     border-color: var(--danger);
   }
@@ -4863,7 +4865,7 @@ body.drawer-open .shadow-player {
 
 .card-master-btn.mastered-active {
   background: var(--moss);
-  color: #fff;
+  color: var(--paper);
   border-color: var(--moss);
 }
 
@@ -5954,7 +5956,7 @@ body.drawer-open .shadow-player {
 @media (hover: hover) and (pointer: fine) {
   .quiz-mode-card:hover {
     box-shadow: var(--sticker-4) var(--ink);
-    background: #fff;
+    background: var(--paper-card);
   }
 }
 
@@ -6019,7 +6021,7 @@ body.drawer-open .shadow-player {
 /* Flashcard */
 .quiz-flashcard {
   min-height: 220px;
-  background: #fff;
+  background: var(--paper-card);
   border: 2px solid var(--ink);
   box-shadow: var(--sticker-4) var(--ink);
   padding: 2rem 1.5rem;
@@ -6037,7 +6039,7 @@ body.drawer-open .shadow-player {
 
 @media (hover: hover) and (pointer: fine) {
   .quiz-flashcard:hover {
-    background: #fffdf6;
+    background: var(--paper-warm);
     box-shadow: var(--sticker-6) var(--ink);
   }
 }
@@ -6102,7 +6104,7 @@ body.drawer-open .shadow-player {
 }
 
 .quiz-btn-wrong {
-  background: #fde8e8;
+  background: var(--note-pink);
   color: var(--cherry);
   border-color: var(--cherry);
 }
@@ -6110,12 +6112,12 @@ body.drawer-open .shadow-player {
 @media (hover: hover) and (pointer: fine) {
   .quiz-btn-wrong:hover {
     background: var(--cherry);
-    color: #fff;
+    color: var(--paper);
   }
 }
 
 .quiz-btn-correct {
-  background: #eef7ee;
+  background: var(--note-green);
   color: var(--moss);
   border-color: var(--moss);
 }
@@ -6123,13 +6125,13 @@ body.drawer-open .shadow-player {
 @media (hover: hover) and (pointer: fine) {
   .quiz-btn-correct:hover {
     background: var(--moss);
-    color: #fff;
+    color: var(--paper);
   }
 }
 
 /* Dictation */
 .quiz-dictation-card {
-  background: #fff;
+  background: var(--paper-card);
   border: 2px solid var(--ink);
   padding: 2rem 1.5rem;
   box-shadow: var(--sticker-4) var(--ink);
@@ -6175,7 +6177,7 @@ body.drawer-open .shadow-player {
 
 .quiz-dict-input:focus {
   outline: none;
-  background: #fff;
+  background: var(--paper-card);
   border-color: var(--accent);
 }
 
@@ -6187,20 +6189,20 @@ body.drawer-open .shadow-player {
 }
 
 .quiz-dict-feedback.correct {
-  background: #eef7ee;
+  background: var(--note-green);
   color: var(--moss);
   border-color: var(--moss);
 }
 
 .quiz-dict-feedback.wrong {
-  background: #fde8e8;
+  background: var(--note-pink);
   color: var(--cherry);
   border-color: var(--cherry);
 }
 
 /* Choice */
 .quiz-choice-card {
-  background: #fff;
+  background: var(--paper-card);
   border: 2px solid var(--ink);
   padding: 2rem 1.5rem;
   box-shadow: var(--sticker-4) var(--ink);
@@ -6234,22 +6236,34 @@ body.drawer-open .shadow-player {
 
 @media (hover: hover) and (pointer: fine) {
   .quiz-choice-btn:hover:not(:disabled) {
-    background: #fff;
+    background: var(--paper-card);
     border-color: var(--accent);
   }
 }
 
 .quiz-choice-btn.is-correct {
-  background: #eef7ee !important;
+  background: var(--note-green) !important;
   color: var(--moss) !important;
   border-color: var(--moss) !important;
   font-weight: 700;
 }
 
+/* 正误不靠颜色：✓/✗ 走图标层，字重再加一道形状差。 */
+.quiz-choice-btn.is-correct::before {
+  content: "✓ ";
+  font-weight: 700;
+}
+
 .quiz-choice-btn.is-wrong {
-  background: #fde8e8 !important;
+  background: var(--note-pink) !important;
   color: var(--cherry) !important;
   border-color: var(--cherry) !important;
+  font-weight: 700;
+}
+
+.quiz-choice-btn.is-wrong::before {
+  content: "✗ ";
+  font-weight: 700;
 }
 
 /* Completion */
@@ -6321,7 +6335,7 @@ body.drawer-open .shadow-player {
 
 .undo-btn {
   background: var(--accent);
-  color: #fff;
+  color: var(--paper);
   border: none;
   padding: 0.2rem 0.6rem;
   font-family: var(--mono);
