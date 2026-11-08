@@ -786,3 +786,12 @@ Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
 验证：pytest 上述 13 + contract_uniform + server_cards_vocab + frontend_module_graph 全 PASS；check_frontend_layers / check_css_sync / build_index_html --check / layer_invariants 全 PASS。
 已知问题（未修，已记计划 §7）：vocab_cards 裸 INSERT 无唯一约束。
 回写检查：临时脚本/截图/DB 副本均在 %TEMP%，未入库；服务已停。
+### 2026-11-08 22:12 | deepseek-v4.1-flash__trae | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec
+分支补记：tests/test_reader_api_split.py 的 EXPECTED_ENDPOINTS 是「rd-api 导出面精确清单」，新增端点的登记属于清单维护，断言仍是 untime == EXPECTED_ENDPOINTS，未放松为子集。同步把 tests/test_wordcard_ledger.py 登记进 tools/ci_shards.py unit-4 并在 ci_shard_weights.json 记 4.0s（漏登记会被 test_ci_shards_partition_every_test_file_exactly_once 拦下）。
+
+### 2026-11-08 22:12 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
+交付：PR #307（feat/reader: 词卡抽屉单行复习台账，按 lemma 去重），不自动合并。
+CI（run 42488246132，head c16e5ce）逐 job：Detect packaging-surface changes / Go Gates / Go↔Python Integration / cost-cold-start / cost-guards / integration-heavy / unit-1..4 / Secret Scan / Static Invariants / Windows Portable Smoke 全 pass；Master Direct-Push Scope Gate skipping（PR 场景按设计不跑）。此前两轮红分别为 ruff E501/I001、mypy arg-type、漏登记 ci_shards、rd-api 导出面清单，均已修。
+清理：验证服务已停；临时 DB 副本/截图/CDP 脚本均在 %TEMP%（未入库）；已移除合并后的旧 worktree D:\Code\DeLector-reviewstate；本 worktree D:\Code\DeLector-ledger 在推送后移除，分支保留。
