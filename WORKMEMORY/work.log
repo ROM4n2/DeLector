@@ -795,3 +795,13 @@ Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
 交付：PR #307（feat/reader: 词卡抽屉单行复习台账，按 lemma 去重），不自动合并。
 CI（run 42488246132，head c16e5ce）逐 job：Detect packaging-surface changes / Go Gates / Go↔Python Integration / cost-cold-start / cost-guards / integration-heavy / unit-1..4 / Secret Scan / Static Invariants / Windows Portable Smoke 全 pass；Master Direct-Push Scope Gate skipping（PR 场景按设计不跑）。此前两轮红分别为 ruff E501/I001、mypy arg-type、漏登记 ci_shards、rd-api 导出面清单，均已修。
 清理：验证服务已停；临时 DB 副本/截图/CDP 脚本均在 %TEMP%（未入库）；已移除合并后的旧 worktree D:\Code\DeLector-reviewstate；本 worktree D:\Code\DeLector-ledger 在推送后移除，分支保留。
+### 2026-11-08 23:16 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：按用户清单执行 v5.22.0 发版（五处版本面同提交 bump + README 重写 + CHANGELOG 收口 + 全量 pytest/ruff/mypy/go race + 闸门 + 模拟器覆盖安装 + tag 触发 build-release.yml）。
+不做范围：不改业务源码 / 不改 DB 写入路径 / 不修重复卡缺陷 / 不动真机与低端机验收。
+
+### 2026-11-08 23:16 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+版本面：version.py 5.22.0 / sw.js delector-static-v5.22.0 / build.gradle 5.22.0 + 52200 / header.html 并重建 index.html。
+改既有断言：tests/test_app_version_source.py 两条版本字面量（5.21.1→5.22.0、52101→52200），依据测试自身文档「写死字面量是为了 bump 时变红、逼人同步」；仅更新期望值，未放松断言语义。
+环境坑：仓库根存在 gitignored 的 delector.db/progress.db 残留，会让 test_nlp_prewarm 的探针（DELECTOR_DATA_DIR 指向 tmp）触发迁移闸；干净全量跑法为临时移开残留、跑完自动还原。
