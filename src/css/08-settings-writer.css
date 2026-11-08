@@ -1,0 +1,2423 @@
+/* ── Settings Modal Styles ─────────────────────────────────────────── */
+.nav-settings-btn {
+  font-size: 0.8125rem;
+  padding: 0.35rem 0.625rem;
+  border-radius: 4px;
+  color: var(--ink, #1a1a1a);
+  border: 1px solid var(--border, #d1d5db);
+  background: var(--paper, #fff);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .nav-settings-btn:hover {
+    background: var(--paper-accent, #f3f4f6);
+    border-color: var(--accent, #2980b9);
+  }
+}
+
+.settings-modal-box {
+  max-width: 540px;
+  width: 90vw;
+  background: var(--paper, #fff);
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+.settings-section-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--ink, #1a1a1a);
+  margin-bottom: 0.35rem;
+}
+
+.btn-preset-pill {
+  font-size: 0.6875rem;
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--border, #d1d5db);
+  background: var(--paper-accent, #f3f4f6);
+  color: var(--ink, #333);
+  cursor: pointer;
+  transition: all 0.1s;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn-preset-pill:hover {
+    background: #dbeafe;
+    color: #1e40af;
+    border-color: #93c5fd;
+  }
+}
+
+/* ── Settings IA (2026-11-07): single entry + collapsible groups ───── */
+@media (max-width: 1024px) {
+  /* 移动端只保留 dock 入口：隐藏顶部「设置」，避免同屏两个入口 */
+  .nav-settings-btn {
+    display: none;
+  }
+}
+
+.settings-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.settings-modal-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.settings-group {
+  border-top: 1px solid var(--border);
+}
+
+.settings-group:first-of-type {
+  border-top: none;
+}
+
+.settings-group-toggle {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  background: transparent;
+  border: none;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.settings-group-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.settings-group-chevron {
+  flex: 0 0 auto;
+  transition: transform 180ms ease;
+}
+
+.settings-group-toggle[aria-expanded="false"] .settings-group-chevron {
+  transform: rotate(-90deg);
+}
+
+.settings-group-body {
+  padding-bottom: 1rem;
+}
+
+.settings-group-body[hidden] {
+  display: none;
+}
+
+.settings-group-body > .modal-field {
+  margin-top: 0.75rem;
+}
+
+.settings-tip {
+  font-size: 0.75rem;
+  color: var(--pencil);
+  margin: 0 0 0.75rem;
+  line-height: 1.45;
+}
+
+.settings-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.settings-inline-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.settings-key-vis-btn {
+  min-width: 44px;
+  padding: 0 0.5rem;
+}
+
+.settings-field-status {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--pencil);
+}
+
+.settings-preset-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.settings-effective-model {
+  margin-top: 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--pencil);
+  line-height: 1.4;
+}
+
+.settings-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.875rem;
+}
+
+.settings-test-feedback {
+  font-size: 0.75rem;
+  color: var(--pencil);
+  font-family: var(--mono);
+}
+
+.settings-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+@media (max-width: 380px) {
+  .settings-modal-box {
+    padding: 1rem;
+  }
+  .settings-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── v3.7.0: Companion Mascot System (Eule & Friends) ─────────────── */
+.folio-mascot-section {
+  max-width: 1200px;
+  margin: 0 auto 2.5rem;
+  padding: 0 1.5rem;
+  box-sizing: border-box;
+}
+
+.folio-mascot-card {
+  position: relative;
+  background: var(--paper-card, #ffffff);
+  border: 1.5px solid var(--ink, #1a1a1a);
+  box-shadow: 3px 3px 0 var(--ink, #1a1a1a);
+  padding: 0;
+  overflow: hidden;
+}
+
+.mascot-card-inner {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 2.5rem;
+  align-items: center;
+  padding: 2rem 2.5rem;
+  box-sizing: border-box;
+}
+
+.mascot-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  min-height: 200px;
+}
+
+.mascot-stage-char {
+  width: 130px;
+  height: 130px;
+  cursor: pointer;
+  animation: companionIdle 4s infinite ease-in-out;
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.12));
+  transition: transform var(--dur-fast);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mascot-stage-char:hover {
+    transform: scale(1.06);
+  }
+}
+
+.mascot-stage-bubble {
+  position: relative;
+  background: var(--paper, #faf8f5);
+  border: 1.5px solid var(--ink, #1a1a1a);
+  box-shadow: 2px 2px 0 var(--ink, #1a1a1a);
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  width: 100%;
+  max-width: 260px;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.mascot-stage-bubble::after {
+  content: "";
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 10px;
+  background: var(--paper, #faf8f5);
+  border-right: 1.5px solid var(--ink, #1a1a1a);
+  border-bottom: 1.5px solid var(--ink, #1a1a1a);
+  transform: rotate(45deg);
+}
+
+.mascot-bubble-de {
+  font-family: var(--serif-heading, "Playfair Display", Georgia, serif);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--ink, #1a1a1a);
+  line-height: 1.35;
+}
+
+.mascot-bubble-zh {
+  font-size: 0.8125rem;
+  color: var(--pencil, #666666);
+  margin-top: 0.25rem;
+  line-height: 1.3;
+}
+
+.mascot-studio-controls {
+  display: flex;
+  flex-direction: column;
+}
+
+.mascot-status-tag {
+  font-family: var(--mono, "JetBrains Mono", monospace);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  background: var(--paper-deep, #f0ede6);
+  color: var(--ink, #1a1a1a);
+  border: 1px solid var(--rule, #dcd7ce);
+  padding: 2px 8px;
+  border-radius: 2px;
+}
+
+.mascot-form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+}
+
+.mascot-form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.mascot-label {
+  font-family: var(--mono, "JetBrains Mono", monospace);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--ink, #1a1a1a);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.mascot-char-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.mascot-choice-btn {
+  background: var(--paper, #faf8f5);
+  border: 1.5px solid var(--ink, #1a1a1a);
+  box-shadow: 2px 2px 0 var(--ink, #1a1a1a);
+  padding: 0.45rem 0.85rem;
+  font-family: var(--font-sans, -apple-system, sans-serif);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ink, #1a1a1a);
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.12s;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mascot-choice-btn:hover {
+    background: var(--paper-accent, #ede8df);
+  }
+}
+
+.mascot-choice-btn.active {
+  background: var(--ink, #1a1a1a);
+  color: #ffffff;
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 var(--ink, #1a1a1a);
+}
+
+.mascot-upload-btn {
+  background: var(--paper-deep, #f0ede6);
+  border-style: dashed;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mascot-upload-btn:hover {
+    background: var(--paper-accent, #ede8df);
+    border-color: var(--accent, #d9663f);
+    color: var(--accent, #d9663f);
+  }
+}
+
+.mascot-choice-btn.mascot-custom-btn.active {
+  background: var(--ink, #1a1a1a);
+  color: #f7d070;
+}
+
+.mascot-text-input {
+  background: var(--paper, #faf8f5);
+  border: 1.5px solid var(--ink, #1a1a1a);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-family: var(--font-sans, -apple-system, sans-serif);
+  color: var(--ink, #1a1a1a);
+  border-radius: 3px;
+  outline: none;
+  max-width: 320px;
+  box-sizing: border-box;
+}
+
+.mascot-text-input:focus {
+  border-color: var(--accent, #d9663f);
+  box-shadow: 0 0 0 2px rgba(217, 102, 63, 0.2);
+}
+
+.mascot-color-swatches {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.mascot-color-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--ink, #1a1a1a);
+  cursor: pointer;
+  transition: transform var(--dur-fast);
+  box-sizing: border-box;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mascot-color-dot:hover {
+    transform: scale(1.2);
+  }
+}
+
+.mascot-color-custom-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--ink, #1a1a1a);
+  background: var(--paper, #faf8f5);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.mascot-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--rule, #e5e0d8);
+}
+
+/* ── Global Floating Companion Widget ──────────────────────────────── */
+.companion {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  pointer-events: none;
+  touch-action: none;
+  transition:
+    right 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+    bottom 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.companion.is-dragging {
+  transition: none !important;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: auto !important;
+}
+
+/* 让位滑入：松手 / 编辑态聚焦后从禁停区滑到最近安全位（不瞬移） */
+.companion.is-settling {
+  transition:
+    left 0.26s cubic-bezier(0.16, 1, 0.3, 1),
+    top 0.26s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+/* 拖拽悬停在禁停区：半透明 + 虚线描边提示「这里不能停」 */
+.companion.is-over-no-park .companion-char {
+  opacity: 0.35;
+  outline: 2px dashed var(--ink, #1a1a1a);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+.companion.is-over-no-park .companion-avatar {
+  opacity: 0.35;
+}
+
+.companion.ontop {
+  z-index: 1001 !important;
+}
+
+.companion.is-disabled .companion-char,
+.companion.is-disabled .companion-bubble,
+.companion.is-disabled .companion-panel {
+  display: none !important;
+}
+
+.companion.is-disabled .companion-avatar {
+  display: flex !important;
+  opacity: 0.6;
+}
+
+/* 只有 german 工作台（iframe 全屏）彻底禁用入口；用户手动收起伴读时头像必须可点回。 */
+.companion.is-disabled.is-german-view .companion-avatar {
+  pointer-events: none;
+}
+
+.companion-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+
+.companion-char {
+  width: 72px;
+  height: 72px;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
+  animation: companionIdle 4s infinite ease-in-out;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.15));
+  transition: transform var(--dur-fast);
+}
+
+.companion-avatar {
+  touch-action: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .companion-char:hover {
+    transform: scale(1.1);
+  }
+}
+
+.companion-avatar {
+  display: none;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--paper, #faf8f5);
+  border: 1.5px solid var(--ink, #1a1a1a);
+  box-shadow: 2px 2px 0 var(--ink, #1a1a1a);
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform var(--dur-fast);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .companion-avatar:hover {
+    transform: scale(1.1);
+  }
+}
+
+.companion-bubble {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 12px);
+  width: max-content;
+  max-width: 280px;
+  background: var(--paper, #faf8f5);
+  border: 1.5px solid var(--ink, #1a1a1a);
+  box-shadow: 3px 3px 0 var(--ink, #1a1a1a);
+  padding: 0.65rem 0.9rem;
+  border-radius: 4px;
+  pointer-events: none;
+  transform-origin: bottom right;
+  z-index: 75;
+  /* 四侧求解器写入 data-side；箭头位置由 JS 用这两个变量跟随角色中心 */
+  --bubble-arrow-x: calc(100% - 32px);
+  --bubble-arrow-y: 50%;
+}
+
+/* 内容超过 45vh 时只有内层滚动（overflow 由求解器按需开启，避免短消息出现滚动条）；
+   外层必须 overflow: visible 才不会被裁掉箭头 */
+.companion-bubble-body {
+  overscroll-behavior: contain;
+}
+
+/* 默认（data-side 缺失或 top）：箭头贴气泡下沿，向下指 */
+.companion-bubble::after {
+  content: "";
+  position: absolute;
+  bottom: -6px;
+  top: auto;
+  right: auto;
+  left: calc(var(--bubble-arrow-x) - 4.5px);
+  width: 9px;
+  height: 9px;
+  background: var(--paper, #faf8f5);
+  border-right: 1.5px solid var(--ink, #1a1a1a);
+  border-bottom: 1.5px solid var(--ink, #1a1a1a);
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
+}
+
+/* 气泡在角色下方：箭头贴气泡上沿，向上指 */
+.companion-bubble[data-side="bottom"]::after {
+  bottom: auto;
+  top: -6px;
+  border-right: none;
+  border-bottom: none;
+  border-top: 1.5px solid var(--ink, #1a1a1a);
+  border-left: 1.5px solid var(--ink, #1a1a1a);
+}
+
+/* 气泡在角色左侧：箭头贴气泡右沿，向右指 */
+.companion-bubble[data-side="left"]::after {
+  bottom: auto;
+  left: auto;
+  right: -6px;
+  top: calc(var(--bubble-arrow-y) - 4.5px);
+  border-right: 1.5px solid var(--ink, #1a1a1a);
+  border-bottom: none;
+  border-top: 1.5px solid var(--ink, #1a1a1a);
+  border-left: none;
+}
+
+/* 气泡在角色右侧：箭头贴气泡左沿，向左指 */
+.companion-bubble[data-side="right"]::after {
+  bottom: auto;
+  left: -6px;
+  right: auto;
+  top: calc(var(--bubble-arrow-y) - 4.5px);
+  border-right: none;
+  border-bottom: 1.5px solid var(--ink, #1a1a1a);
+  border-top: none;
+  border-left: 1.5px solid var(--ink, #1a1a1a);
+}
+
+.companion-bubble-de {
+  font-family: var(--serif-heading, "Playfair Display", Georgia, serif);
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--ink, #1a1a1a);
+  line-height: 1.35;
+}
+
+.companion-bubble-zh {
+  font-size: 0.75rem;
+  color: var(--pencil, #666666);
+  margin-top: 0.2rem;
+  line-height: 1.3;
+}
+
+.companion-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 12px);
+  width: 250px;
+  background: var(--paper, #faf8f5);
+  border: 1.5px solid var(--ink, #1a1a1a);
+  box-shadow: 4px 4px 0 var(--ink, #1a1a1a);
+  padding: 0.85rem;
+  border-radius: 4px;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  z-index: 80;
+  box-sizing: border-box;
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--rule, #e5e0d8);
+}
+
+.panel-title {
+  font-family: var(--mono, "JetBrains Mono", monospace);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--ink, #1a1a1a);
+  text-transform: uppercase;
+}
+
+.panel-close {
+  background: transparent;
+  border: none;
+  font-size: 0.875rem;
+  cursor: pointer;
+  color: var(--pencil, #666);
+  padding: 0 4px;
+}
+
+.panel-row {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.panel-char-btn {
+  flex: 1;
+  background: var(--paper-deep, #f0ede6);
+  border: 1px solid var(--ink, #1a1a1a);
+  border-radius: 3px;
+  padding: 0.25rem 0;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+
+.panel-char-btn.active {
+  background: var(--ink, #1a1a1a);
+  box-shadow: 1px 1px 0 var(--ink, #1a1a1a);
+}
+
+/* 角色按钮注入的是与浮球/舞台同一套 .companion-svg（模板默认 width/height:100%）。
+   面板按钮没有固定高度，不钉死尺寸会被撑成整块；这里只覆盖面板内的图标。 */
+.panel-char-btn .companion-svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+  margin: 0 auto;
+}
+
+/* 浮球头像同理：span 本身没有宽高，svg 百分比高度会塌成 0。 */
+#companion-avatar-icon {
+  display: block;
+  width: 28px;
+  height: 28px;
+  line-height: 0;
+}
+
+.panel-upload-btn {
+  background: var(--paper-deep, #f0ede6);
+  border-style: dashed;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .panel-upload-btn:hover {
+    background: var(--paper-accent, #ede8df);
+    border-color: var(--accent, #d9663f);
+  }
+}
+
+.panel-char-btn.mascot-custom-btn.active {
+  background: var(--ink, #1a1a1a);
+  color: #f7d070;
+}
+
+#panel-name {
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid var(--ink, #1a1a1a);
+  border-radius: 3px;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.75rem;
+  font-family: var(--font-sans, -apple-system, sans-serif);
+  outline: none;
+}
+
+.panel-color-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ink, #1a1a1a);
+  cursor: pointer;
+}
+
+.panel-color-custom {
+  width: 22px;
+  height: 22px;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  background: transparent;
+}
+
+.panel-actions {
+  justify-content: space-between;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--rule, #e5e0d8);
+}
+
+/* 尺寸阶梯：.btn 36px → .btn-sm 30px → .btn-xs 26px。
+   30px 不是随手取的：index.html:95-97 三个按钮当初手写的 inline style 就是
+   min-height:30px，那就是作者心里的「小」。这条规则补上后那些 inline 值
+   可以逐步收掉。min-height 必须带 !important —— 只改 padding/字号是缩不小的，
+   .btn 的 36px 会一直兜着（这正是它长期名不副实的原因）。 */
+.btn-sm {
+  min-height: 30px !important;
+  padding: 0.25rem 0.5rem !important;
+  font-size: 0.75rem !important;
+}
+
+/* ── Keyframes & Emotion Animations ────────────────────────────────── */
+@keyframes charBlink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  96% {
+    transform: scaleY(0.1);
+  }
+}
+
+/* 白名单：角色眨眼属于「角色身份」，4.2s 一次且只占 4% 时长；
+   reduce 下停用，见文末降级块。 */
+.char-eye {
+  animation: charBlink 4.2s infinite ease-in-out;
+  transform-box: view-box;
+}
+
+/* 白名单：伴读角色待机是唯一常驻角色动效（ADR-0029 §8）；
+   reduce 下停用，见文末降级块。 */
+@keyframes companionIdle {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes companionJump {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  25% {
+    transform: translateY(-14px) scale(1.05, 0.95);
+  }
+  50% {
+    transform: translateY(0) scale(0.95, 1.05);
+  }
+  75% {
+    transform: translateY(-7px) scale(1.02, 0.98);
+  }
+}
+
+.companion-char.is-happy,
+.mascot-stage-char.is-happy {
+  animation: companionJump 1.1s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+@keyframes companionWiggle {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  20% {
+    transform: rotate(-8deg);
+  }
+  40% {
+    transform: rotate(8deg);
+  }
+  60% {
+    transform: rotate(-5deg);
+  }
+  80% {
+    transform: rotate(5deg);
+  }
+}
+
+.companion-char.is-wiggle,
+.mascot-stage-char.is-wiggle {
+  animation: companionWiggle 0.9s ease-in-out !important;
+}
+
+@keyframes companionDroop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px) scale(1.02, 0.96);
+  }
+}
+
+.companion-char.is-sad,
+.mascot-stage-char.is-sad {
+  animation: companionDroop 1s ease-in-out !important;
+}
+
+@keyframes bubblePop {
+  0% {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.pop-anim {
+  animation: bubblePop 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ── Responsive & Drawer Open Collisions ────────────────────────────── */
+body.drawer-open .companion {
+  right: calc(var(--drawer-width, 360px) + 20px);
+}
+
+@media (max-width: 768px) {
+  .companion {
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px) + 12px);
+    right: 14px;
+    transform: scale(0.88);
+    transform-origin: bottom right;
+  }
+
+  .mascot-card-inner {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    padding: 1.5rem 1.25rem;
+    text-align: center;
+  }
+
+  .mascot-stage-bubble::after {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%) rotate(45deg);
+  }
+
+  .mascot-char-selector,
+  .mascot-color-swatches,
+  .mascot-form-actions {
+    justify-content: center;
+  }
+
+  .mascot-text-input {
+    max-width: 100%;
+    text-align: center;
+  }
+}
+
+/* ── View 5: Schreibwerkstatt (Writing Desk) ────────────────────────── */
+
+#view-writer {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+  width: 100%;
+}
+
+.writer-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.writer-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  border-bottom: 1.5px solid var(--ink);
+  padding-bottom: 1.25rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.writer-title-heading {
+  font-family: var(--serif-heading);
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+}
+
+.writer-actions-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.writer-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.writer-left {
+  display: flex;
+  flex-direction: column;
+}
+
+/* max-height 而不是 height：sticky 列必须高度自适应内容，钉死高度会在内容少时
+   撑出一片空白。加帽 + overflow-y 只在内容真的高过视口时才生效 —— 在那之前
+   外观与行为跟没这两行完全一样。
+   没有这个帽子的后果不是"滚动条少一个"：sticky 盒子一旦比视口高，超出的下半截
+   会永远停在视口外，页面滚到底也带不出来（sticky 只在自己的 grid 行内平移）。
+   4.5rem 是吸顶偏移，1rem 留底边间隙。 */
+.writer-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  position: sticky;
+  top: 4.5rem;
+  max-height: calc(100dvh - 4.5rem - 1rem);
+  overflow-y: auto;
+}
+
+/* Cards & Containers */
+.writer-card-box {
+  background: var(--paper-card);
+  border: 1.5px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  border-radius: 4px;
+  padding: 1.25rem;
+  position: relative;
+}
+
+.writer-box-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--pencil);
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px dashed var(--rule);
+}
+
+.writer-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-family: var(--mono);
+  font-weight: 600;
+  background: var(--paper-tint);
+  color: var(--pencil);
+}
+
+.writer-status-pill.status-clean {
+  background: var(--hl-A2);
+  color: var(--hl-A2-ink);
+  border: 1px solid var(--hl-A2-ink);
+}
+
+.writer-status-pill.status-warn {
+  background: var(--hl-B1);
+  color: var(--hl-B1-ink);
+  border: 1px solid var(--hl-B1-ink);
+}
+
+/* Editor Inputs */
+.writer-input-title {
+  display: block;
+  width: 100%;
+  font-family: var(--serif-heading);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--ink);
+  border: none;
+  border-bottom: 1.5px solid var(--rule);
+  padding: 0.5rem 0;
+  margin-bottom: 0.75rem;
+  outline: none;
+  background: transparent;
+  line-height: 1.4;
+  /* textarea 默认右下角有拖拽柄且会显示滚动条；高度由 writer.js 按内容设置。 */
+  resize: none;
+  overflow-y: hidden;
+  transition: border-color var(--dur-fast) ease;
+}
+
+.writer-input-title:focus {
+  border-bottom-color: var(--accent);
+}
+
+.writer-textarea {
+  width: 100%;
+  font-family: var(--serif-body);
+  font-size: 1.125rem;
+  line-height: 1.8;
+  color: var(--ink);
+  border: none;
+  outline: none;
+  resize: vertical;
+  background: transparent;
+  min-height: 180px;
+}
+
+/* ── Inline IDE Editor (v4.0.0) ───────────────────────────────────────────── */
+.ide-editor {
+  width: 100%;
+  min-height: 240px;
+  max-height: 520px;
+  overflow-y: auto;
+  font-family: var(--serif-body);
+  font-size: 1.125rem;
+  line-height: 2;
+  color: var(--ink);
+  padding: 0.5rem 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.ide-editor:empty:before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  font-style: italic;
+  pointer-events: none;
+  display: block;
+}
+
+.ide-sent-block {
+  display: inline;
+  border-radius: 3px;
+  transition: background var(--dur-fast) ease;
+}
+
+.ide-sent-block.ide-sent-flash {
+  background: rgba(233, 185, 74, 0.4);
+  outline: 1.5px solid #d9771c;
+  transition: all 0.8s ease;
+}
+
+/* Tooltip for IDE editor */
+.ide-error-tooltip {
+  position: absolute;
+  z-index: 1200;
+  max-width: 260px;
+  background: var(--paper-card);
+  border: 1.5px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  border-radius: 4px;
+  padding: 0.625rem 0.75rem;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) ease;
+}
+
+.ide-error-tooltip.hidden {
+  display: none;
+}
+
+.ide-error-tooltip .tooltip-header {
+  margin-bottom: 0.25rem;
+}
+
+.ide-error-tooltip .tooltip-body {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--ink);
+  margin-bottom: 0.35rem;
+}
+
+.ide-error-tooltip .tooltip-suggest {
+  font-size: 0.8125rem;
+  color: var(--accent);
+}
+
+.ide-error-tooltip .tooltip-hint {
+  font-size: 0.6875rem;
+  color: var(--muted);
+  font-family: var(--sans);
+  margin-top: 0.25rem;
+  border-top: 1px dashed var(--rule);
+  padding-top: 0.25rem;
+}
+
+/* ── Inlay Hints Inline Badges (v4.1.1 VSCode Style) ─────────────────────── */
+.inlay-hint {
+  display: inline-block;
+  contenteditable: false;
+  user-select: none;
+  pointer-events: none;
+  font-family: var(--mono);
+  font-size: 0.72em;
+  line-height: 1.1;
+  vertical-align: 1px;
+  margin: 0 3px 0 2px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 500;
+  opacity: 0.85;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.inlay-hint::before {
+  content: attr(data-hint);
+}
+
+.inlay-hint.inlay-prep {
+  background: rgba(217, 119, 28, 0.12);
+  color: #9a5200;
+  border: 1px solid rgba(217, 119, 28, 0.28);
+}
+
+.inlay-hint.inlay-np {
+  background: rgba(43, 122, 126, 0.12);
+  color: #175459;
+  border: 1px solid rgba(43, 122, 126, 0.28);
+}
+
+.ide-editor.hide-inlays .inlay-hint {
+  display: none !important;
+}
+
+/* Sentence Navigation List in Sidebar */
+/* 不加 max-height / overflow-y：滚动归 .writer-sidebar 一个人管。
+   列表自己再开一个滚动区，手指/滚轮落在列表上就被内层吃掉，
+   外层 sidebar 反而没地方可抓、底部滚不到（v4.4.6 移动端踩过一次）。 */
+.writer-sent-nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.writer-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 3px;
+  cursor: pointer;
+  background: rgba(21, 20, 15, 0.03);
+  border: 1px solid transparent;
+  transition: all var(--dur-fast) ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .writer-nav-item:hover {
+    background: rgba(21, 20, 15, 0.07);
+    border-color: var(--rule);
+  }
+}
+
+/* 触屏上 :hover 不触发（或点完粘住不放），只靠 hover 的行等于按下去毫无反馈。
+   :active 在触屏是按下即生效、抬手即消失，是唯一可靠的按压态。
+   hover 也只改背景/描边、不做位移：整行 flex 容器位移会带来文字抖动。
+   -webkit-tap-highlight-color 清零：否则安卓 WebView 自带的灰块会和
+   自定义按压色叠在一起闪一下。 */
+.writer-nav-item,
+.writer-problem-row,
+.version-item {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.writer-nav-item:active {
+  background: rgba(21, 20, 15, 0.12);
+}
+
+.writer-nav-idx {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--muted);
+  min-width: 1.25rem;
+}
+
+.writer-nav-snippet {
+  flex: 1;
+  font-size: 0.75rem;
+  font-family: var(--serif-body);
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.writer-nav-badge {
+  font-size: 0.6875rem;
+  font-family: var(--mono);
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
+.writer-nav-badge.has-err {
+  background: rgba(237, 111, 92, 0.15);
+  color: #8c1e14;
+}
+
+.writer-nav-badge.clean {
+  background: rgba(94, 186, 125, 0.15);
+  color: #1e703f;
+}
+
+.writer-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--rule);
+}
+
+.writer-word-counter {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+/* Diagnostic Render Box */
+.writer-render {
+  font-family: var(--serif-body);
+  font-size: 1.125rem;
+  line-height: 2;
+  color: var(--ink);
+  min-height: 100px;
+}
+
+.writer-empty-tip {
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-style: italic;
+  padding: 1rem 0;
+  text-align: center;
+  font-family: var(--sans);
+}
+
+.writer-sent-block {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  transition: background var(--dur-fast) ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .writer-sent-block:hover {
+    background: rgba(21, 20, 15, 0.02);
+  }
+}
+
+.writer-sent-num {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+  user-select: none;
+  min-width: 1.5rem;
+}
+
+.writer-sent-content {
+  flex: 1;
+}
+
+/* Wavy Underlines for Error Types */
+.writer-err-underline {
+  text-decoration: underline wavy;
+  text-decoration-thickness: 1.5px;
+  cursor: pointer;
+  padding: 1px 3px;
+  border-radius: 3px;
+  transition: all var(--dur-fast) ease;
+  font-weight: 500;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .writer-err-underline:hover {
+    filter: brightness(0.92);
+  }
+}
+
+.writer-err-underline.active-span {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.err-artikel {
+  background: rgba(237, 111, 92, 0.15);
+  color: #8c1e14;
+  text-decoration-color: var(--cherry);
+}
+
+.err-kasus {
+  background: rgba(233, 185, 74, 0.22);
+  color: #7a4f00;
+  text-decoration-color: #d9771c;
+}
+
+.err-praeposition {
+  background: rgba(76, 145, 149, 0.18);
+  color: #175459;
+  text-decoration-color: #2b7a7e;
+}
+
+.err-andere {
+  background: rgba(107, 79, 143, 0.15);
+  color: #4b2d73;
+  text-decoration-color: #6b4f8f;
+}
+
+/* Sidebar Styles */
+.writer-sidebar-card {
+  background: var(--paper-card);
+  border: 1.5px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  border-radius: 4px;
+  padding: 1.25rem;
+}
+
+.sidebar-section-title {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--pencil);
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--rule-light);
+  padding-bottom: 0.4rem;
+}
+
+.writer-cefr-box {
+  display: flex;
+  flex-direction: column;
+}
+
+.writer-cefr-level {
+  font-family: var(--serif-heading);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 0.25rem;
+}
+
+.writer-cefr-desc {
+  font-size: 0.8125rem;
+  color: var(--pencil);
+  line-height: 1.5;
+}
+
+/* Detail Card in Sidebar */
+.writer-err-placeholder {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--pencil);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.writer-err-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.err-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.err-type-badge {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+}
+
+.err-bg-artikel {
+  background: var(--hl-B2);
+  color: var(--hl-B2-ink);
+  border-color: var(--hl-B2-ink);
+}
+.err-bg-kasus {
+  background: var(--hl-B1);
+  color: var(--hl-B1-ink);
+  border-color: var(--hl-B1-ink);
+}
+.err-bg-praeposition {
+  background: #e0f2f1;
+  color: #004d40;
+  border-color: #004d40;
+}
+.err-bg-andere {
+  background: var(--hl-C1);
+  color: var(--hl-C1-ink);
+  border-color: var(--hl-C1-ink);
+}
+
+.err-explanation {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--paper-tint);
+  padding: 0.75rem;
+  border-radius: 4px;
+  border-left: 3px solid var(--accent);
+}
+
+.err-box-title {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--pencil);
+  font-weight: 600;
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.correction-chip {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  padding: 4px 10px;
+  border-radius: 4px;
+  display: inline-block;
+  font-family: var(--serif-body);
+  letter-spacing: 0.02em;
+  box-shadow: 1px 1px 0 var(--ink);
+}
+
+.err-context-text {
+  font-size: 0.875rem;
+  color: var(--pencil);
+  font-style: italic;
+  line-height: 1.5;
+  background: rgba(21, 20, 15, 0.03);
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+}
+
+.err-action-box {
+  margin-top: 0.5rem;
+}
+
+.btn-block {
+  width: 100%;
+  text-align: center;
+  justify-content: center;
+}
+
+/* AI Notes */
+.writer-ai-notes-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.writer-ai-notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.writer-ai-note-item {
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--ink);
+  background: var(--paper-tint);
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+}
+
+.writer-ai-note-tip {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--moss);
+  font-weight: 600;
+}
+
+/* Essay History List */
+.writer-essay-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.writer-essay-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.85rem;
+  border-radius: 4px;
+  border: 1px solid var(--rule-light);
+  background: var(--paper);
+  cursor: pointer;
+  transition: all var(--dur-fast) ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .writer-essay-item:hover {
+    background: var(--paper-tint);
+    border-color: var(--ink);
+  }
+}
+
+.writer-essay-item.active {
+  background: var(--paper-tint);
+  border: 1.5px solid var(--accent);
+  box-shadow: 1px 1px 0 var(--ink);
+}
+
+.writer-essay-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.writer-essay-item-title {
+  font-family: var(--serif-heading);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.writer-essay-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.writer-essay-err-pill {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.writer-essay-err-pill.has-err {
+  background: var(--hl-B1);
+  color: var(--hl-B1-ink);
+}
+
+.writer-essay-err-pill.no-err {
+  background: var(--hl-A2);
+  color: var(--hl-A2-ink);
+}
+
+.writer-essay-date {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+/* Responsive adjustments */
+@media (max-width: 860px) {
+  /* 单一滚动容器：html。全局 .view{overflow-x:hidden} 会把 overflow-y 计算成
+     auto，于是 #view-writer 多出一个永远不滚的嵌套滚动容器；clip 不创建滚动
+     容器，横向裁切语义不变。 */
+  #view-writer {
+    overflow-x: clip !important;
+    overflow-y: visible !important;
+    padding: 1rem 1rem 0;
+  }
+
+  .writer-container {
+    gap: 1rem;
+  }
+
+  .writer-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .writer-header-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding-bottom: 0.75rem;
+  }
+
+  /* 移动端首屏预算：eyebrow 与桌面字号在 393px 下占掉约 80px，
+     编辑框 + 工具栏就会被推到首屏之外；收掉 eyebrow 是最直接的一刀。 */
+  .writer-header-bar .hero-eyebrow {
+    display: none;
+  }
+
+  .writer-title-heading {
+    font-size: 1.35rem;
+    line-height: 1.3;
+  }
+
+  .writer-actions-top {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 0.375rem;
+  }
+
+  .writer-actions-top .btn {
+    padding: 0.3rem 0.55rem;
+    font-size: 0.75rem;
+  }
+
+  .writer-mode-switcher-bar {
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .writer-mobile-panel-trigger {
+    display: inline-flex;
+  }
+
+  /* bottom sheet：底边锚定 + 顶部必须显式 auto。
+     桌面基规则带 top: 4.5rem；只补 bottom 属于 over-constrained 布局，
+     bottom 会被静默忽略，sheet 顶在 4.5rem、底停在视口上方 132.5px ——
+     闭包时正好露出约 40px 页签条，还整片盖住底部 dock（z-index 1100 > 1000）。 */
+  .writer-sidebar {
+    position: fixed;
+    z-index: 1100;
+    top: auto;
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: 0;
+    height: min(76vh, 680px);
+    /* 键盘态用 visualViewport 高度，避免 76vh 在 adjustPan 下按整屏算。 */
+    height: min(calc(var(--writer-vvh, 100dvh) * 0.76), 680px);
+    /* 显式解掉基规则那个 max-height: calc(100dvh …) 帽子。 */
+    max-height: none;
+    overflow-y: auto;
+    padding: 0.75rem;
+    /* sheet 铺满到视口底并盖住 dock；内部留出 dock 高度 + 安全区，
+       滚到底时最后一个控件不会被 dock 或 home indicator 吃掉。 */
+    padding-bottom: calc(
+      0.75rem + 58px + env(safe-area-inset-bottom, 0px)
+    );
+    background: var(--paper);
+    border: 1.5px solid var(--ink);
+    box-shadow: 4px 4px 0 var(--ink);
+    /* 闭包：贴底 + 平移自身高度，完全离屏；不能再出现「只露一条页签」的条带。 */
+    transform: translateY(100%);
+    transition: transform 180ms ease;
+    overscroll-behavior: contain;
+  }
+
+  .writer-sidebar.mobile-panel-open {
+    transform: translateY(0);
+    /* adjustPan / iOS 键盘只缩 visualViewport 时，把面板抬到键盘上沿；
+       adjustResize 下 inset 为 0，行为与 bottom:0 一致。 */
+    bottom: var(--writer-keyboard-inset, 0px);
+  }
+
+  /* 键盘态：编辑区跟随 visualViewport 收缩，避免固定 520px 把工具栏顶出屏幕。 */
+  #ide-editor {
+    min-height: 160px;
+    max-height: min(520px, calc(var(--writer-vvh, 100dvh) - 240px));
+    scroll-margin-top: 60px;
+    /* 让位目标不是编辑框本身，而是「编辑框 + 下方工具栏」整块：
+       58px dock + 12px 间隙 + 35px 工具栏，否则键盘态聚焦后工具栏会压在 dock 下面。 */
+    scroll-margin-bottom: calc(58px + 12px + 35px + 2px);
+  }
+
+  /* 单行 input 换成 textarea 后，移动端至少给两行：示例标题在 360/393 下
+     正好折成两行，不再被右侧裁切。 */
+  .writer-input-title {
+    min-height: calc(1.45em * 2);
+    line-height: 1.45;
+  }
+
+  .writer-panel-lock {
+    overflow: hidden;
+  }
+}
+
+.writer-mobile-panel-trigger,
+.writer-mobile-panel-sheet {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .writer-mobile-panel-trigger {
+    display: inline-flex;
+  }
+
+  .writer-mobile-panel-sheet {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 1050;
+    background: rgba(21, 20, 15, 0.28);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms ease;
+  }
+
+  .writer-mobile-panel-sheet.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+/* ── Writer Sidebar Tabs & Panes (v3.12.0) ─────────────────────────────── */
+/* flex-shrink: 0 是 sheet 固定高度的前提。父容器高度一确定，flex 子项默认
+   会被压缩到塞得下为止（然后自己的内容再溢出去），结果是内容挤成一团、
+   父容器反而没有可滚动的溢出。钉住不许收缩，溢出才会交给 overflow-y。 */
+/* position: sticky 桌面/移动共用：sidebar 自己是滚动容器，tab 条吸在它顶部，
+   切 tab 不必先滚回去找。依赖上面那句不透明的 --paper-card 背景把滚过的内容盖住。 */
+.writer-panel-tabs {
+  display: flex;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--paper-card);
+  border: 1.5px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 1.25rem;
+}
+
+.writer-tab-btn {
+  flex: 1;
+  padding: 0.65rem 0.85rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--pencil);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all var(--dur-fast) ease;
+  text-align: center;
+  border-bottom: 2.5px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .writer-tab-btn:hover {
+    background: var(--paper-tint);
+    color: var(--ink);
+  }
+}
+
+.writer-tab-btn.active {
+  color: var(--ink);
+  background: var(--paper-tint);
+  border-bottom-color: var(--accent);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.writer-pane {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 1.25rem;
+}
+
+.writer-pane.hidden {
+  display: none !important;
+}
+
+/* ── Problems Panel & Badges (v4.2.0) ─────────────────────────────────────── */
+.writer-tab-badge {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: rgba(237, 111, 92, 0.18);
+  color: #8c1e14;
+  margin-left: 0.25rem;
+  font-weight: 600;
+}
+
+.writer-tab-badge.hidden {
+  display: none;
+}
+
+.writer-problems-stat-pill {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: rgba(21, 20, 15, 0.05);
+  color: var(--ink-mute);
+}
+
+.writer-problem-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding-right: 2px;
+}
+
+.writer-problem-group-header {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.35rem 0.25rem 0.2rem;
+  border-bottom: 1px dashed var(--rule);
+  margin-top: 0.4rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.writer-problem-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 4px;
+  background: var(--paper);
+  border: 1px solid var(--rule-light);
+  cursor: pointer;
+  transition: all var(--dur-fast) ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .writer-problem-row:hover {
+    background: var(--paper-tint);
+    border-color: var(--ink);
+  }
+}
+
+.writer-problem-row:active {
+  background: var(--paper-deep);
+}
+
+.writer-problem-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.writer-problem-badge {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.writer-problem-badge.sev-error {
+  background: rgba(237, 111, 92, 0.15);
+  color: #8c1e14;
+  border: 1px solid rgba(237, 111, 92, 0.3);
+}
+
+.writer-problem-badge.sev-warning {
+  background: rgba(217, 119, 28, 0.15);
+  color: #9a5200;
+  border: 1px solid rgba(217, 119, 28, 0.3);
+}
+
+.writer-problem-pos {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+
+.writer-problem-expl {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--ink);
+  font-family: var(--sans);
+}
+
+.writer-problem-suggest {
+  font-size: 0.75rem;
+  color: #1e703f;
+  font-family: var(--sans);
+}
+
+.writer-problem-preview {
+  font-family: var(--serif-body);
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-top: 0.15rem;
+  border-top: 1px dashed rgba(21, 20, 15, 0.08);
+}
+
+/* ── Version History Snapshot List ────────────────────────────────────────── */
+.writer-version-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+  padding-right: 2px;
+}
+
+.version-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 4px;
+  border: 1px solid var(--rule-light);
+  background: var(--paper);
+  cursor: pointer; /* 整行可点 = 预览快照 (v4.4.5) */
+  transition: all var(--dur-fast) ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .version-item:hover {
+    background: var(--paper-tint);
+    border-color: var(--ink);
+  }
+}
+
+.version-item.version-checkpoint {
+  border-left: 3.5px solid var(--accent);
+  background: rgba(217, 102, 63, 0.03);
+}
+
+/* 必须排在 .version-item.version-checkpoint 之后：两者特异性相同（都是两个类的量级，
+   :active 与 .version-checkpoint 等价），同分时后写的赢。写在前面的话 checkpoint 行
+   按下去不会有任何反馈 —— 而 checkpoint 行恰恰是最常被点的那些。
+   代价：checkpoint 行按压瞬间丢掉那层 3% 的薄橙底，换成 paper-deep，可接受。 */
+.version-item:active {
+  background: var(--paper-deep);
+}
+
+.version-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.version-id {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.version-msg {
+  font-family: var(--serif-heading);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+.version-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  padding-top: 0.35rem;
+  border-top: 1px dashed var(--rule-light);
+}
+
+.version-time {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--pencil);
+}
+
+.version-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* .version-restore-btn 的规则已删除（v4.4.8 之后）：它只在
+   writer.js:1337 与 `btn btn-ghost btn-xs` 连用，而它设的 font-size /
+   padding / border-radius 三项全部被 .btn-xs 的 !important 盖掉 ——
+   三条声明一条都没生效，是彻底的死规则。几何交给 .btn-xs，与同一行的
+   .btn-del 删除键自然对齐。类名保留在 HTML 里作为语义钩子。 */
+
+/* ── Version Preview Modal (v4.0.0) ───────────────────────────────────────── */
+.version-preview-box {
+  width: 90%;
+  max-width: 720px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.version-preview-meta-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.version-preview-content {
+  flex: 1;
+  overflow-y: auto;
+  font-family: var(--serif-body);
+  font-size: 1.125rem;
+  line-height: 2;
+  color: var(--ink);
+  padding: 0.85rem;
+  background: rgba(21, 20, 15, 0.02);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  min-height: 180px;
+  max-height: 460px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── AI Polish Review Modal (v3.12.0) ────────────────────────────────────── */
+.polish-modal-box {
+  max-width: 980px;
+  width: 95vw;
+  height: 86vh;
+  max-height: 840px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 1.25rem 1.5rem 1rem;
+  background: var(--paper-card);
+  border: 2px solid var(--ink);
+  box-shadow: 4px 4px 0 var(--ink);
+  border-radius: 6px;
+}
+
+.polish-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.85rem;
+  background: var(--paper-tint);
+  border-radius: 4px;
+  border: 1px solid var(--rule-light);
+  margin-bottom: 0.75rem;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.polish-summary-badge {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.polish-quick-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.polish-diff-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  overflow-y: auto;
+  padding: 2px 6px 12px 0;
+  flex: 1 1 auto;
+  min-height: 200px;
+  margin-bottom: 0.5rem;
+}
+
+.diff-hunk {
+  border: 1.5px solid var(--rule);
+  border-radius: 6px;
+  background: var(--paper-card);
+  box-shadow: 1px 2px 0 var(--ink);
+  transition: all var(--dur-fast) ease;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.diff-hunk.hunk-accepted {
+  border-color: #2e7d32;
+  box-shadow: 2px 3px 0 rgba(46, 125, 50, 0.4);
+}
+
+.diff-hunk.hunk-rejected {
+  border-color: #888;
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.15);
+}
+
+.diff-hunk-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.45rem 0.85rem;
+  background: var(--paper-tint);
+  border-bottom: 1px solid var(--rule-light);
+}
+
+.diff-hunk-title {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.diff-hunk-badge {
+  background: var(--ink);
+  color: var(--paper);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.7rem;
+}
+
+.diff-hunk-label {
+  color: var(--pencil);
+  font-weight: 600;
+}
+
+.diff-decision-group {
+  display: inline-flex;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 2px;
+  border-radius: 4px;
+  gap: 2px;
+}
+
+.diff-decision-btn {
+  border: none;
+  background: transparent;
+  padding: 3px 9px;
+  font-size: 0.75rem;
+  font-family: var(--mono);
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 3px;
+  color: var(--pencil);
+  transition: all var(--dur-fast) ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .diff-decision-btn:hover {
+    color: var(--ink);
+  }
+}
+
+.diff-decision-btn.btn-choice-accept.active {
+  background: #2e7d32;
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.diff-decision-btn.btn-choice-reject.active {
+  background: var(--ink);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.diff-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  cursor: pointer;
+}
+
+.diff-side {
+  padding: 0.85rem 1rem;
+  font-family: var(--serif-body);
+  font-size: 1rem;
+  line-height: 1.7;
+  transition:
+    background var(--dur-fast) ease,
+    opacity var(--dur-fast) ease;
+}
+
+.diff-side-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.diff-side-label {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.diff-side-label.label-old {
+  color: var(--cherry);
+}
+
+.diff-side-label.label-new {
+  color: #2e7d32;
+}
+
+.diff-chosen-tag {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--paper-tint);
+  color: var(--pencil);
+  border: 1px solid var(--rule);
+}
+
+.diff-chosen-tag.accept-tag {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border-color: #a5d6a7;
+}
+
+.diff-old {
+  border-right: 1px solid var(--rule-light);
+}
+
+.diff-old.side-chosen {
+  background: rgba(21, 20, 15, 0.04);
+  color: var(--ink);
+}
+
+.diff-old.side-discarded {
+  background: rgba(237, 111, 92, 0.03);
+  color: var(--pencil);
+  opacity: 0.7;
+}
+
+.diff-new.side-chosen {
+  background: rgba(79, 143, 107, 0.1);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.diff-new.side-discarded {
+  background: rgba(0, 0, 0, 0.02);
+  color: var(--muted);
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.diff-sent {
+  margin-bottom: 0.25rem;
+  word-break: break-word;
+}
+
+.diff-prefix {
+  font-family: var(--mono);
+  font-weight: 700;
+  margin-right: 0.35rem;
+  user-select: none;
+  opacity: 0.6;
+}
+
+.diff-token-del {
+  background: rgba(230, 57, 70, 0.2);
+  color: #900c3f;
+  text-decoration: line-through;
+  padding: 0 3px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.diff-token-ins {
+  background: rgba(46, 125, 50, 0.22);
+  color: #1b5e20;
+  padding: 0 3px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.diff-empty {
+  font-style: italic;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.polish-notes-container {
+  flex-shrink: 0;
+  background: var(--paper-tint);
+  border: 1px solid var(--rule-light);
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  max-height: 110px;
+  overflow-y: auto;
+  margin-bottom: 0.5rem;
+}
+
+.polish-modal-footer {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--rule-light);
+}
+
+/* Responsive Diff Grid */
+@media (max-width: 720px) {
+  .diff-grid {
+    grid-template-columns: 1fr;
+  }
+  .diff-old {
+    border-right: none;
+    border-bottom: 1px dashed var(--rule-light);
+  }
+}
+

@@ -181,6 +181,12 @@ jobs:
         if: matrix.suite.name == 'unit-2'
         run: python tools/check_index_html_sync.py
 
+      # ── 前端 style.css 零差异拆分同步门禁 ────────────────────────────────
+      # src/css/*.css 是唯一真相，static/style.css 是拼接产物；本闸按原始字节比对。
+      - name: Frontend style.css source sync gate
+        if: matrix.suite.name == 'unit-2'
+        run: python tools/check_css_sync.py
+
       # ── 前端分层与模块图完整性门禁（2026-10-19 writer.js 分层）─────────────────
       # 判据见 tools/check_frontend_layers.py 与 docs/plans/2026-10-19-writer-js-modularization.md。
       # 与上面那条互补、**刻意不重复**：路由契约闸管**路径**存在性；本闸补**方法**一致性

@@ -1,0 +1,553 @@
+/* 自托管字体：取代原 Google Fonts @import（国内/离线不可达），见 css/fonts.css */
+@import url("css/fonts.css");
+@import url("css/tokens.css");
+
+/* ── Design System v3.0 — Academic Modern Editorial & Continuous Exhibition ── */
+
+:root {
+  /* 移动端写作页：writer.js 用 visualViewport 覆盖成实时 px 值；
+     这里的默认值保证 JS 未执行/老 WebView 下仍能按 dvh 布局。 */
+  --writer-vvh: 100dvh;
+  --writer-keyboard-inset: 0px;
+
+  /* Surfaces */
+  --paper: #faf8f5;
+  --paper-card: #ffffff;
+  /* 暖白纸面斜坡上的两个中间档：warm 比 paper 只暖一丝（整块 banner 铺底、
+     pill hover），accent 落在 tint 与 deep 之间（按钮 hover / 内嵌代码底色）。
+     两者原先只以内联回退值的形式散落各处，回退值还混进了几个冷灰
+     (#f3f4f6/#f1f5f9) —— 在暖纸调色板里显脏，这里统一钉回暖色轴。 */
+  --paper-warm: #f7f4ec;
+  --paper-tint: #f2ece1;
+  --paper-accent: #ede7da;
+  --paper-deep: #e6ddd0;
+  --stage: #181512;
+
+  /* Ink */
+  --ink: #15140f;
+  --pencil: #5c554b;
+  --muted: #8c8477;
+  --rule: #d8d0c2;
+  --rule-light: #ebe5da;
+  /* --border 是 --rule 的语义别名：卡片/按钮 1px 描边全走这一档，
+     与相邻规则里直接引用 --rule 的视觉重量一致（--rule 全文 85 处，
+     --line 只 3 处，前者才是这个粗细的既有 token）。 */
+  --border: var(--rule);
+  --grid-dot: rgba(21, 20, 15, 0.05);
+
+  /* Physical materials */
+  --tape: rgba(43, 38, 32, 0.12);
+  --tape-border: rgba(26, 23, 20, 0.18);
+
+  /* Accents */
+  --coral: #ed6f5c;
+  --coral-soft: #f08e7c;
+  --accent: #c14a2b;
+  --accent-hover: #a83b1f;
+  --mustard: #e9b94a;
+  --amber: #d9771c;
+  --amber-soft: rgba(217, 119, 28, 0.12);
+  --cherry: #b03030;
+  --danger: #b03030; /* 与 --cherry 同色但语义分开：
+                                            --cherry  = 答错 / 错误反馈（SRS、quiz、error underline）
+                                            --danger  = 破坏性操作（删/清/还原） */
+  --danger-strong: #c84444;
+  --moss: #3b6e3f;
+  --olive: #6e7448;
+
+  /* Editorial Ink & Line Tokens */
+  --ink-soft: #2a2620;
+  --ink-mute: #5a5448;
+  --ink-faint: #8b8676;
+  --line: rgba(21, 20, 15, 0.16);
+  --line-soft: rgba(21, 20, 15, 0.08);
+  --line-faint: rgba(21, 20, 15, 0.05);
+
+  /* Layout */
+  --drawer-width: min(420px, 92vw);
+  --drawer-gap: 2rem;
+  --drawer-mobile-height: 65vh;
+
+  /* Semantic aliases */
+  --accent-color: var(--accent);
+  --bg-secondary: var(--paper-warm);
+  --border-color: var(--border);
+  --text-color: var(--ink);
+  --forest: var(--moss);
+  --pencil-light: var(--muted);
+  --font-mono: var(--mono);
+  --font-serif: var(--serif);
+
+  /* CEFR Pastel Highlighters */
+  --hl-A1: #e3effb;
+  --hl-A1-ink: #1d548c;
+  --hl-A2: #d6eccf;
+  --hl-A2-ink: #20662a;
+  --hl-B1: #fde9bd;
+  --hl-B1-ink: #825c00;
+  --hl-B2: #fde0d7;
+  --hl-B2-ink: #91261b;
+  --hl-C1: #efe2fa;
+  --hl-C1-ink: #522485;
+
+  /* CEFR 词阶透视（ADR-0026）：沉浸模式下 B1/B2 只留极细下沿标记，C1 保留柔和点缀 */
+  --cefr-edge-weak: rgba(21, 20, 15, 0.14);
+  --cefr-edge-exam: rgba(145, 38, 27, 0.55);
+
+  /* Sticky Notes */
+  --note-yellow: #fffbe6;
+  --note-pink: #fff0ed;
+  --note-green: #edf7ec;
+  /* memo 卡片按 nth-child 轮换四种便签底色，蓝色那档一直没定义 ——
+     取与另外三档同等饱和/明度的淡蓝（呼应 --hl-A1 #E3EFFB 的蓝相，再提亮一档）。 */
+  --note-blue: #ecf3fb;
+
+  /* Typography */
+  --serif-display: "Playfair Display", "Instrument Serif", Georgia, serif;
+  --serif-heading: "Playfair Display", "Instrument Serif", Georgia, serif;
+  --serif-body: "DM Serif Text", "Iowan Old Style", Georgia, serif;
+  --serif: "Playfair Display", "Instrument Serif", Georgia, serif;
+  --serif-text: "DM Serif Text", "Iowan Old Style", Georgia, serif;
+  --sans-tight:
+    "Inter Tight", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* --font-sans 是 --sans 的别名：mascot 面板三处（含 #panel-name 输入框）
+     用的是这个名字。三处都改成 --sans 也行，但别名让两种叫法都落到同一字体栈，
+     不至于哪天又漏改一处、静默退回 -apple-system 回退栈。 */
+  --font-sans: var(--sans);
+  --mono: "IBM Plex Mono", "JetBrains Mono", Consolas, monospace;
+  --hand: "Caveat", "Patrick Hand", cursive;
+
+  /* Shadows */
+  --shadow-sm: 0 2px 4px rgba(21, 20, 15, 0.06);
+  --shadow-card: 0 14px 28px -12px rgba(21, 20, 15, 0.12);
+  --shadow-hard: 3px 3px 0 var(--ink);
+
+  /* Motion */
+  --ease-editorial: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 180ms;
+  --dur-mid: 360ms;
+  --dur-slow: 900ms;
+
+  /* Motion infrastructure（T2）：主应用只加载 style.css，必须在本文件 :root 落一份；
+     tokens.css 里保持同名镜像给 workbench 使用。--stagger-index 由 motion.js 写入。 */
+  --motion-enter: 180ms;
+  --motion-enter-shift: 4px;
+  --motion-press: 100ms;
+  --motion-count: 520ms;
+  --motion-stagger-step: 40ms;
+  --stagger-index: 0;
+
+  --reader-fs: 1.125rem;
+}
+
+/* ── Reset & Base ────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+}
+
+body {
+  background:
+    radial-gradient(circle, var(--grid-dot) 1.2px, transparent 1.2px) 0 0 / 22px
+      22px,
+    var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font: inherit;
+}
+input,
+textarea,
+select {
+  font: inherit;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ── Lucide 图标（static/icons/lucide-sprite.svg） ──────────────
+   尺寸走 1em：图标跟随宿主按钮的 font-size，不需要为每个按钮单独定宽高。
+   颜色走 currentColor（symbol 内 stroke="currentColor"），hover/active 自动跟随。
+   pointer-events:none 让点击永远落在按钮上，图标本身不吞事件。
+   图标只做冗余通道：可访问名一律由可见文字或 aria-label 提供（不变量 I1）。 */
+.ui-ico {
+  width: 1em;
+  height: 1em;
+  display: inline-block;
+  vertical-align: -0.125em;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+/* ── Top Metadata Ticker Strip (36px Ultra-slim) ── */
+
+.top-ticker,
+.topbar {
+  height: 36px;
+  background: var(--paper-tint);
+  border-bottom: 1px solid var(--line);
+  padding: 0 2rem;
+  display: flex;
+  align-items: center;
+  position: relative;
+  z-index: 31;
+}
+
+.topbar-inner {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.topbar-inner b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.topbar-inner .coral {
+  color: var(--coral, var(--accent));
+}
+
+/* 顶栏状态点：仅作「System 在线」的静态标记。
+   循环呼吸会让每一页都持续动，违反 ADR-0029 §8；状态语义由左侧文字承担。 */
+.topbar-inner .pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--coral, var(--accent));
+  display: inline-block;
+  margin-right: 6px;
+}
+
+/* 顶栏版本号兼作手动检查入口，反馈必须区别于普通元数据才能被发现。 */
+#topbar-system {
+  cursor: pointer;
+  transition: color var(--dur-fast) ease;
+}
+#topbar-system:focus-visible{
+  color: var(--coral, var(--accent));
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  #topbar-system:hover {
+    color: var(--coral, var(--accent));
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+  }
+}
+#topbar-system:focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: 3px;
+}
+
+/* ── 顶栏版本更新 chip（落后时唯一可见的更新状态承载）── */
+.update-chip {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.75rem;
+}
+/* 必须显式覆盖：作者样式的 display 会盖掉 UA 的 [hidden]，否则无新版时 chip 反而可见。 */
+.update-chip[hidden] {
+  display: none;
+}
+.update-chip-link {
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+  text-transform: none;
+  color: var(--coral, var(--accent));
+  text-decoration: none;
+  border: 1px solid var(--coral, var(--accent));
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  white-space: nowrap;
+}
+@media (hover: hover) and (pointer: fine) {
+  .update-chip-link:hover {
+    background: var(--coral, var(--accent));
+    color: #fff;
+  }
+}
+
+@media (max-width: 768px) {
+  .top-ticker {
+    padding: 0 0.75rem;
+  }
+  .topbar-inner .mid {
+    display: none;
+  }
+}
+
+/* ── Top Navigation Bar ──────────────────── */
+
+#nav {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2rem;
+  height: 56px;
+  background: rgba(250, 248, 245, 0.96);
+  border-bottom: 1.5px solid var(--ink);
+  backdrop-filter: blur(8px);
+}
+
+.nav-brand {
+  font-family: var(--serif);
+
+  font-size: 1.625rem;
+
+  font-style: italic;
+
+  font-weight: 700;
+
+  color: var(--ink);
+
+  cursor: pointer;
+
+  user-select: none;
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 0.75rem;
+}
+
+.nav-brand .brand-dot {
+  color: var(--accent);
+
+  font-style: normal;
+}
+
+.nav-pin {
+  font-family: var(--mono);
+
+  font-size: 0.625rem;
+
+  font-weight: 600;
+
+  letter-spacing: 0.16em;
+
+  text-transform: uppercase;
+
+  color: var(--accent);
+
+  border: 1.5px dashed var(--accent);
+
+  padding: 3px 8px;
+
+  border-radius: 3px;
+
+  transform: rotate(-1.5deg);
+
+  background: var(--paper);
+}
+
+.nav-actions {
+  display: flex;
+  gap: 0.625rem;
+  align-items: center;
+}
+
+/* ── Buttons ─────────────────────────────── */
+
+.btn {
+  min-height: 36px;
+
+  display: inline-flex;
+
+  align-items: center;
+
+  gap: 6px;
+
+  padding: 0 1rem;
+
+  font-family: var(--sans);
+
+  font-size: 0.8125rem;
+
+  font-weight: 600;
+
+  border-radius: 6px;
+
+  transition: all 0.15s ease;
+
+  white-space: nowrap;
+}
+
+.btn-ghost {
+  border: 1.5px solid var(--rule);
+
+  background: var(--paper);
+
+  color: var(--pencil);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn-ghost:hover {
+    border-color: var(--ink);
+    color: var(--ink);
+  }
+}
+
+/* 次要按钮 = 比 .btn-ghost 再退后一层。**必须与 ghost 有可见差异**，不是
+   审美偏好：writer.js:261 用 ghost ↔ secondary 的互斥切换来表示格提示
+   ON/OFF，writer.js:905 用 accent → secondary 表示「已存为卡片」。两处都
+   只靠这个类的外观传达状态 —— 与 ghost 同色就等于把状态指示器做成隐形的
+   （v4.4.8 刚补上这条规则时就是同色，切换只剩文字在变）。
+   浅底 + 淡字 + 虚边读作「关闭 / 已完成」，与 ghost 的实边深字形成层级。 */
+.btn-secondary {
+  border: 1.5px solid var(--line-soft);
+
+  background: var(--paper-deep);
+
+  color: var(--ink-faint);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn-secondary:hover {
+    border-color: var(--rule);
+    color: var(--ink-mute);
+  }
+}
+
+/* 尺寸第三档。必须重置 min-height —— .btn 的 36px 是 .btn-sm 唯一没盖住的
+   属性，所以 index.html:95-97,610,678 才不得不各写一遍 inline style。
+   26px 而非 24px：留出 WCAG 2.5.5 的最小可点高度余量。 */
+.btn-xs {
+  min-height: 26px !important;
+
+  padding: 0 0.5rem !important;
+
+  font-size: 0.75rem !important;
+
+  border-radius: 4px !important;
+}
+
+/* 破坏性操作修饰类（删作文、删快照）。静息态只给字色不给底色 ——
+   删除键在被指向之前不该抢视觉焦点。hover 翻成实底而非 .card-del-btn
+   那种浅底(#fde8e8)：那个是裸 button，这个是 .btn 变体，得跟
+   .btn-ghost:hover 的「加重边框 + 实底」量级对齐才不显得比邻键轻。
+   必须排在 .btn-ghost 之后 —— 两者同为单类选择器，靠源序定胜负。 */
+.btn-del {
+  color: var(--danger);
+
+  border-color: rgba(176, 48, 48, 0.35);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn-del:hover {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: #fef9ee;
+  }
+}
+
+.btn-del:active {
+  background: var(--danger-strong);
+
+  transform: translateY(0);
+}
+
+/* T8：按压反馈只给可点控件（正文 .tok、考试选项文字不在此列）。
+   :active 在触屏按下即生效、抬手即消失；transform 不改变布局盒。 */
+.btn:active {
+  transform: scale(0.98);
+
+  transition: transform var(--motion-press, 100ms) ease;
+}
+
+/* T9：只为 T3–T8 触及过的可聚焦控件补统一焦点环，不做全站清理。
+   outline 不参与布局；与 T3 的 hover 只改色/影不冲突。 */
+.btn:focus-visible,
+.nav-tab:focus-visible,
+.mobile-nav-btn:focus-visible,
+.dock-item:focus-visible,
+.satz-lab-chip:focus-visible,
+.speaker-btn:focus-visible,
+.speaker-btn-sm:focus-visible,
+.hl-color-btn:focus-visible,
+.article-row-del:focus-visible,
+.card-del-btn:focus-visible,
+.card-master-btn:focus-visible,
+.encounter-entry-card:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.btn-dark {
+  background: var(--ink);
+
+  color: #fef9ee;
+
+  box-shadow: 2px 2px 0 var(--pencil);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn-dark:hover {
+    background: #2d2722;
+    box-shadow: 3px 3px 0 var(--pencil);
+  }
+}
+
+.btn-accent {
+  background: var(--accent);
+
+  color: #fff;
+
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn-accent:hover {
+    opacity: 0.92;
+  }
+}
+
+.btn-full {
+  width: 100%;
+  justify-content: center;
+}
+
+/* ── Views ───────────────────────────────── */
+
+.view {
+  flex: 1;
+  display: none;
+}
+
+.view.active {
+  display: block;
+}
+
