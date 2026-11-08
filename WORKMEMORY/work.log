@@ -683,3 +683,15 @@ P2 组件族换肤第五轮（最后一族）：写作 writer。worktree D:\Code
 - 唯一布局改动：动作区两行命中区 42→44px、行距 6→8px 消除重叠；其余不重排。
 - 不做：08 ≤1036 设置段、09 设置规则、卡盒/闪卡/阅读器/词卡/备考、android/、visual_gates 阈值、全面 IA 重排。
 - 审计：writer.js 14 个 classList 切换类名，CSS 源全集零缺失（无 C 桶）。
+
+### 2026-11-08 18:31 | deepseek-v4.1-flash__trae | WORK_END
+Status: PR_OPEN —— P2 组件族第五轮（写作 writer，最后一族），分支 feat/writer-skin。
+- 命中区：393 第一行 42→44px（4 按钮全部），行2 命中顶边 220.06→224.06，行1 底边 226.06→224.06，重叠 6→0（相切）；360 同样 42→44，2 对重叠→0；1280 单行无触控伪元素，0 变化。
+- 布局：行距 6→8px，动作区 78→80px，header 171.06→173.06，编辑区 y 528.44→530.44，首屏可见 160 不变，横向溢出 0。
+- 字面量：hex 519→505（−14/配额13）、唯一 rgba 108→99（−9/配额5）；infinite 7；闸内最低对比 4.63；新增组合 5.05–8.68 全部 ≥4.5。
+- 状态非颜色：pill 实线✓/虚线!；句导航徽章方角!/圆角✓；问题徽章实线/虚线；作文正误条方角虚线!/圆角实线✓；输入框与 IDE 聚焦 2px outline；四类错误下划线四种线型。
+- 矩阵（同源三份数据、清音频缓存、36/36 × before/after/after2）：信号仅 writer-393 7.23% / 360 7.83%；设置三档与 cards/reader/quiz/exam 全 0；drawer-393 4.362%、home、german、drawer-1280、cards 音频体积 0→0.02→0.03MB 均复现为噪声。
+- computed 基线 12/12 一致，0 项更新（控件集不含 writer 动作区，改用定向探针）。
+- 校验：build_css + check_css_sync PASS；visual_gates 505/99/7/4.63 全 PASS；reduced-motion 下新元素 1e-05s、无动画。
+- PR #302 已开（base master，不自动合并）；PR CI 13 pass / 0 failure / 0 cancelled / 1 skipped（Master Direct-Push Scope Gate 按设计在 PR 上 skipping）。
+- 收尾：8781–8785 服务已停；临时 worktree D:\Code\DeLector-visual-before 已移除。
