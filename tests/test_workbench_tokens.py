@@ -86,7 +86,7 @@ def test_style_css_imports_tokens_css():
     )
 
 
-# workbench 的 :root 只允许这 8 个独有语义；共享语义名（--paper/--ink/--rule/...）
+# workbench 的 :root 只允许这 9 个独有语义；共享语义名（--paper/--ink/--rule/...）
 # MUST 由 tokens.css 提供。历史形态里 --accent 自引用成为 guaranteed-invalid（无 fallback
 # 的 var(--accent) 整条失效），--muted / --line 同名覆盖成与主应用不同的值 ——
 # 这份白名单就是防复发的机械闸。
@@ -97,6 +97,7 @@ WORKBENCH_LOCAL_VARS = {
     "--wb-hard-soft",
     "--wb-again",
     "--wb-again-soft",
+    "--wb-on-accent",
     "--wb-shadow",
     "--wb-radius",
 }

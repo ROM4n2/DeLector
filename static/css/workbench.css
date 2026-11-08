@@ -23,7 +23,8 @@
   --wb-hard-soft: var(--note-yellow);
   --wb-again: var(--cherry);
   --wb-again-soft: var(--note-pink);
-  --wb-shadow: 0 2px 10px rgba(30,40,60,.08);
+  --wb-on-accent: #fff;
+  --wb-shadow: 0 2px 10px var(--shadow-tint-1);
   --wb-radius: 12px;
 }
 /* 暗色插槽：tokens.css 尚无暗色层，本页只重绑自己实际消费的共享语义名。 */
@@ -35,6 +36,14 @@
   --rule: #3a342b;
   --accent: #ed6f5c;
   --paper-tint: #2e261f;
+  /* 共享的细线/阴影色是暖黑叠色，叠在暗底上等于消失；重绑为低透明度亮线
+     与纯黑影，保证分隔线与抬升在暗色下仍可见。 */
+  --line-soft: rgba(237, 231, 218, 0.14);
+  --shadow-tint-1: rgba(0, 0, 0, 0.32);
+  --shadow-tint-2: rgba(0, 0, 0, 0.42);
+  --shadow-tint-3: rgba(0, 0, 0, 0.52);
+  --shadow-tint-4: rgba(0, 0, 0, 0.62);
+  --wb-on-accent: #241512;
   --wb-good: #4e8c53;
   --wb-good-soft: #1e281f;
   --wb-hard: #f3c966;
@@ -46,7 +55,7 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 body{
-  font-family:var(--sans, "Inter", -apple-system, BlinkMacSystemFont, sans-serif);
+  font-family:var(--sans);
   background:var(--paper); color:var(--ink); font-size:15px; line-height:1.6;
   -webkit-font-smoothing:antialiased;
 }
@@ -57,7 +66,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:6px;
   padding:8px 18px;border-radius:9px;font-size:14px;font-weight:600;
-  background:var(--accent);color:#fff;transition:filter .15s, transform var(--motion-press, 100ms) ease;
+  background:var(--accent);color:var(--wb-on-accent);transition:filter .15s, transform var(--motion-press) ease;
 }
 @media (hover: hover) and (pointer: fine) {
   .btn:hover {
@@ -75,9 +84,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
 .wrap{max-width:960px;margin:0 auto;padding:20px 16px;}
 header.top{
   display:flex;align-items:center;gap:14px;padding:14px 4px 10px;flex-wrap:wrap;
-  border-bottom:1px solid var(--line-soft, rgba(21, 20, 15, 0.08));margin-bottom:12px;
+  border-bottom:1px solid var(--line-soft);margin-bottom:12px;
 }
-header.top h1{font-size:22px;letter-spacing:.3px;font-family:var(--serif, "Playfair Display", Georgia, serif);font-weight:700}
+header.top h1{font-size:22px;letter-spacing:.3px;font-family:var(--serif);font-weight:700}
 header.top .sub{color:var(--muted);font-size:12.5px}
 .badge{
   background:var(--paper-tint);color:var(--accent);border-radius:999px;
@@ -86,14 +95,14 @@ header.top .sub{color:var(--muted);font-size:12.5px}
 .badge.hot{background:var(--wb-again-soft);color:var(--wb-again)}
 /* 顶栏 scope 分段控件：与 .badge 同高同圆角，塞进 header.top 同一 flex 行 */
 .seg{
-  display:inline-flex;gap:2px;background:var(--paper-tint, #f2ece1);
+  display:inline-flex;gap:2px;background:var(--paper-tint);
   border:1px solid var(--rule);border-radius:999px;padding:2px;flex-shrink:0;
 }
 .seg button{
   padding:3px 12px;border-radius:999px;font-size:12px;font-weight:600;
   color:var(--muted);white-space:nowrap;transition:all .15s;background:transparent;
 }
-.seg button.active{background:var(--paper-card, #ffffff);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,0.06)}
+.seg button.active{background:var(--paper-card);color:var(--ink);box-shadow:var(--elevation-1)}
 @media (hover: hover) and (pointer: fine) {
   .seg button:not(.active):hover {
     color:var(--ink)
@@ -128,7 +137,7 @@ nav.tabs button.active{
 
 /* ================= 复习视图 ================= */
 .rev-meta{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
-.progress{flex:1;min-width:180px;height:4px;background:var(--line-soft, rgba(21, 20, 15, 0.08));border-radius:99px;overflow:hidden}
+.progress{flex:1;min-width:180px;height:4px;background:var(--line-soft);border-radius:99px;overflow:hidden}
 .progress>i{display:block;height:100%;background:var(--accent);border-radius:99px;transition:width .3s}
 .rev-stage{display:flex;align-items:center;gap:10px}
 .arrow{
@@ -148,30 +157,30 @@ nav.tabs button.active{
 .face{
   position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;
   background:var(--paper-card);border:1px solid var(--rule);border-radius:12px;
-  box-shadow:0 4px 20px rgba(21, 20, 15, 0.05), 0 1px 3px rgba(21, 20, 15, 0.03);display:flex;flex-direction:column;
+  box-shadow:var(--wb-shadow);display:flex;flex-direction:column;
   align-items:center;justify-content:center;padding:26px 34px;text-align:center;overflow:auto;
 }
 .face.back{transform:rotateY(180deg);justify-content:flex-start;padding-top:30px}
-.face .hw{font-size:40px;font-weight:700;letter-spacing:-0.01em;font-family:var(--serif, "Playfair Display", Georgia, serif);color:var(--ink)}
-.face .ipa{color:var(--muted);font-size:15px;margin-top:6px;font-family:var(--mono, "IBM Plex Mono", Consolas, monospace)}
+.face .hw{font-size:40px;font-weight:700;letter-spacing:-0.01em;font-family:var(--serif);color:var(--ink)}
+.face .ipa{color:var(--muted);font-size:15px;margin-top:6px;font-family:var(--mono)}
 .face .pos{display:inline-block;background:var(--paper-tint);color:var(--accent);
-  border:1px solid var(--rule);border-radius:6px;padding:2px 8px;font-size:11.5px;font-family:var(--mono, "IBM Plex Mono", Consolas, monospace);font-weight:600;margin-bottom:8px}
+  border:1px solid var(--rule);border-radius:6px;padding:2px 8px;font-size:11.5px;font-family:var(--mono);font-weight:600;margin-bottom:8px}
 .face .gloss{font-size:20px;font-weight:600;margin-bottom:16px}
 .face .exs{width:100%;max-width:560px;text-align:left;font-size:14px}
 .face .exs .ex{padding:7px 0;border-top:1px dashed var(--rule)}
 .face .exs .ex:first-child{border-top:none}
-.face .exs .de{font-family:var(--serif-text, var(--serif, "Playfair Display", Georgia, serif));line-height:1.6}
+.face .exs .de{font-family:var(--serif-text);line-height:1.6}
 .face .exs .zh{color:var(--muted);font-size:13px}
 .face .flip-hint{position:absolute;bottom:12px;font-size:12px;color:var(--muted)}
 .rate-row{display:flex;gap:10px;margin-top:16px;justify-content:center;flex-wrap:wrap}
 .rate-btn{
   flex:1;max-width:200px;padding:12px 10px;border-radius:8px;font-size:15px;font-weight:700;
-  box-shadow:0 1px 3px rgba(21, 20, 15, 0.04);
+  box-shadow:var(--elevation-1);
   transition:transform var(--dur-fast) cubic-bezier(.22,1,.36,1), box-shadow var(--dur-fast), filter var(--dur-fast);
 }
 @media (hover: hover) and (pointer: fine) {
   .rate-btn:hover:not(:disabled) {
-    box-shadow:0 3px 8px rgba(21, 20, 15, 0.08);filter:brightness(0.98)
+    box-shadow:var(--elevation-2);filter:brightness(0.98)
   }
 }
 .rate-btn:active:not(:disabled){transform:translateY(1px);box-shadow:none}
@@ -183,9 +192,9 @@ nav.tabs button.active{
 .empty-box{text-align:center;padding:44px 20px}
 .empty-box .big{font-size:44px;margin-bottom:10px}
 .empty-box p{color:var(--muted);margin-bottom:16px}
-code,kbd{font-family:var(--mono, "IBM Plex Mono", Consolas, monospace)}
+code,kbd{font-family:var(--mono)}
 .kbd{background:var(--paper-card);border:1px solid var(--rule);border-bottom-width:2px;
-  border-radius:5px;padding:1px 6px;font-size:12px;font-family:var(--mono, "IBM Plex Mono", Consolas, monospace)}
+  border-radius:5px;padding:1px 6px;font-size:12px;font-family:var(--mono)}
 
 /* ================= 自测视图 ================= */
 .qopt{
@@ -195,19 +204,19 @@ code,kbd{font-family:var(--mono, "IBM Plex Mono", Consolas, monospace)}
 }
 @media (hover: hover) and (pointer: fine) {
   .qopt:hover:not(:disabled) {
-    border-color:var(--ink);background:var(--paper-tint, #f2ece1)
+    border-color:var(--ink);background:var(--paper-tint)
   }
 }
 .qopt:disabled{cursor:default}
 .qopt.ok{border-color:var(--wb-good);background:var(--wb-good-soft);color:var(--wb-good);font-weight:700}
 .qopt.bad{border-color:var(--wb-again);background:var(--wb-again-soft);color:var(--wb-again)}
 .qnum{color:var(--muted);font-size:13px;margin-bottom:8px}
-.qword{font-size:30px;font-weight:700;text-align:center;margin:14px 0 20px;font-family:var(--serif, "Playfair Display", Georgia, serif)}
+.qword{font-size:30px;font-weight:700;text-align:center;margin:14px 0 20px;font-family:var(--serif)}
 .qword small{display:block;font-size:15px;color:var(--muted);font-weight:400;margin-top:4px;font-family:var(--sans)}
 .fb{padding:12px 16px;border-radius:10px;margin:14px 0;font-size:14.5px}
 .fb.ok{background:var(--wb-good-soft);color:var(--wb-good)}
 .fb.bad{background:var(--wb-again-soft);color:var(--wb-again)}
-.spell-input{width:100%;font-size:19px;padding:12px 16px;text-align:center;font-family:var(--serif, "Playfair Display", Georgia, serif);border:1px solid var(--rule);border-radius:8px}
+.spell-input{width:100%;font-size:19px;padding:12px 16px;text-align:center;font-family:var(--serif);border:1px solid var(--rule);border-radius:8px}
 .mode-grid{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 .mode-card{
   flex:1;min-width:220px;border:2px solid var(--rule);border-radius:12px;padding:16px;
@@ -227,18 +236,18 @@ code,kbd{font-family:var(--mono, "IBM Plex Mono", Consolas, monospace)}
 /* ================= 统计视图 ================= */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
 .kpi{background:var(--paper-card);border:1px solid var(--rule);border-radius:8px;
-  padding:14px 16px;box-shadow:0 1px 3px rgba(21, 20, 15, 0.04)}
-.kpi .v{font-size:26px;font-weight:700;font-family:var(--serif, "Playfair Display", Georgia, serif)}
+  padding:14px 16px;box-shadow:var(--elevation-1)}
+.kpi .v{font-size:26px;font-weight:700;font-family:var(--serif)}
 .kpi .l{font-size:12.5px;color:var(--muted);margin-top:2px}
 .kpi.hl .v{color:var(--accent)}
 .letter-row{display:flex;align-items:center;gap:10px;margin-bottom:7px}
-.letter-row .lt{width:22px;font-weight:800;font-family:var(--serif, "Playfair Display", Georgia, serif);text-align:center}
+.letter-row .lt{width:22px;font-weight:800;font-family:var(--serif);text-align:center}
 .letter-row .bar{flex:1;height:14px;border-radius:99px;overflow:hidden;display:flex;background:var(--rule)}
 .letter-row .bar i{display:block;height:100%}
-.letter-row .pct{width:86px;text-align:right;font-size:12px;color:var(--muted);font-family:var(--mono, "IBM Plex Mono", Consolas, monospace)}
+.letter-row .pct{width:86px;text-align:right;font-size:12px;color:var(--muted);font-family:var(--mono)}
 .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-top:10px}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
-svg text{font-family:var(--sans, "Inter", -apple-system, BlinkMacSystemFont, sans-serif)}
+svg text{font-family:var(--sans)}
 
 /* ================= 词库视图 ================= */
 .toolbar{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
@@ -249,14 +258,14 @@ table.wtab th{
   border-bottom:1px solid var(--ink);position:sticky;top:0;background:var(--paper-card);white-space:nowrap;
   letter-spacing:.02em;text-transform:uppercase;
 }
-table.wtab td{padding:10px 8px;border-bottom:1px solid var(--line-soft, rgba(21, 20, 15, 0.08));vertical-align:top}
+table.wtab td{padding:10px 8px;border-bottom:1px solid var(--line-soft);vertical-align:top}
 @media (hover: hover) and (pointer: fine) {
   table.wtab tr:hover td {
-    background:var(--paper-tint, #f2ece1)
+    background:var(--paper-tint)
   }
 }
-table.wtab .hw{font-weight:700;font-family:var(--serif, "Playfair Display", Georgia, serif);color:var(--ink);font-size:14.5px}
-table.wtab .ipa{color:var(--muted);font-size:12px;font-family:var(--mono, "IBM Plex Mono", Consolas, monospace)}
+table.wtab .hw{font-weight:700;font-family:var(--serif);color:var(--ink);font-size:14.5px}
+table.wtab .ipa{color:var(--muted);font-size:12px;font-family:var(--mono)}
 table.wtab .gloss-cell{max-width:230px}
 .tag-chip{
   display:inline-block;background:var(--paper-tint);color:var(--accent);border-radius:5px;
@@ -308,7 +317,7 @@ input[type="range"]{width:190px;accent-color:var(--accent)}
 }
 .modal-mask.open{display:flex}
 .modal{
-  background:var(--paper-card);border-radius:14px;box-shadow:0 12px 44px rgba(0,0,0,.25);
+  background:var(--paper-card);border-radius:14px;box-shadow:var(--elevation-3);
   width:100%;max-width:560px;max-height:88vh;box-sizing:border-box;overflow:auto;padding:22px;
   animation:pop .18s ease;
 }

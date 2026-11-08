@@ -1604,6 +1604,17 @@
   box-shadow: 0 2px 0 var(--accent);
 }
 
+/* 「首字母提示已填入」状态：虚线底线 + 斜纹底（形状通道，不依赖颜色）。
+   与 .cloze-hint-badge 的虚线小签成对，扫读即可分辨哪些空格是系统补的。 */
+.cloze-input.has-hint {
+  border-bottom-style: dashed;
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 5px,
+    var(--line-soft) 5px 6px
+  );
+}
+
 .cloze-input.is-correct {
   background: #eafaf1;
   color: var(--moss);

@@ -155,7 +155,11 @@ python tools/visual_gates.py --json   # 机器读
 --ink-faint: var(--text-faint);
 ```
 
-**双份镜像**：主应用只加载 `static/style.css`（`:root` 在 `src/css/01-tokens-base.css`），workbench iframe 只加载 `static/css/tokens.css`，iframe 不继承父文档 `:root`。两处 MUST 同步；`test_token_mirrors_agree_for_p1_pairs` 会逐 token 比对解析值。暗色插槽沿用 workbench 既有 `[data-theme="dark"]`，本轮只保证 `--hard` 在暗色下仍指向文字安全色，不实现暗色。
+**双份镜像**：主应用只加载 `static/style.css`（`:root` 在 `src/css/01-tokens-base.css`），workbench iframe 只加载 `static/css/tokens.css`，iframe 不继承父文档 `:root`。两处 MUST 同步；`test_token_mirrors_agree_for_p1_pairs` 会逐 token 比对解析值。
+
+**workbench iframe 边界结论（2026-11-08 复核）**：维持现状，**不消除**。父级既不构建期/运行期注入 token，也不向 iframe postMessage 桥接；workbench 内部一律消费自身 `link` 的 `tokens.css`，**禁止依赖父级变量**。证据：父级 `:root --paper` 改为 `rgb(1,2,3)` 后，iframe 内 `--paper` 仍为 `#faf8f5`、body 背景仍为 `rgb(250,248,245)`；iframe 自带 `../css/tokens.css` 链接，主应用 JS 对 `contentDocument` / `contentWindow` 零引用。暗色插槽沿用 workbench 既有 `[data-theme="dark"]`，重绑它实际消费的共享语义名（`--paper` / `--paper-card` / `--paper-tint` / `--ink` / `--muted` / `--rule` / `--accent` / `--line-soft` / `--shadow-tint-*`）与 `--wb-*`，`--wb-on-accent` 负责强调底上的文字色。
+
+**零散例外清单（2026-11-08）**：① `workbench.css` 的 `.modal-mask` 用 `rgba(15,18,25,.45)` —— 模态遮罩材质，elevation 阶梯只描述阴影、无遮罩语义，保留；② 暗色块 `--wb-shadow` 用纯黑 `rgba(0,0,0,.35)` —— 暖黑叠在暗底上不可见，属暗色材质例外；③ `workbench.html` 的 `console.info("%c…")` 颜色 `#2e9e5b` / `#d2504a` 只在 DevTools 控制台生效，不进 CSS 计算，无法消费 token；④ PWA `theme-color` / manifest 图标底色 `#3565b0` / `#ffffff` 是品牌常量与应用图标资源，不属 CSS token 层，未改；⑤ `08-settings-writer.css` 2042 / 2149 / 2388 的 `rgba(21,20,15,.05/.08)` 与 `rgba(0,0,0,.06)` 位于写作族已收口区，按本轮约束未动，留待后续统一。
 
 ### 材质层级（P3，阴影 / 纸感）
 

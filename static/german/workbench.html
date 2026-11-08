@@ -44,7 +44,7 @@
     <div class="rev-meta">
       <span class="hint" id="revInfo">—</span>
       <div class="progress" style="max-width:280px"><i id="revProgFill" style="width:0%"></i></div>
-      <span class="hint" id="revProgText" style="font-family:Consolas,monospace">0 / 0</span>
+      <span class="hint" id="revProgText" style="font-family:var(--mono)">0 / 0</span>
     </div>
 
     <div id="revBoard">
@@ -128,7 +128,7 @@
     <div class="rev-meta">
       <span class="qnum" id="quizQLabel">—</span>
       <div class="progress" style="max-width:240px"><i id="quizProgFill" style="width:0%"></i></div>
-      <span class="hint" id="quizProgText" style="font-family:Consolas,monospace">0 / 0</span>
+      <span class="hint" id="quizProgText" style="font-family:var(--mono)">0 / 0</span>
       <button class="btn sm ghost" id="btnQuizQuit">结束</button>
     </div>
     <div id="quizQBox"></div>
@@ -241,7 +241,7 @@
         <div class="desc">FSRS 调度目标：越高复习越频繁。推荐 0.90</div></div>
       <div style="display:flex;align-items:center;gap:10px">
         <input type="range" id="setRetention" min="0.80" max="0.95" step="0.01">
-        <b id="setRetentionVal" style="font-family:Consolas,monospace;width:44px"></b>
+        <b id="setRetentionVal" style="font-family:var(--mono);width:44px"></b>
       </div>
     </div>
     <div class="set-row">
@@ -313,7 +313,7 @@
     </div>
     <div class="set-row">
       <div><div class="lab">发音速率</div>
-        <div class="desc"><b id="setTtsRateVal" style="font-family:Consolas,monospace">0.9×</b></div></div>
+        <div class="desc"><b id="setTtsRateVal" style="font-family:var(--mono)">0.9×</b></div></div>
       <div style="display:flex;align-items:center;gap:10px;width:320px">
         <span style="font-size:11px;color:var(--muted)">0.5×</span>
         <input type="range" id="setTtsRate" min="0.5" max="1.5" step="0.05" style="flex:1">
@@ -328,7 +328,7 @@
         <button class="btn sm ghost" id="btnCopyDiag" style="display:none">复制结果</button>
       </div>
     </div>
-    <textarea id="ttsDiagOutput" readonly style="display:none;width:100%;min-height:160px;font-family:Consolas,monospace;font-size:11px;margin-top:8px;resize:vertical;background:var(--paper-card);color:var(--fg);border:1px solid var(--rule);border-radius:6px;padding:8px"></textarea>
+    <textarea id="ttsDiagOutput" readonly style="display:none;width:100%;min-height:160px;font-family:var(--mono);font-size:11px;margin-top:8px;resize:vertical;background:var(--paper-card);color:var(--ink);border:1px solid var(--rule);border-radius:6px;padding:8px"></textarea>
     <details style="margin-top:12px;padding:8px;border:1px solid var(--rule);border-radius:6px;background:var(--paper-card)">
       <summary style="cursor:pointer;font-weight:600">如何用 http:// 协议打开（解决 TTS 无声音）</summary>
       <div style="margin-top:10px;font-size:13px;line-height:1.7">
@@ -391,7 +391,7 @@
   <!-- F5 · LAN 同步（6 位短码，WebRTC P2P） -->
   <div class="panel" id="lanSyncPanel" style="display:none">
     <h2>LAN 同步（6 位短码，WebRTC P2P）</h2>
-    <div class="guide" style="font-size:13px;line-height:1.7;color:#b8860b">
+    <div class="guide" style="font-size:13px;line-height:1.7;color:var(--mustard-ink)">
       手动短码 P2P 已停用：服务端已启用配对密钥鉴权（X-WB-Key），短码端点不再对未配对请求开放。<br>
       进度同步请使用下方「镜像自动同步（配对密钥 · 后台静默）」——配对一次后自动后台对账，无需手动传码。
       <b>下方短码按钮为旧版遗留（保留仅为兼容旧书签/指引），点击不再生效。</b>
@@ -403,27 +403,27 @@
     <div id="lanStepA" style="margin-top:10px">
       <button class="btn sm ghost" id="btnLanOffer">① 生成短码</button>
       <div id="lanOfferDisplay" style="display:none;margin-top:8px;text-align:center">
-        <div style="font-size:2rem;font-family:Consolas,monospace;letter-spacing:0.3em;color:var(--accent);font-weight:700" id="lanOfferCode">—</div>
+        <div style="font-size:2rem;font-family:var(--mono);letter-spacing:0.3em;color:var(--accent);font-weight:700" id="lanOfferCode">—</div>
         <button class="btn sm ghost" id="btnLanCopyOffer" style="margin-top:4px">复制短码</button>
       </div>
       <div style="margin-top:12px">
         <label style="font-size:13px;display:block;margin-bottom:4px">② 输入对方的短码：</label>
-        <input type="text" id="lanAnswerIn" maxlength="6" style="width:160px;font-size:1.25rem;font-family:Consolas,monospace;letter-spacing:0.2em;text-transform:uppercase;text-align:center" placeholder="XXXXXX">
+        <input type="text" id="lanAnswerIn" maxlength="6" style="width:160px;font-size:1.25rem;font-family:var(--mono);letter-spacing:0.2em;text-transform:uppercase;text-align:center" placeholder="XXXXXX">
         <button class="btn sm ghost" id="btnLanAcceptAnswer" style="margin-top:4px">③ 确认连接并发送</button>
       </div>
     </div>
     <div id="lanStepB" style="margin-top:10px;display:none">
       <label style="font-size:13px;display:block;margin-bottom:4px">① 输入对方的短码：</label>
-      <input type="text" id="lanOfferIn" maxlength="6" style="width:160px;font-size:1.25rem;font-family:Consolas,monospace;letter-spacing:0.2em;text-transform:uppercase;text-align:center" placeholder="XXXXXX">
+      <input type="text" id="lanOfferIn" maxlength="6" style="width:160px;font-size:1.25rem;font-family:var(--mono);letter-spacing:0.2em;text-transform:uppercase;text-align:center" placeholder="XXXXXX">
       <button class="btn sm ghost" id="btnLanAcceptOffer" style="margin-top:4px">② 获取邀请并生成回执</button>
       <div id="lanAnswerDisplay" style="display:none;margin-top:8px;text-align:center">
-        <div style="font-size:2rem;font-family:Consolas,monospace;letter-spacing:0.3em;color:var(--accent);font-weight:700" id="lanAnswerCode">—</div>
+        <div style="font-size:2rem;font-family:var(--mono);letter-spacing:0.3em;color:var(--accent);font-weight:700" id="lanAnswerCode">—</div>
         <button class="btn sm ghost" id="btnLanCopyAnswer" style="margin-top:4px">复制短码</button>
       </div>
       <p class="hint" style="margin-top:8px;color:var(--muted)">③ 等待 A 输入你的短码，传输完成后自动完成合并。</p>
     </div>
     <p id="lanStatus" class="hint" style="margin-top:10px;color:var(--muted)"></p>
-    <div style="border-top:1px dashed #ccc;margin-top:14px;padding-top:12px">
+    <div style="border-top:1px dashed var(--rule);margin-top:14px;padding-top:12px">
       <h3 style="margin:0 0 6px;font-size:14px">镜像自动同步（配对密钥 · 后台静默）</h3>
       <p class="hint" style="margin:0 0 10px;color:var(--muted);font-size:12.5px;line-height:1.7">
         上面的短码同步需要两台设备都在线、手动传；这里的镜像同步只需配对一次，
@@ -433,7 +433,7 @@
       <div id="wbPairHostState" style="display:none">
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <span style="font-size:13px">本机同步密钥：</span>
-          <code id="wbHostKey" style="padding:2px 8px;background:rgba(0,0,0,.06);border-radius:6px;font-size:13px;word-break:break-all">—</code>
+          <code id="wbHostKey" style="padding:2px 8px;background:var(--paper-tint);border-radius:6px;font-size:13px;word-break:break-all">—</code>
           <button class="btn sm ghost" id="btnPairCopyKey" type="button">复制密钥</button>
           <button class="btn sm ghost" id="btnPairRevoke" type="button">撤销配对</button>
         </div>
@@ -1398,7 +1398,7 @@ function quizFinish() {
       quiz.wrong.map(id => {
         const w = wordById(id); if (!w) return "";
         return "<div style='padding:6px 0;border-bottom:1px dashed var(--rule)'>" +
-          "<b style='font-family:var(--serif, \"Playfair Display\", Georgia, serif)'>" + esc(w.hw) + "</b>" +
+          "<b style='font-family:var(--serif)'>" + esc(w.hw) + "</b>" +
           (w.ipa ? " <span class='hint'>" + esc(w.ipa) + "</span>" : "") +
           " — " + esc(w.gloss) + "</div>";
       }).join("");
