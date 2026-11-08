@@ -750,3 +750,17 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 修复：暗色补重绑 --pencil/--ink-faint/--paper-warm 并提亮 --muted；--wb-good 5.79、--wb-again 5.29、on-accent-on-again 5.64；新增 --wb-accent-on-tint（亮 coral 4.74 / 暗 accent 4.97）；带正文的 hover/选中面改 --paper-warm。
 - 例外：--rule 装饰边界不套 3:1；modal 遮罩、暗色纯黑 --wb-shadow 按材质保留；console/PWA 品牌色沿用既有例外。
 校验：workbench_gates 全 PASS（44/44 对比度，最低 3.02 图形）；visual_gates 505/99/7/4.63 持平；check_css_sync PASS。
+
+### 2026-11-08 20:53 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec, web-fetch
+任务：词卡抽屉「复习状态」UI 立项调研（只读）。基线 origin/master 85cf99e，独立 worktree `D:\Code\DeLector-reviewstate`，分支 docs/wordcard-review-state-research。
+不做：不改 static/src/delector/tests/配置；不启动服务；不做真实 App 截图。
+
+### 2026-11-08 20:53 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, web-fetch
+产出：docs/reviews/2026-11-08-wordcard-review-state-research.md。
+结论：vocab_cards 已有 11 个复习列（mastered/due_date/interval_days/repetition_count/correct_count/wrong_count/ease_factor/fsrs_s/d/lapses），但抽屉 lookup 与 scope=reader 的 12 字段契约都不返回；显式四态、last_reviewed_at、原始 grade 完全不存在（quiz_log 只存 correct 0/1）。
+外部：10 个官方来源文档实测（Anki/RemNote/Mochi/Quizlet/Memrise/Duolingo/SuperMemo + M3/HIG/WCAG），无截图；M3 chips 非状态组件、WCAG 1.4.1/1.4.11 已核。
+方案：A 入卡状态章 / B 单行复习台账（推荐）/ C 四态章+间隔预览（暂缓）。前置：只读状态端点 + 一词多卡匹配口径裁决。
+验证：仅静态取证与 WCAG 对比度计算（--line 在白底 1.43:1 不达标，状态边框须 currentColor）；未跑测试、未渲染。
+回写检查：无临时产物入库；无代码改动。
