@@ -549,7 +549,7 @@ P3 workbench token 收口（独立 worktree `D:\Code\DeLector-workbench-p3`，�
 - 不做：不改 `src/css/`、主应用 `style.css` 组件规则、`android/`；不跑全量 pytest；不自动合并。
 
 ### 2026-11-08 12:06 | deepseek-v4.1-flash__trae | WORK_END
-Status: PR_OPEN —— workbench iframe token 收口，commit 待记，PR 未合并。
+Status: PR_OPEN —— workbench iframe token 收口，commit `22d32a9`，PR #297（未合并）。
 - 根因（CDP 实测 iframe 内 computed token）：旧 `--accent: var(--accent, #c14a2b)` 自引用 → guaranteed-invalid，`--accent` 计算值为空，所有无 fallback 的 `var(--accent)` 整条失效（`.tabs active` 下划线 0px、`.progress > i` 透明、`.btn.ghost` 失去珊瑚色）；`--muted` 被同名覆盖成 `--pencil #5c554b`（主应用 `--muted #756e61`）；`--line` 同名覆盖成 `--rule #d8d0c2`（全局 `--line` 是 rgba 叠色）。
 - 落地：17 → 8 个局部变量；`--bg/--panel/--text/--accent-soft` → `--paper/--paper-card/--ink/--paper-tint`；`--card/--accent2` 0 引用删除；SRS 收敛 `--wb-good/--wb-hard/--wb-again(+soft)` 并映射 `--moss/--mustard-ink/--cherry/--note-*`；`--shadow/--radius` → `--wb-shadow/--wb-radius`。
 - 方案选定：workbench 独立 link 同一份 tokens.css（iframe 不继承父 :root，但这是同源独立消费者），拒绝父级注入（值二次复制、首帧闪烁、独立打开失效、主题桥接与 CSP 风险）。
