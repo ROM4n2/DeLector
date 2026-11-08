@@ -518,3 +518,11 @@ Status: DONE —— P1 只动 token 清 5 处对比度欠账；commit `a72bc63`�
 - 矩阵：36/36 × 改前/改后/噪声基线；35/36 可判定变化，`15-drawer-360` 全落噪声区；差异仅 coral/muted/ink-faint 三族色值及抗锯齿混合。
 - computed-style 只更新 3 条（mobile-nav-active.border-top-color、stat-ring-coral.border-top-color、stat-ring-coral.color），其余控件 20 属性不变 ⇒ 结构未动。
 - 闸门：hex 581≤582、rgba 118≤118、infinite 7==7、闸内对比度最低 4.63、mustard 文字声明 0；pytest 39 passed、Ruff/Mypy strict、check_css_sync 全绿。
+
+### 2026-11-08 11:35 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+P1 PR #294 追加「抬高字面量硬顶」提交（未转任何现有字面量为 token）。
+- 新预算：hex 700 / rgba 150（原 582 / 118）；实测仍 581 / 118，占用 83.0% / 78.7%，余量 119 / 32。
+- 余量预分：P2 组件族 ≤48/14、P3 收口 ≤24/8、T3–T9 动效阴影 ≤12/6、并行合并机动 ≤35/4。
+- 逼近告警：达预算 90%（hex 630 / rgba 135）打印 `[WARN] ... 新增字面量应优先改成 token`，不阻断；选 90% 是为了留一轮 PR 的改 token 提前量。
+- 验证：`visual_gates.py` 全 PASS（581/118）；pytest 41 passed；Ruff / Mypy strict 全绿；文档新增 §3.2 记录理由与实测。

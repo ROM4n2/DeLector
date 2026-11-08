@@ -32,9 +32,10 @@ def test_hex_gate_detects_extra_literals() -> None:
 
     mutating = css + "\n.visual-gate-probe { color: #123456; }\n"
     assert visual_gates.count_hex_outside_root(mutating) == before + 1
-    assert before + 1 <= visual_gates.HEX_BUDGET  # 一处的余量正是给这种小改动
+    assert before + 1 <= visual_gates.HEX_BUDGET  # 未触硬顶的单点新增仍允许，接近上限时另有告警
 
-    exhausted = css + "".join(f"\n.probe-{i} {{ color: #12345{i % 10}; }}\n" for i in range(3))
+    probes = visual_gates.HEX_BUDGET - before + 1
+    exhausted = css + "".join(f"\n.probe-{i} {{ color: #{i:06x}; }}\n" for i in range(probes))
     assert visual_gates.count_hex_outside_root(exhausted) > visual_gates.HEX_BUDGET
 
 
@@ -48,6 +49,30 @@ def test_root_tokens_are_exempt_from_hex_budget() -> None:
 def test_rgba_gate_counts_unique_values() -> None:
     css = ".a{color:rgba(0,0,0,.5)}.b{color:rgba(0, 0, 0, 0.5)}.c{color:rgba(1,2,3,.2)}"
     assert visual_gates.unique_rgba_values(css) == {"rgba(0,0,0,.5)", "rgba(1,2,3,.2)"}
+
+
+def test_literal_caps_are_hard_ceilings_with_headroom() -> None:
+    """新上限是硬顶而非目标值：实测必须仍低于逼近阈值，且不触发告警。"""
+    report = {gate["name"]: gate for gate in visual_gates.evaluate()["gates"]}
+    for name, budget in (
+        ("hex literals outside :root", visual_gates.HEX_BUDGET),
+        ("unique rgba literals", visual_gates.RGBA_BUDGET),
+    ):
+        gate = report[name]
+        assert gate["ok"], gate
+        assert gate["actual"] <= budget * visual_gates.NEAR_LIMIT_RATIO, gate
+        assert gate["warning"] == "", gate
+
+
+def test_literal_near_limit_warning_mentions_token() -> None:
+    assert visual_gates.literal_gate_warning(581, 700) == ""
+    assert visual_gates.literal_gate_warning(629, 700) == ""
+    message = visual_gates.literal_gate_warning(630, 700)
+    assert "90%" in message
+    assert "新增字面量应优先改成 token" in message
+    # 告警只提示，不改判 ok
+    gate = visual_gates.GateResult(name="probe", ok=True, actual=630, budget=700, warning=message)
+    assert gate.ok
 
 
 def test_infinite_gate_ignores_comments() -> None:

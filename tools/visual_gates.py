@@ -3,8 +3,9 @@
 
 所有数值都从当前 CSS **现算**，不读取手抄统计；阈值是产品约定：
 
-- `static/style.css` 规则体（`:root` 以外）的 hex 字面量 <= 582
-- `static/style.css` 的 rgba/rgb 唯一值 <= 118
+- `static/style.css` 规则体（`:root` 以外）的 hex 字面量 <= 700
+- `static/style.css` 的 rgba/rgb 唯一值 <= 150
+- 上述两项达到预算的 90% 时打印逼近告警（不阻断，提示优先改 token）
 - `static/**/*.css` 中 `animation*: ... infinite` 的循环动画 == 7
 - 语义颜色对：正文 >= 4.5:1；大字与图形 >= 3:1
 
@@ -27,8 +28,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 STYLE_CSS = REPO_ROOT / "static" / "style.css"
 STATIC_ROOT = REPO_ROOT / "static"
 
-HEX_BUDGET = 582
-RGBA_BUDGET = 118
+# 硬顶，不是目标值。P1 实测 hex 581 / rgba 118，仍保留约 17% / 21% 余量；
+# 余量只给 P2 组件族与 P3 边界收口里确实无法 token 化的单次用色，见
+# docs/agents/visual-regression.md §3.2。达到 90% 时告警但不阻断。
+HEX_BUDGET = 700
+RGBA_BUDGET = 150
+NEAR_LIMIT_RATIO = 0.90
 INFINITE_BUDGET = 7
 
 _COMMENT_RE = re.compile(r"/\*.*?\*/", re.S)
@@ -76,6 +81,17 @@ class GateResult:
     budget: Any
     unit: str = ""
     detail: str = ""
+    warning: str = ""
+
+
+def literal_gate_warning(actual: int, budget: int) -> str:
+    """字面量逼近上限时返回提示；未达阈值返回空串（告警不阻断）。"""
+    if budget <= 0 or actual < budget * NEAR_LIMIT_RATIO:
+        return ""
+    return (
+        f"{actual}/{budget}（{actual / budget:.0%}）已达逼近阈值 "
+        f"{NEAR_LIMIT_RATIO:.0%}：新增字面量应优先改成 token"
+    )
 
 
 def strip_comments(text: str) -> str:
@@ -246,21 +262,25 @@ def evaluate(css_path: Path = STYLE_CSS, static_root: Path = STATIC_ROOT) -> dic
         item for item in contrast if item["advisory"] and item["role"] != "decorative"
     ]
     mustard_text_usage = find_mustard_text_usage(css)
+    hex_actual = count_hex_outside_root(css)
+    rgba_actual = len(unique_rgba_values(css))
 
     gates = [
         GateResult(
             name="hex literals outside :root",
-            ok=count_hex_outside_root(css) <= HEX_BUDGET,
-            actual=count_hex_outside_root(css),
+            ok=hex_actual <= HEX_BUDGET,
+            actual=hex_actual,
             budget=HEX_BUDGET,
             unit="occurrences",
+            warning=literal_gate_warning(hex_actual, HEX_BUDGET),
         ),
         GateResult(
             name="unique rgba literals",
-            ok=len(unique_rgba_values(css)) <= RGBA_BUDGET,
-            actual=len(unique_rgba_values(css)),
+            ok=rgba_actual <= RGBA_BUDGET,
+            actual=rgba_actual,
             budget=RGBA_BUDGET,
             unit="unique values",
+            warning=literal_gate_warning(rgba_actual, RGBA_BUDGET),
         ),
         GateResult(
             name="infinite animations",
@@ -305,6 +325,8 @@ def _print_report(report: dict[str, Any]) -> None:
     for gate in report["gates"]:
         status = "PASS" if gate["ok"] else "FAIL"
         print(f"[{status}] {gate['name']}: {gate['actual']} (预算 {gate['budget']})")
+        if gate.get("warning"):
+            print(f"       [WARN] {gate['warning']}")
         if gate.get("detail"):
             print(f"       {gate['detail']}")
     print("对比度（纳入闸门）：")

@@ -97,7 +97,8 @@ python tools/visual_gates.py --json   # 机器读
 
 | 闸 | 口径 | 预算 | P1 实测（2026-11-08, origin/master `0ec6dfd`） |
 | --- | --- | --- | --- |
-| 颜色字面量 | `static/style.css` 中 `:root` 以外的 hex 出现次数 + rgba/rgb 唯一值 | hex ≤ 582 / rgba ≤ 118 | 581 / 118 |
+| 颜色字面量 | `static/style.css` 中 `:root` 以外的 hex 出现次数 + rgba/rgb 唯一值 | hex ≤ 700 / rgba ≤ 150 | 581 / 118 |
+| 逼近告警 | 任一字面量达到预算的 90%（hex 630 / rgba 135）时打印 `[WARN]`，不阻断 | 90% | 未触发（hex 83.0% / rgba 78.7%） |
 | 对比度 | 语义 token 对，正文 4.5:1，大字与图形 3:1 | 见下 | 最低 4.63 |
 | 循环动画 | `static/**/*.css` 中 `infinite` 声明数 | == 7 | 7 |
 | mustard 用途 | 裸 `--mustard` 是否出现在文字色声明 | 0 | 0 |
@@ -163,6 +164,29 @@ python tools/visual_gates.py --json   # 机器读
 - 已知非确定截图（german / encounter / drawer / reader@1280）在两份 P0 基线之间同样会变，属于存量噪声；这些界面的差异全部落在噪声区内，不与本轮颜色迁移冲突。
 - computed-style 只更新 3 条：`mobile-nav-active.border-top-color`、`stat-ring-coral.border-top-color`、`stat-ring-coral.color`，均为 coral token 的有意换色；其余 12 控件 20 属性全部不变，说明布局与结构未动。
 
+
+## 3.2 字面量上限：为什么是 700 / 150
+
+**上限是硬顶，不是目标值。** 当前实测仍是 **hex 581、rgba 118**（2026-11-08，`origin/master` `0ec6dfd`），距离硬顶分别还有 119 / 32 的余量，占用约 83.0% / 78.7%。本轮调整闸门只是把「只剩 1 格」的旧预算换成可容纳后续工作的硬顶，**没有把任何现有规则体字面量转成 token**——那是后续组件族迁移的独立工作。
+
+余量按即将到来的工作面预分，不是开放额度：
+
+| 用途 | hex | rgba | 说明 |
+| --- | ---: | ---: | --- |
+| P2 组件族（按钮 / 导航 / 卡片牌堆 / 抽屉 / 播放器 / 模态） | ≤ 48 | ≤ 14 | 每族 ≤8 个单次硬投影、遮罩、渐变端点；能复用 token 的仍走 token |
+| P3 边界收口（workbench iframe / A1 / 考试 / PWA 主题色） | ≤ 24 | ≤ 8 | iframe 不继承父 `:root`，少量局部值需就地声明 |
+| T3–T9 动效与按压（hover / active 阴影、叠加色） | ≤ 12 | ≤ 6 | 计划内一次性反馈，不改布局 |
+| 并行 PR 合并与一次性修复机动 | ≤ 35 | ≤ 4 | 只用于真实合并冲突，不作为新增功能的常规来源 |
+| **合计余量** | **119** | **32** | 与 700 / 150 的差值一致 |
+
+**逼近告警**：任一项达到硬顶的 **90%**（hex 630 / rgba 135）时，`visual_gates.py` 会在该行下方打印：
+
+```text
+[PASS] hex literals outside :root: 630 (预算 700)
+       [WARN] 630/700（90%）已达逼近阈值 90%：新增字面量应优先改成 token
+```
+
+告警**不阻断**闸门（`ok` 仍为 `true`），但测试 `test_literal_caps_are_hard_ceilings_with_headroom` 要求实测低于该阈值。选 90% 而不是 95%，是为了在还来得及改 token 时给出一轮完整 PR 的提前量；等到 95% 才提示，剩余空间已不够一次组件族改动。
 
 ## 4. 一次失败怎么判
 
