@@ -588,3 +588,7 @@ Status: PR_OPEN —— 组件族 P2（阅读器 + 词卡抽屉），分支 feat/
 ### 2026-11-08 12:45 | deepseek-v4.1-flash__trae | PITFALL
 Caps: filesystem-read, filesystem-write, shell-exec
 tok.sel 选中样式被静默覆盖：05-cards-player.css 的 .tok.reading-active 同特异性且位置更后、同为 !important，压过 03 片 .tok.sel；且 #reader-content .tok 的 2px 圆角覆盖 .tok.sel 的 3px。解法：选择器提升为 #reader-content .tok.sel。另：CDP 探针须在 sel 出现后等 ≥260ms 再读 computed style，否则命中 120ms 过渡首帧得到透明背景。
+
+### 2026-11-08 12:52 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+上条 WORK_END 已落地：commit 3517201，PR #298（base feat/material-p3，未合并）；#296 合入后改基 master 即可。
