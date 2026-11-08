@@ -883,3 +883,17 @@ Caps: filesystem-read, filesystem-write, shell-exec, android-build, emulator-run
 - 验证：pytest 全量 2897 passed/4 skipped/1 xfailed；ruff、mypy --strict delector tools、mypy tests 通过；干净重建后 assembleEmulatorDebug/assembleDeviceDebug、lintDeviceDebug、testDeviceDebugUnitTest 全绿（增量重建会让 APK local header 出现对齐空隙，contiguity 测试需 clean build，属既存构建行为）。
 - 模拟器（API37 emulator-5554）同 versionCode 52101 闭环：仅改 style.css --paper（#faf8f5→#faf8f4）→ sync → 重建 → 覆盖安装 → marker 52101:78c95b6c885b、health/CDP 四方指纹一致、computed --paper=#faf8f4；回退后 marker 回 52101:cc1efb3c37f8、computed 回 #faf8f5；两次均无 static.version.error，delector.db/progress.db 未动。反向 --check（改 CSS 不 sync）exit 2 报「静态资源已过期」。
 - 说明：tokens.css 的 --paper 被 style.css 同名 token 覆盖，故视觉闭环用 style.css 临时改动取证后已还原，最终 diff 未包含这两个文件。
+
+### 2026-11-08 04:10 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, emulator-run, github-pr
+P4 桌宠「自由移动」PR（feat/companion-p4-free-move，基线 origin/master 240d38f，不合并）。
+- 开关默认关，位于抽屉「伴学」区顶部 #drawer-companion-section（原生 checkbox + role=switch + aria-describedby；「已开启/已关闭」文字同步，不靠颜色）。
+- 约束分工沿用 P3：拖拽中不约束（collectNoParkRects 仅用于提示态），pointerup 调既有 settleIfNeeded()，settle-end 后再 savePosition()；未另写判定。
+- 位置记忆：delector_companion_roam / delector_companion_pos；视口差 ≤32px 用布局 left/top 精确回位，跨断点才用 rx/ry；尺寸只用 offsetWidth/offsetHeight + transform-origin/scale 换算。
+- 视图切换 onNavIntent 先 restoreSavedPosition 再 scheduleRefresh(280)；抽屉开→关由既有 MutationObserver 识别：开启恢复记忆位、关闭清 inline 回 CSS 角落，延迟 380ms 避开 0.36s 滑出动画。
+- 动效：未新增 infinite（仍 7 处）；prefers-reduced-motion 下 .companion transition:none。
+- 桌面 1280×800（CDP 真实鼠标拖拽）：角落 {1169,704}→开抽屉 {196.95,621.25}→开启→拖过 nav mid {596.48,29.03}（is-over-no-park=true）→落 (1169,420) 即 {left:1132.98,top:384.63}；saved {left:1133,top:384.63,rx:.9497,ry:.5283,vw:1265,vh:800,scale:1}；reload 恢复 {1133,384.625}；writer {1133,250.375}、exam/cards/home {1133,384.625}；关闭→{1169,704}，重开→inline {1133,384.48}；松手压 nav→{596.5,106}；1280→393 夹回 {329.64,675.09,63.36}；reduced-motion 0s。AX role=switch name=自由移动，空格可切换。
+- 模拟器 API37（411×813 CSS，dpr 2.625，adb 真触摸）：tap 桌宠开抽屉→tap 开关 (525,1244) 得 checked/已开启；adb swipe 104,597→656,1370 → saved {left:209.65,top:379.63,rx:.6271,ry:.5177,vw:411,vh:813,scale:.88}；reload 精确回位后被可点击 clause-node 让位到 top 296.49（P3 松手避让，非漂移）；换非交互空区重拖 adb swipe 656,1152→871,1664 → {left:291.67,top:491.81}/visual {300.31,500.45}，reload 后 t0–t1250 稳定；备考⇄文库位置不变。
+- PITFALL：新分区误用未定义 token var(--hairline)，被 test_no_undefined_css_variables_in_writer_surfaces 抓住；改用 var(--line-soft)。
+- 门禁：check_index_html_sync / check_frontend_layers / check_layer_invariants / check_companion_contract / check_frontend_api_contract / check_silent_degradation 全 exit 0；3 个 companion node 探针 PASS；全量 pytest 2909 passed / 9 skipped / 1 xfailed（exit 0）。
+- 未验证：真机（仅模拟器）；iOS Safari 的 visualViewport 差异。

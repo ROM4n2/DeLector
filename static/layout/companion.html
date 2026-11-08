@@ -8,20 +8,20 @@
       <div
         id="companion-char"
         class="companion-char"
-        onclick="window.Companion.onClick()"
+        onclick="window.Companion.onClick(event)"
       ></div>
       <button
         id="companion-avatar"
         class="companion-avatar"
         aria-label="伴读角色设置与对话"
-        onclick="window.Companion.onClick()"
+        onclick="window.Companion.onClick(event)"
       >
         <span id="companion-avatar-icon" aria-hidden="true"></span>
       </button>
       <div id="companion-panel" class="companion-panel hidden">
         <div class="panel-head">
           <span class="panel-title">伴读角色设置</span>
-          <button class="panel-close" aria-label="关闭伴读设置" onclick="window.Companion.onClick()">
+          <button class="panel-close" aria-label="关闭伴读设置" onclick="window.Companion.togglePanel()">
             <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-x"></use></svg>
           </button>
         </div>

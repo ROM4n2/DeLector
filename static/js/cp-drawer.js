@@ -751,6 +751,8 @@ export function initCompanionDrawer() {
   // 初始化全局伴学浮动胶囊拖拽/点击行为
   // P3：拖拽是最高优先级状态，必须能从 thinking / speaking / error 抢占。
   initFloatingCapsule({
+    // P4：自由移动开关由 Companion 持久化；控制器只负责按开关状态恢复/记忆位置。
+    freeMove: window.Companion?.freeMove === true,
     onDragStart: () => window.Companion?.setDragging?.(true),
     onDragEnd: () => window.Companion?.setDragging?.(false)
   });

@@ -15,6 +15,39 @@ import {
   EDITABLE_SELECTOR
 } from './companion-obstacles.js';
 
+// P4 自由移动：开关与位置记忆的持久化键（位置数据带版本，便于后续迁移）。
+const FREE_MOVE_KEY = 'delector_companion_roam';
+const POSITION_KEY = 'delector_companion_pos';
+const POSITION_VERSION = 1;
+
+function readFreeMoveSetting() {
+  try {
+    return window.localStorage.getItem(FREE_MOVE_KEY) === 'on';
+  } catch (_) {
+    return false;
+  }
+}
+
+function readSavedPosition() {
+  try {
+    const raw = window.localStorage.getItem(POSITION_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || data.v !== POSITION_VERSION) return null;
+    return data;
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeSavedPosition(data) {
+  try {
+    window.localStorage.setItem(POSITION_KEY, JSON.stringify(data));
+  } catch (_) {
+    // 隐私模式 / 配额满：位置记忆静默失效，不影响拖拽本身。
+  }
+}
+
 /**
  * 初始化全局伴学小萌宠浮动胶囊的拖拽、点击与重排自适应逻辑
  * @param {Object} [options]
@@ -55,6 +88,9 @@ export function initFloatingCapsule(options) {
   let dragObstacles = null;
   let refreshTimer = 0;
   let settleTimer = 0;
+  // P4：自由移动默认关闭；关闭时只保留点击，不启动拖拽。
+  let freeMove = typeof opts.freeMove === 'boolean' ? opts.freeMove : readFreeMoveSetting();
+  let persistAfterSettle = false;
 
   /** 视觉视口：复用 companion-obstacles 的统一实现（含键盘态兜底） */
   function getViewport() {
@@ -196,6 +232,140 @@ export function initFloatingCapsule(options) {
     else notifyBubble();
   }
 
+  /**
+   * 记住当前落点：以视觉视口内的相对比例为主，布局坐标做兜底。
+   * 尺寸一律取 offsetWidth/offsetHeight（布局尺寸），transform 只参与视觉边界换算，
+   * 不在这里用 getBoundingClientRect() 量视觉尺寸。
+   */
+  function savePosition() {
+    if (!freeMove) return;
+    if (!capsuleEl.offsetWidth || !capsuleEl.getClientRects().length) return;
+
+    const width = capsuleEl.offsetWidth || 60;
+    const height = capsuleEl.offsetHeight || 60;
+    const scale = getScale();
+    const vp = getViewport();
+    const layout = getLayoutPosition();
+    const visual = visualRectFor(layout.left, layout.top);
+    const spanX = Math.max(1, vp.width - width * scale);
+    const spanY = Math.max(1, vp.height - height * scale);
+
+    writeSavedPosition({
+      v: POSITION_VERSION,
+      left: Math.round(layout.left * 100) / 100,
+      top: Math.round(layout.top * 100) / 100,
+      rx: Math.round(((visual.left - vp.left) / spanX) * 10000) / 10000,
+      ry: Math.round(((visual.top - vp.top) / spanY) * 10000) / 10000,
+      vw: Math.round(vp.width),
+      vh: Math.round(vp.height),
+      scale: Math.round(scale * 1000) / 1000,
+      savedAt: Date.now()
+    });
+  }
+
+  /** 直接落位（无过渡）：刷新恢复与关闭自由移动时使用 */
+  function applyPositionNow(pos) {
+    if (settleTimer) {
+      clearTimeout(settleTimer);
+      settleTimer = 0;
+    }
+    capsuleEl.classList.remove('is-settling');
+    capsuleEl.style.left = pos.left + 'px';
+    capsuleEl.style.top = pos.top + 'px';
+    capsuleEl.style.right = 'auto';
+    capsuleEl.style.bottom = 'auto';
+    notifyBubble();
+  }
+
+  /** 从 localStorage 恢复上次落点，并按当前视觉视口夹回可见区 */
+  function restoreSavedPosition() {
+    const saved = readSavedPosition();
+    if (!saved) return false;
+
+    const width = capsuleEl.offsetWidth || 60;
+    const height = capsuleEl.offsetHeight || 60;
+    const scale = getScale();
+    const origin = getTransformOrigin();
+    const vp = getViewport();
+
+    let visualLeft = 0;
+    let visualTop = 0;
+    // 视口基本没变（含滚动条出现/消失的十几像素差异）时用布局坐标精确回位；
+    // 真正跨断点/跨设备时才用归一化比例，避免滚动条宽度差导致十几像素漂移。
+    const sameViewport =
+      Number.isFinite(saved.left) && Number.isFinite(saved.top) &&
+      Number.isFinite(saved.vw) && Number.isFinite(saved.vh) &&
+      Math.abs(vp.width - saved.vw) <= 32 && Math.abs(vp.height - saved.vh) <= 32;
+    if (sameViewport) {
+      const fallback = visualRectFor(saved.left, saved.top);
+      visualLeft = fallback.left;
+      visualTop = fallback.top;
+    } else if (Number.isFinite(saved.rx) && Number.isFinite(saved.ry)) {
+      const spanX = Math.max(1, vp.width - width * scale);
+      const spanY = Math.max(1, vp.height - height * scale);
+      visualLeft = vp.left + saved.rx * spanX;
+      visualTop = vp.top + saved.ry * spanY;
+    } else if (Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
+      const fallback = visualRectFor(saved.left, saved.top);
+      visualLeft = fallback.left;
+      visualTop = fallback.top;
+    } else {
+      return false;
+    }
+
+    // 视觉 -> 布局：视觉 = 布局 + origin * (1 - scale)
+    const clamped = clampPosition(
+      visualLeft - origin.x * (1 - scale),
+      visualTop - origin.y * (1 - scale)
+    );
+    applyPositionNow(clamped);
+    return true;
+  }
+
+  /** 松手后记忆落点；若还要滑出禁停区，等 settle-end 再写，避免记住临时压住的坐标 */
+  function schedulePersistPosition() {
+    if (!freeMove) return;
+    if (capsuleEl.classList.contains('is-settling')) {
+      persistAfterSettle = true;
+      return;
+    }
+    persistAfterSettle = false;
+    savePosition();
+  }
+
+  function onSettleEndPersist() {
+    if (!freeMove || !persistAfterSettle) return;
+    persistAfterSettle = false;
+    savePosition();
+  }
+
+  /** P4 开关：开启恢复记忆位置；关闭回到 CSS 默认角落，但保留记忆供下次恢复 */
+  function setFreeMove(enabled) {
+    const next = Boolean(enabled);
+    freeMove = next;
+    capsuleEl.classList.toggle('is-free-move', next);
+    capsuleEl.setAttribute('data-free-move', next ? 'on' : 'off');
+
+    if (next) {
+      restoreSavedPosition();
+      scheduleRefresh(0);
+      return;
+    }
+
+    persistAfterSettle = false;
+    if (settleTimer) {
+      clearTimeout(settleTimer);
+      settleTimer = 0;
+    }
+    capsuleEl.classList.remove('is-settling', 'is-over-no-park', 'is-dragging');
+    capsuleEl.style.left = '';
+    capsuleEl.style.top = '';
+    capsuleEl.style.right = '';
+    capsuleEl.style.bottom = '';
+    notifyBubble();
+    scheduleRefresh(0);
+  }
+
   /** 低频事件合并：键盘动画 / 视图切换会连续触发，统一 120ms 后再求解 */
   function scheduleRefresh(delay) {
     if (refreshTimer) clearTimeout(refreshTimer);
@@ -222,6 +392,10 @@ export function initFloatingCapsule(options) {
     const target = e.target;
     if (!target || typeof target.closest !== 'function') return;
     if (target.closest('.dock-item, .mobile-nav-btn, .nav-tab, #mobile-bottom-nav, #nav')) {
+      // P4：视图切换先回到记忆位置，再按新视图布局让位（沿用既有 scheduleRefresh）。
+      if (freeMove) {
+        restoreSavedPosition();
+      }
       scheduleRefresh(280);
     }
   }
@@ -259,6 +433,9 @@ export function initFloatingCapsule(options) {
     ) {
       return;
     }
+
+    // P4：自由移动未开启时只保留点击（开抽屉 / 面板），不启动拖拽。
+    if (!freeMove) return;
 
     isPointerDown = true;
     isDragging = false;
@@ -374,6 +551,8 @@ export function initFloatingCapsule(options) {
 
       // 落点避让：压住禁停区则滑到最近安全位（不硬禁止，也不回弹到原位）
       settleIfNeeded();
+      // P4：落点稳定后记住位置（跨刷新 / 跨视图恢复）。
+      schedulePersistPosition();
 
       // 防误触：移动端手势释放后会有最高 300ms 延迟合成 click 事件，统一屏蔽
       justDragged = true;
@@ -420,11 +599,34 @@ export function initFloatingCapsule(options) {
   document.addEventListener('focusin', onFocusChange, true);
   document.addEventListener('focusout', onFocusChange, true);
   document.addEventListener('click', onNavIntent, true);
+  document.addEventListener('companion:settle-end', onSettleEndPersist);
 
   // 写作页 sheet / 底部 dock / 抽屉的开合会改变可停放区域，监听 class 变化即可
   let observer = null;
   if (typeof MutationObserver === 'function') {
-    observer = new MutationObserver(() => scheduleRefresh(120));
+    let drawerWasOpen = Boolean(document.getElementById('drawer')?.classList.contains('open'));
+    observer = new MutationObserver(() => {
+      const drawerEl = document.getElementById('drawer');
+      const drawerOpenNow = Boolean(drawerEl && drawerEl.classList.contains('open'));
+      if (drawerWasOpen && !drawerOpenNow) {
+        // P4：抽屉只是临时让位来源，关闭后回到记忆位置（开启）或默认角落（关闭）。
+        // 等抽屉滑出动画结束再求解，避免把过渡中的残影当成禁停区。
+        if (freeMove) {
+          restoreSavedPosition();
+        } else {
+          capsuleEl.style.left = '';
+          capsuleEl.style.top = '';
+          capsuleEl.style.right = '';
+          capsuleEl.style.bottom = '';
+          notifyBubble();
+        }
+        drawerWasOpen = drawerOpenNow;
+        scheduleRefresh(380);
+        return;
+      }
+      drawerWasOpen = drawerOpenNow;
+      scheduleRefresh(120);
+    });
     ['writer-panel', 'writer-mobile-panel-sheet', 'mobile-bottom-nav', 'drawer'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) {
@@ -434,6 +636,13 @@ export function initFloatingCapsule(options) {
         });
       }
     });
+  }
+
+  // P4：恢复自由移动状态；开启时先回到记忆位置，再做首帧避让校准。
+  capsuleEl.classList.toggle('is-free-move', freeMove);
+  capsuleEl.setAttribute('data-free-move', freeMove ? 'on' : 'off');
+  if (freeMove) {
+    restoreSavedPosition();
   }
 
   // 首帧后校准一次（默认右下角可能正好压在 dock 上）
@@ -453,9 +662,11 @@ export function initFloatingCapsule(options) {
     document.removeEventListener('focusin', onFocusChange, true);
     document.removeEventListener('focusout', onFocusChange, true);
     document.removeEventListener('click', onNavIntent, true);
+    document.removeEventListener('companion:settle-end', onSettleEndPersist);
     if (observer) observer.disconnect();
     if (refreshTimer) clearTimeout(refreshTimer);
     if (settleTimer) clearTimeout(settleTimer);
+    persistAfterSettle = false;
     delete capsuleEl._floatingCapsuleController;
   }
 
@@ -467,6 +678,11 @@ export function initFloatingCapsule(options) {
     refresh: settleIfNeeded,
     /** 供气泡求解器做联合让位：移动到指定视觉坐标，不再反向通知气泡 */
     moveToVisual: (pos) => applyVisualPosition(pos, false),
+    /** P4 自由移动开关：开启恢复记忆位置，关闭回到默认角落 */
+    setFreeMove,
+    isFreeMove: () => freeMove,
+    savePosition,
+    restoreSavedPosition,
     destroy
   };
 

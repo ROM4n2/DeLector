@@ -13489,3 +13489,72 @@ body.drawer-open .companion {
     transform: rotate(-2deg);
   }
 }
+
+/* ── 伴读桌宠：自由移动（P4，2026-11-08） ─────────────────────────────
+   本分区只追加在 style.css 末尾，不改写上方既有规则。
+   开关位于抽屉「伴学」区顶部（桌宠自己的设置区），不进入主设置弹层。 */
+.companion-roam-row {
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.companion-roam-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: var(--ink, #1a1a1a);
+}
+
+.companion-roam-input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--ink, #1a1a1a);
+  cursor: pointer;
+}
+
+.companion-roam-label {
+  font-weight: 600;
+}
+
+.companion-roam-state {
+  margin-left: auto;
+  font-family: var(--mono, "JetBrains Mono", monospace);
+  font-size: 0.6875rem;
+  color: var(--pencil, #666);
+}
+
+.companion-roam-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: var(--pencil, #666);
+}
+
+.companion-roam-input:focus-visible {
+  outline: 2px solid var(--ink, #1a1a1a);
+  outline-offset: 2px;
+}
+
+/* reduced-motion：恢复 / 回角落 / 让位都直接落位，不走位置过渡。 */
+@media (prefers-reduced-motion: reduce) {
+  .companion,
+  .companion.is-settling {
+    transition: none !important;
+  }
+}
+
+/* 自由移动后桌宠贴近视口边缘时，设置面板翻到角色下方 / 右侧，保持开关可达。 */
+.companion.panel-below .companion-panel {
+  bottom: auto;
+  top: calc(100% + 12px);
+}
+
+.companion.panel-align-left .companion-panel {
+  right: auto;
+  left: 0;
+}
