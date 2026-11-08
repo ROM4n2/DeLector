@@ -805,3 +805,13 @@ Caps: filesystem-read, filesystem-write, shell-exec
 版本面：version.py 5.22.0 / sw.js delector-static-v5.22.0 / build.gradle 5.22.0 + 52200 / header.html 并重建 index.html。
 改既有断言：tests/test_app_version_source.py 两条版本字面量（5.21.1→5.22.0、52101→52200），依据测试自身文档「写死字面量是为了 bump 时变红、逼人同步」；仅更新期望值，未放松断言语义。
 环境坑：仓库根存在 gitignored 的 delector.db/progress.db 残留，会让 test_nlp_prewarm 的探针（DELECTOR_DATA_DIR 指向 tmp）触发迁移闸；干净全量跑法为临时移开残留、跑完自动还原。
+
+### 2026-11-08 15:50 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, android-build, emulator-run, git-push, gh-release
+v5.22.0 已发布：tag v5.22.0 → 4faaf7a（merge 2158abe，PR #308）→ https://github.com/ROM4n2/DeLector/releases/tag/v5.22.0。
+- 版本面：version.py 5.22.0 / sw.js delector-static-v5.22.0 / build.gradle 5.22.0+52200 / header.html 并重建 index.html；README Release/Tests 徽章与下载表同步；FEATURES/SECURITY 口径同步。
+- README：emoji 扫描 0 命中；版本历史只留 v5.22.0/v5.21.1/v5.21.0，移出的 9 个版本核对在 CHANGELOG；CHANGELOG 13 个版本头严格降序无重复。
+- 验证：全量 pytest 2962 passed / 4 skipped / 1 xfailed（2967 collected）；ruff / mypy x3 / gofmt / go vet / go test -race 全绿；九道机械闸 exit 0；CI 42495775057 13 success + 1 skipped（Master Direct-Push Scope Gate），无 failure/cancelled；release run 42496154743 5/5 success。
+- Android：device APK arm64-v8a versionCode 52200；模拟器覆盖安装成功，org.delector.app.emulator 52200/5.22.0。
+- 过程偏差：master 直推白名单不含 header.html/tests/FEATURES/SECURITY，改走 release/v5.22.0 + PR #308 合并；直接改了两条版本字面量守卫（测试自述 bump 时同步）。
+- 未覆盖：arm64 真机、低端机 OOM、iOS 键盘态（发布说明写明的已知边界，不作发版前置）；重复卡写侧缺陷未修。
