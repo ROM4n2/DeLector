@@ -675,3 +675,23 @@ Status: PR_OPEN —— P2 组件族第四轮（设置 settings），分支 feat/
 - 矩阵（同源数据，清空音频缓存后重跑；36/36 × before3/after3）：settings 393 23.04% / 360 23.54% / 1280 7.97% 为唯一信号；cards 三档 0（首次 0.4% 系缓存 0→0.02MB 数据漂移，清缓存后归零）；drawer-393 7.9% 只在 before 首跑出现、before2 与 after 均为 0，判为首次运行态；drawer-1280 0.219% 为猫头鹰眨眼动画；german 三档为随机格言噪声。
 - computed 基线：仅 settings-input.height 43→44px（命中区提升），已 update 并复核 compare 12/12 一致；其余 11 控件 0 漂移。
 - 校验：build_css + check_css_sync PASS；visual_gates 519/108/7/4.63 全 PASS；check_frontend_api_contract PASS；check_silent_degradation 0 未豁免。
+
+### 2026-11-08 18:26 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+P2 组件族换肤第五轮（最后一族）：写作 writer。worktree D:\Code\DeLector-visual-p4，分支 feat/writer-skin，基线 origin/master `82e2650`（#301 merge；master push run 42469828001 全 success）。
+- 范围：08 writer 段 1037+（容器/头部/标题/动作区/布局/左栏/侧栏/卡片/输入/IDE/inlay/句导航/工具栏/诊断框/句块/错误下划线/CEFR 与详情/AI 笔记/作文历史/响应式）+ 09 触摸命中块（仅 `.writer-actions-top .btn::after`）。
+- 唯一布局改动：动作区两行命中区 42→44px、行距 6→8px 消除重叠；其余不重排。
+- 不做：08 ≤1036 设置段、09 设置规则、卡盒/闪卡/阅读器/词卡/备考、android/、visual_gates 阈值、全面 IA 重排。
+- 审计：writer.js 14 个 classList 切换类名，CSS 源全集零缺失（无 C 桶）。
+
+### 2026-11-08 18:31 | deepseek-v4.1-flash__trae | WORK_END
+Status: PR_OPEN —— P2 组件族第五轮（写作 writer，最后一族），分支 feat/writer-skin。
+- 命中区：393 第一行 42→44px（4 按钮全部），行2 命中顶边 220.06→224.06，行1 底边 226.06→224.06，重叠 6→0（相切）；360 同样 42→44，2 对重叠→0；1280 单行无触控伪元素，0 变化。
+- 布局：行距 6→8px，动作区 78→80px，header 171.06→173.06，编辑区 y 528.44→530.44，首屏可见 160 不变，横向溢出 0。
+- 字面量：hex 519→505（−14/配额13）、唯一 rgba 108→99（−9/配额5）；infinite 7；闸内最低对比 4.63；新增组合 5.05–8.68 全部 ≥4.5。
+- 状态非颜色：pill 实线✓/虚线!；句导航徽章方角!/圆角✓；问题徽章实线/虚线；作文正误条方角虚线!/圆角实线✓；输入框与 IDE 聚焦 2px outline；四类错误下划线四种线型。
+- 矩阵（同源三份数据、清音频缓存、36/36 × before/after/after2）：信号仅 writer-393 7.23% / 360 7.83%；设置三档与 cards/reader/quiz/exam 全 0；drawer-393 4.362%、home、german、drawer-1280、cards 音频体积 0→0.02→0.03MB 均复现为噪声。
+- computed 基线 12/12 一致，0 项更新（控件集不含 writer 动作区，改用定向探针）。
+- 校验：build_css + check_css_sync PASS；visual_gates 505/99/7/4.63 全 PASS；reduced-motion 下新元素 1e-05s、无动画。
+- PR #302 已开（base master，不自动合并）；PR CI 13 pass / 0 failure / 0 cancelled / 1 skipped（Master Direct-Push Scope Gate 按设计在 PR 上 skipping）。
+- 收尾：8781–8785 服务已停；临时 worktree D:\Code\DeLector-visual-before 已移除。

@@ -3451,6 +3451,14 @@
     transform: translate(-50%, -50%);
   }
 
+  /* writer 头部操作区两行按钮：48px 命中区 + 6px 行距会互相覆盖 6px，
+     第一行实测只剩 42px。这里收到 44px，配合 08 里 8px 行距，
+     两行命中矩形相切不重叠，第一行有效命中回到 44px。 */
+  .writer-actions-top .btn::after {
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+  }
+
   #drawer .drawer-tab-btn {
     min-height: 44px;
   }
