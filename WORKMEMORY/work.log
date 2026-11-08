@@ -502,3 +502,10 @@ P0 视觉回归基建完成（本地跑通，未接 CI）。
 ### 2026-11-08 10:02 | deepseek-v4.1-flash__trae | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 P0 视觉回归基建已提交并开 PR：commit `05e2c0e`（feat/visual-regression-p0，基线 origin/master a7f1b40），PR #293 https://github.com/ROM4n2/DeLector/pull/293（OPEN，未合并）。worktree `D:\Code\DeLector-visual-p0` 保留供后续 P1 复用。
+
+### 2026-11-08 10:40 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+P1 只动 token 清 5 处对比度欠账（独立 worktree `D:\Code\DeLector-visual-p1`，分支 `feat/token-contrast-p1`，基线 origin/master `0ec6dfd`）。
+- 目标：coral / mustard / muted / ink-faint 四组 token 达标；token 拆值层+语义层（暗色只留插槽）；用 P0 闸与基线证明「颜色变了、结构没变」。
+- 不做：不碰布局/结构/动画；不新增规则体 hex/rgba 字面量；不实现暗色；不跑全量 pytest；不自动合并。
+- 方法：先跑一次改前矩阵留档 → 改 tokens.css 与 01-tokens-base.css 双镜像 + workbench 映射 → build_css → 闸门升级 → 改后矩阵与 computed-style 比对。

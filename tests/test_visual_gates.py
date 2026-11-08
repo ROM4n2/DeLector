@@ -71,6 +71,66 @@ def test_contrast_gate_detects_root_color_regression() -> None:
     assert not changed["ink-on-paper"]["ok"]
 
 
+def test_p1_contrast_debts_are_gated_and_cleared() -> None:
+    """P1 的 5 组欠账必须已移入闸门（非 advisory）且实测达标。"""
+    report = {item["id"]: item for item in visual_gates.evaluate_contrast(_style())}
+    expected = {
+        "muted-on-paper": 4.5,
+        "ink-faint-on-paper": 4.5,
+        "coral-on-paper": 4.5,
+        "white-on-coral": 4.5,
+        "mustard-ink-on-paper": 4.5,
+    }
+    for pair_id, threshold in expected.items():
+        item = report[pair_id]
+        assert not item["advisory"], pair_id
+        assert item["ratio"] >= threshold, (pair_id, item["ratio"])
+
+
+def test_mustard_gate_rejects_text_usage() -> None:
+    css = (
+        ":root{--mustard:#e9b94a}"
+        ".ok{border-left:1px solid var(--mustard)}"
+        ".bad{color:var(--mustard)}"
+        ".ink{color:var(--mustard-ink)}"
+    )
+    violations = visual_gates.find_mustard_text_usage(css)
+    assert violations == ["color: var(--mustard)"]
+
+
+def test_token_mirrors_agree_for_p1_pairs() -> None:
+    """style.css 的 :root 与 workbench 用的 tokens.css 必须给同一组值。"""
+    style_tokens = visual_gates.parse_root_tokens(_style())
+    core = (REPO_ROOT / "static" / "css" / "tokens.css").read_text(encoding="utf-8")
+    core_tokens = visual_gates.parse_root_tokens(core)
+    for name in (
+        "--paper",
+        "--coral",
+        "--mustard",
+        "--mustard-ink",
+        "--muted",
+        "--ink-faint",
+    ):
+        assert visual_gates.resolve_token(name, style_tokens) == visual_gates.resolve_token(
+            name, core_tokens
+        ), name
+
+
+def test_workbench_hard_token_is_text_safe() -> None:
+    """workbench iframe 不继承父 :root，--hard 必须自己解析到文字安全色。"""
+    core = (REPO_ROOT / "static" / "css" / "tokens.css").read_text(encoding="utf-8")
+    workbench = (REPO_ROOT / "static" / "css" / "workbench.css").read_text(encoding="utf-8")
+    tokens = visual_gates.parse_root_tokens(core)
+    tokens.update(visual_gates.parse_root_tokens(workbench))
+    hard = visual_gates.resolve_token("--hard", tokens)
+    soft = visual_gates.resolve_token("--hard-soft", tokens)
+    assert hard == "#825c00"
+    hard_rgb = visual_gates._parse_color(hard)
+    soft_rgb = visual_gates._parse_color(soft)
+    assert hard_rgb is not None and soft_rgb is not None
+    assert visual_gates.contrast_ratio(hard_rgb, soft_rgb) >= 4.5
+
+
 def test_baseline_compare_reports_property_transition(tmp_path: Path) -> None:
     baseline = {
         "controls": {

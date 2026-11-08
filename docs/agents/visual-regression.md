@@ -1,6 +1,6 @@
 # 视觉回归 P0（本地）
 
-> 目标：在**不接 CI、不改样式和页面**的前提下，先让视觉回归在本地稳定可跑、可判红绿。
+> 目标：先让视觉回归在本地稳定可跑、可判红绿。P0 只建工具不改样式；P1 起 token 换色必须用同一套矩阵与基线证明「颜色变了、结构没变」。
 > 产物默认落在 `_artifacts/`（已 gitignore）；入库的只有工具、测试和 `tests/fixtures/visual/computed_style_baseline.json`。
 
 ## 1. 一键跑矩阵
@@ -95,27 +95,74 @@ python tools/visual_gates.py          # 人读
 python tools/visual_gates.py --json   # 机器读
 ```
 
-| 闸 | 口径 | 预算 | P0 实测（2026-11-08, origin/master） |
+| 闸 | 口径 | 预算 | P1 实测（2026-11-08, origin/master `0ec6dfd`） |
 | --- | --- | --- | --- |
 | 颜色字面量 | `static/style.css` 中 `:root` 以外的 hex 出现次数 + rgba/rgb 唯一值 | hex ≤ 582 / rgba ≤ 118 | 581 / 118 |
 | 对比度 | 语义 token 对，正文 4.5:1，大字与图形 3:1 | 见下 | 最低 4.63 |
 | 循环动画 | `static/**/*.css` 中 `infinite` 声明数 | == 7 | 7 |
+| mustard 用途 | 裸 `--mustard` 是否出现在文字色声明 | 0 | 0 |
 
 所有数值都在运行时从 CSS 现算。`--json` 会带出每对颜色的前景/背景解析值与实测比值。
 
-**闸门内的对比度对**（全部通过）：`ink|ink-mute|pencil` on `paper`、`paper` on `ink`、`paper-card` on `accent`、`danger|moss` on `paper`、`accent` on `paper`、`ink` on `mustard`、`paper-card` on `moss`。
+**闸门内的对比度对**（全部通过）：`ink|ink-mute|pencil` on `paper`、`paper` on `ink`、`paper-card` on `accent`、`danger|moss` on `paper`、`accent` on `paper`、`ink` on `mustard`、`paper-card` on `moss`、`muted|ink-faint|coral|mustard-ink` on `paper`、`paper-card` on `coral`。
 
-**已知欠账（P0 只报告不阻断，P1 换皮必须清零）**：
+## 3.1 P1 换色：仅 token，5 处欠账清零
 
-| 对 | 实测 | 要求 |
-| --- | --- | --- |
-| `muted` on `paper` | 3.49 | 4.5（正文） |
-| `ink-faint` on `paper` | 3.43 | 4.5（正文） |
-| `coral` on `paper` | 2.82 | 3.0（图形） |
-| `paper-card` on `coral` | 2.99 | 3.0（大字） |
-| `mustard` on `paper` | 1.72 | 3.0（图形） |
+### 改前 / 改后（现算）
 
-这些是调研报告已登记的设计存量问题；P0 不碰样式，所以放进 advisory 列表持续可见。P1 修完后把它们移进 `CONTRAST_PAIRS` 的闸门段（`advisory=False`）。
+| token 对 | 角色 | 改前 | 改后 | 阈值 |
+| --- | --- | --- | --- | --- |
+| `coral` on `paper` | 正文（原按图形） | 2.82 | **5.26** | ≥4.5 |
+| `paper-card` on `coral` | 正文（原按大字） | 2.99 | **5.58** | ≥4.5 |
+| `muted` on `paper` | 正文 | 3.49 | **4.76** | ≥4.5 |
+| `ink-faint` on `paper` | 正文 | 3.43 | **4.98** | ≥4.5 |
+| `mustard` on `paper` | 仅装饰 | 1.72 | 1.72 | 不判定 |
+| `mustard-ink` on `paper` | 正文（新 token） | — | **5.69** | ≥4.5 |
+
+### coral：单值重选，不拆 fill/text
+
+所有 coral 底色上都压白色小字（0.625–0.76rem：更新 chip hover、feed 等级标签、feed 摄入按钮、遇见区两个新增按钮），所以底色本身必须对白色 ≥4.5。若拆成「亮底色 + 白字」，要达标仍需改规则体里的文字颜色，超出「只动 token」范围；而按 4.5 反推，文字向与底色向会收敛到同一亮度，拆出的两个值几乎相同，不增加能力。因此统一取 `#b44322`——它本就是 24 处 coral 旧回退值，实测 5.26 / 5.58 双向过线。代价是装饰性 coral 点线一起变深，对比度反而更稳。
+
+### mustard：仅装饰，禁止承载文字
+
+`--mustard: #e9b94a` 保持 1.72，只允许出现在边框、描边、阴影等非文本处；任何文字色 MUST 用新 token `--mustard-ink: #825c00`（5.69）。workbench 的 `--hard` 同时承担文字色，已改为 `var(--mustard-ink)`。机械闸 `mustard decorative-only` 会扫描 `static/style.css`，裸 `--mustard` 一旦出现在 `color / caret-color / text-decoration-color / text-emphasis-color` 声明即红。
+
+### token 分层（暗色只留插槽）
+
+改动只涉及 4 组 token，没有重写整张色板：
+
+```css
+/* 值层：只放色值，未来暗色主题只替换这一层 */
+--color-coral-700: #b44322;
+--color-mustard-400: #e9b94a;
+--color-mustard-700: #825c00;
+--color-gray-500: #756e61;
+--color-gray-450: #726b5e;
+
+/* 语义层：规则体只认这一层 */
+--color-accent-coral: var(--color-coral-700);
+--color-accent-mustard: var(--color-mustard-400);
+--color-accent-mustard-ink: var(--color-mustard-700);
+--text-muted: var(--color-gray-500);
+--text-faint: var(--color-gray-450);
+
+/* 兼容层：既有规则体不动 */
+--coral: var(--color-accent-coral);
+--mustard: var(--color-accent-mustard);
+--mustard-ink: var(--color-accent-mustard-ink);
+--muted: var(--text-muted);
+--ink-faint: var(--text-faint);
+```
+
+**双份镜像**：主应用只加载 `static/style.css`（`:root` 在 `src/css/01-tokens-base.css`），workbench iframe 只加载 `static/css/tokens.css`，iframe 不继承父文档 `:root`。两处 MUST 同步；`test_token_mirrors_agree_for_p1_pairs` 会逐 token 比对解析值。暗色插槽沿用 workbench 既有 `[data-theme="dark"]`，本轮只保证 `--hard` 在暗色下仍指向文字安全色，不实现暗色。
+
+### P1 验证记录
+
+- 矩阵：改前 / 改后各 36/36 张，失败 0、控件缺失 0；改后再跑一遍作为噪声基线。
+- 截图差异只出现两类颜色迁移：`rgb(237,111,92) → rgb(180,67,34)`（coral）与 `rgb(140,132,119) → rgb(117,110,97)`、`rgb(139,134,118) → rgb(114,107,94)`（muted / ink-faint），其余为文字抗锯齿混合色。
+- 已知非确定截图（german / encounter / drawer / reader@1280）在两份 P0 基线之间同样会变，属于存量噪声；这些界面的差异全部落在噪声区内，不与本轮颜色迁移冲突。
+- computed-style 只更新 3 条：`mobile-nav-active.border-top-color`、`stat-ring-coral.border-top-color`、`stat-ring-coral.color`，均为 coral token 的有意换色；其余 12 控件 20 属性全部不变，说明布局与结构未动。
+
 
 ## 4. 一次失败怎么判
 
@@ -131,8 +178,9 @@ python tools/visual_gates.py --json   # 机器读
 
 ## 5. 边界
 
-- P0 **不接 CI**：`.github/workflows/ci.yml`、`tools/ci_shards*`、`src/css/` 属于另一条 CSS 拆分线，本工具只读构建后的 `static/style.css`。
-- 暂不做像素级 diff（P1 再做）；当前用「截图留档 + 控件的 computed-style 精确比对」抓回归。
+- 工具只读构建后的 `static/style.css`，不读 `src/css/`；改 token 必须同时改 `src/css/01-tokens-base.css` 与 `static/css/tokens.css` 两处镜像，再跑 `python tools/build_css.py` 与 `python tools/check_css_sync.py`。
+- **不接 CI**：`.github/workflows/ci.yml`、`tools/ci_shards*` 仍由另一条线维护。
+- P1 的截图比对是一次性脚本：先跑两遍改后矩阵得到噪声区，再与改前比对；尚未固化成命令。
 - `font-family` 等属性受本机字体影响；换机器首次跑请先 `--update-baseline` 生成该机基线，或后续在 CI 容器里固定字体。
 - 截图是**视口截图**，不是整页长图；滚动区域只覆盖首屏，布局回归以 12 界面首屏与 computed-style 为准。
 - 浏览器查找顺序：`DELECTOR_CHROME` → `%LOCALAPPDATA%\ms-playwright\chromium-*` → 系统 Chrome/Edge → `/usr/bin/chromium`。找不到时脚本直接报错，不静默降级。
