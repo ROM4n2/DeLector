@@ -12,6 +12,7 @@
 """
 
 from pathlib import Path
+from typing import Any, Dict, List
 from urllib.parse import quote
 
 from server_helpers import ROOT
@@ -120,7 +121,7 @@ def test_ledger_counts_duplicates_but_returns_one_row(client):
 
 def test_ledger_dedupe_is_deterministic_across_insertion_order(client):
     """同一组卡换插入顺序，代表卡逐字段一致（证明不看扫描顺序）。"""
-    cards = [
+    cards: List[Dict[str, Any]] = [
         dict(
             due_date="2026-11-12",
             interval_days=4,
