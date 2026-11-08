@@ -500,6 +500,28 @@ body.drawer-resizing #drawer {
   letter-spacing: 0.04em;
 }
 
+/* 复习台账（方案 B）：单行等宽，只排版既有列。
+   状态语义全部由文本承载，颜色不做区分；左边框用 currentColor（--ink-mute 实测
+   7.51:1），不得改用 --line（叠白底仅 1.43:1，低于 SC 1.4.11 的 3:1）。
+   纯展示、不可点 ⇒ 不适用 44px 命中区。 */
+.wordcard-ledger {
+  font-family: var(--mono);
+
+  font-size: 0.6875rem;
+
+  line-height: 1.45;
+
+  font-variant-numeric: tabular-nums;
+
+  color: var(--ink-mute);
+
+  margin-top: 0.5rem;
+
+  padding: 4px 0 4px 8px;
+
+  border-left: 2px solid currentColor;
+}
+
 .input-label {
   font-family: var(--mono);
 

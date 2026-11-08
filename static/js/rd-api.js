@@ -67,6 +67,14 @@ export async function fetchCardCounts() {
   return api('/api/cards/counts');
 }
 
+/** 抽屉复习台账：按 lemma 取「代表卡」与卡数（只读，后端已做确定性去重）。
+ *  lemma 走路径参数：网络层闸门要求 `api()` 路径可静态归一，query 串无法对账。 */
+export async function fetchVocabLedger(lemma) {
+  const key = encodeURIComponent(String(lemma || '').trim());
+  if (!key) return { lemma: '', card_count: 0, card: null };
+  return api(`/api/cards/vocab/ledger/${key}`);
+}
+
 // ── 笔记系统 ───────────────────────────────────────────────────────────────
 export async function fetchArticleNotes(articleId) {
   return api(`/api/articles/${articleId}/notes`);
