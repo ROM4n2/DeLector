@@ -292,6 +292,79 @@ def get_known_lemmas() -> Dict[str, Any]:
     return {"lemmas": [r["lemma"] for r in rows if r["lemma"]]}
 
 
+# 词卡抽屉「复习台账」取数：按 lemma 去重，**一条 SQL 决定代表卡**。
+#
+# 为什么必须在 SQL 里定序：`vocab_cards` 的 `word` / `lemma` 没有 UNIQUE，裸 INSERT
+# 会产生同一 lemma 的多张卡。若把候选数组交给前端取 `[0]`，实际就是让 SQLite 的
+# 隐式扫描顺序决定状态——索引或查询计划一变，抽屉显示就会漂移，且无法证明稳定。
+#
+# `last_signal_day` = 「最近一次用户动作」的日期，两段合并：
+# - `mastered_at`：用户在卡盒手动置「已掌握」的时间（显式裁决）；
+# - `date(due_date, '-interval_days days')`：最近复习日。这不是估价，而是写入公式
+#   `due_date = 复习当天 + interval_days`（`_calc_fsrs_step`）的精确逆运算。
+# SQLite 的 DESC 把 NULL 排最后 ⇒ 从未复习的新卡不会盖过有真实动作的卡。
+# 并列时依次用 `created_at DESC`、`id DESC` 收口，保证同一输入永远同一行。
+_LEDGER_SQL = """
+WITH ranked AS (
+    SELECT
+        id, mastered, due_date, interval_days, repetition_count,
+        correct_count, wrong_count, fsrs_s, created_at,
+        CASE WHEN COALESCE(fsrs_s, 0) > 0 THEN 1 ELSE 0 END AS is_workbench,
+        CASE
+            WHEN mastered = 1 AND mastered_at IS NOT NULL AND mastered_at <> ''
+                THEN substr(mastered_at, 1, 10)
+            WHEN due_date IS NOT NULL AND due_date <> ''
+             AND interval_days IS NOT NULL AND interval_days > 0
+                THEN date(due_date, '-' || CAST(interval_days AS TEXT) || ' days')
+            ELSE NULL
+        END AS last_signal_day
+    FROM vocab_cards
+    WHERE lemma = ?
+)
+SELECT *, COUNT(*) OVER () AS card_count
+FROM ranked
+ORDER BY last_signal_day DESC, created_at DESC, id DESC
+LIMIT 1
+"""
+
+
+@router.get("/api/cards/vocab/ledger/{lemma}")
+def get_vocab_card_ledger(lemma: str) -> Dict[str, Any]:
+    """抽屉复习台账：同一 lemma 多卡只返回一张代表卡（读侧去重，不写库）。
+
+    只暴露既有列：`mastered / due_date / interval_days / repetition_count /
+    correct_count / wrong_count / fsrs_s`，外加 `is_workbench` 与 `card_count`。
+    `is_workbench` 口径与 `/api/cards/known-lemmas` 的 `fsrs_s > 0` 一致；前端据此
+    切换文案，**不再复制数值阈值**（`reader.js` 不得 import `cards.js`，否则成环）。
+
+    无卡返回 200 空态，不返回 404：抽屉每次点词都会查一次，「没入卡」是正常结果。
+    lemma 走路径参数而非 query：前端网络层闸门要求 `api()` 的路径可静态归一
+    （query 字符串无法与后端路由对账），路径参数折算为 `/ledger/{}` 可对账。
+    """
+    lemma_norm = (lemma or "").strip()
+    if not lemma_norm:
+        return {"lemma": "", "card_count": 0, "card": None}
+    with db_conn() as conn:
+        row = conn.execute(_LEDGER_SQL, (lemma_norm,)).fetchone()
+    if row is None:
+        return {"lemma": lemma_norm, "card_count": 0, "card": None}
+    return {
+        "lemma": lemma_norm,
+        "card_count": int(row["card_count"]),
+        "card": {
+            "id": int(row["id"]),
+            "mastered": bool(row["mastered"]),
+            "due_date": row["due_date"] or None,
+            "interval_days": row["interval_days"],
+            "repetition_count": row["repetition_count"] or 0,
+            "correct_count": row["correct_count"] or 0,
+            "wrong_count": row["wrong_count"] or 0,
+            "fsrs_s": row["fsrs_s"],
+            "is_workbench": bool(row["is_workbench"]),
+        },
+    }
+
+
 @router.get("/api/cards/vocab")
 def get_cards_vocab(cefr: str = "A1", scope: str = "core", sources: Optional[str] = None) -> Any:
     scope_norm = (scope or "core").lower().strip()

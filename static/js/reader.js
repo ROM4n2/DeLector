@@ -7,7 +7,7 @@ import { Companion, getActiveView } from "./companion.js";
 import {
   removeArticle, fetchArticles, fetchArticle,
   lookupVocab, lookupGrammar,
-  saveVocabCard, saveGrammarCard, fetchCardCounts,
+  saveVocabCard, saveGrammarCard, fetchCardCounts, fetchVocabLedger,
   fetchArticleNotes, saveArticleNote, removeNote, fetchNoteAssist,
   saveSyntaxStats, fetchSyntaxStats
 } from './rd-api.js';
@@ -330,6 +330,58 @@ async function _openReaderBody(id, token) {
   if (window.show) window.show("reader");
 }
 
+// ── 复习台账（方案 B：单行等宽，只排版既有列） ──────────────────────────────
+// 取数规则在后端 SQL（/api/cards/vocab/ledger）：同一 lemma 多卡按
+// 「最近一次用户动作 → 创建时间 → id」定序取一张。前端只负责排版，不复制判据，
+// 因此这里不 import cards.js 的 isWorkbenchSourced（会形成模块环），改用响应里的
+// is_workbench（后端与 known-lemmas 同为 fsrs_s > 0 口径）。
+function clearVocabLedger() {
+  const el = document.getElementById("d-ledger");
+  if (!el) return;
+  el.textContent = "";
+  el.hidden = true;
+}
+
+function ledgerSegments(card, cardCount) {
+  const segs = [];
+  const dueRaw = card.due_date ? String(card.due_date).slice(0, 10) : "";
+  segs.push(card.mastered ? "已掌握" : dueRaw ? "待复习" : "未排期");
+  if (dueRaw) {
+    // 同年只给 MM-DD（读词时瞥一眼，年份是噪音）；跨年补全，否则日期会歧义。
+    const sameYear = dueRaw.slice(0, 4) === String(new Date().getFullYear());
+    segs.push("到期" + (sameYear ? dueRaw.slice(5) : dueRaw));
+  }
+  const interval = Number(card.interval_days);
+  if (dueRaw && Number.isFinite(interval) && interval > 0) {
+    segs.push("间隔" + interval + "d");
+  }
+  if (card.is_workbench) {
+    // s = FSRS 稳定性（天），与卡盒 repetition_count（次）量纲不同，故不写「次」。
+    const s = Number(card.fsrs_s);
+    if (Number.isFinite(s)) segs.push("工作台 s=" + s.toFixed(1) + "d");
+  } else {
+    const correct = Number(card.correct_count) || 0;
+    const wrong = Number(card.wrong_count) || 0;
+    // 0 正 / 0 误 不显示：没复习过就没有统计可报。
+    if (correct + wrong > 0) segs.push(correct + "正/" + wrong + "误");
+  }
+  const total = Number(cardCount) || 0;
+  if (total > 1) segs.push("共" + total + "张");
+  return segs;
+}
+
+function renderVocabLedger(data) {
+  const el = document.getElementById("d-ledger");
+  if (!el) return;
+  if (!data || !data.card) {
+    el.textContent = "";
+    el.hidden = true;
+    return;
+  }
+  el.textContent = ledgerSegments(data.card, data.card_count).join("·");
+  el.hidden = false;
+}
+
 // ── Token Inspection ────────────────────────────────────────────────────────
 export function inspect(tokenId, sentId) {
   document
@@ -395,6 +447,15 @@ export function inspect(tokenId, sentId) {
   document.getElementById("d-meta").innerHTML =
     `原型: <strong>${esc(token.lemma)}</strong> · 词性: ${esc(token.pos)} ${genderHtml}${separableHtml}` +
     (token.case ? ` · ${esc(token.case)}` : "");
+
+  // 复习台账：先清上一个词的残留，再按 lemma 取（后端 SQL 已做确定性去重）。
+  // 与查词同款竞态守卫：只有当前选中词仍是本次点击的词时才落地。
+  clearVocabLedger();
+  fetchVocabLedger(token.lemma || token.text)
+    .then((data) => {
+      if (state.selectedToken?.text === token.text) renderVocabLedger(data);
+    })
+    .catch(clearVocabLedger);
 
   // Clear previous dynamic morphology sections
   const oldSep = document.getElementById("d-separable-box");
@@ -838,6 +899,7 @@ export async function analyzeGrammar() {
 
 export async function saveVocab() {
   if (!state.selectedToken || !state.currentArticle) return;
+  const savedToken = state.selectedToken;
   const btn = document.getElementById("save-vocab-btn");
   const originalText = btn ? btn.textContent : "+ 加入 Anki 词汇卡";
   if (btn) {
@@ -867,6 +929,12 @@ export async function saveVocab() {
       btn.classList.add("is-saved");
     }
     refreshCardCounters();
+    // 刚入卡：立刻重取台账，让「未入卡」的空行变成真实状态。
+    fetchVocabLedger(savedToken.lemma || savedToken.text)
+      .then((data) => {
+        if (state.selectedToken === savedToken) renderVocabLedger(data);
+      })
+      .catch(clearVocabLedger);
     Companion.celebrate("card_vocab");
   } catch (e) {
     if (btn) {

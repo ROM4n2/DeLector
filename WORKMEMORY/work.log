@@ -764,3 +764,34 @@ Caps: filesystem-read, filesystem-write, shell-exec, web-fetch
 方案：A 入卡状态章 / B 单行复习台账（推荐）/ C 四态章+间隔预览（暂缓）。前置：只读状态端点 + 一词多卡匹配口径裁决。
 验证：仅静态取证与 WCAG 对比度计算（--line 在白底 1.43:1 不达标，状态边框须 currentColor）；未跑测试、未渲染。
 回写检查：无临时产物入库；无代码改动。
+
+### 2026-11-08 21:15 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
+目标：合并 #306（已：merge commit，master 64428d7，push run 42483927972 全 success，Windows Portable Smoke skipped 属 docs-only）后，先写计划再做方案 B「词卡抽屉单行复习台账」。
+分支：feat/wordcard-review-ledger，worktree D:\Code\DeLector-ledger，基线 64428d7。
+不做：不加 UNIQUE、不改写入路径、不扩 scope=reader 12 字段契约、不做四态/间隔预览/评分、不做可点击台账。
+
+### 2026-11-08 21:47 | deepseek-v4.1-flash__trae | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec
+计划：docs/plans/2026-11-08-wordcard-review-state-ledger.md。读侧去重取数 = 单条 SQL：last_signal_day := COALESCE(mastered_at 日期, date(due_date,'-interval_days days'))，ORDER BY last_signal_day DESC, created_at DESC, id DESC LIMIT 1；why：前者是写入公式 due_date=复习日+interval 的精确逆运算，后两级收口保证同输入永远同一行。数据通路选新端点 GET /api/cards/vocab/ledger/{lemma}；why：扩 12 字段会被 test_vocab_contract_uniform 的 set(keys)==CONTRACT_FIELDS 钉死，规矩不许放松断言。lemma 走路径参数；why：check_frontend_layers 要求 api() 路径可静态归一。重复卡文案用「共N张」纯文本。
+
+### 2026-11-08 21:47 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
+产出：
+- delector/routes/cards.py：GET /api/cards/vocab/ledger/{lemma}（只读，COUNT(*) OVER() 一次给出代表卡+卡数，is_workbench 与 known-lemmas 同为 fsrs_s>0）。
+- static/js/rd-api.js + reader.js：抽屉台账渲染（textContent，无 innerHTML）；查词与 saveVocab 后刷新，竞态守卫同查词。
+- static/modals/drawer.html + index.html（build_index_html.py 重建）、src/css/04-drawer-wordcard.css + style.css（build_css.py）。
+- tests/test_wordcard_ledger.py（13 用例：空态/去重跨插入顺序稳定/并列收口/已掌握与复习日比较/工作台/12 字段不漂移/前端接线/currentColor）。
+实测（headless Edge + CDP，临时 DB 副本，不碰真实库）：台账 offsetHeight=24；1440/393/360 均单行，393 内容宽 295、360 内容宽 262，rowScrollWidth==clientWidth 且 drawerScrollWidth==drawerClientWidth（无溢出）；前景 rgb(90,84,72)、边框同色、白底，实算 7.51:1。带空格写法实测 325.6px 会在 393 折行，故定稿无空格分隔（220px）。
+验证：pytest 上述 13 + contract_uniform + server_cards_vocab + frontend_module_graph 全 PASS；check_frontend_layers / check_css_sync / build_index_html --check / layer_invariants 全 PASS。
+已知问题（未修，已记计划 §7）：vocab_cards 裸 INSERT 无唯一约束。
+回写检查：临时脚本/截图/DB 副本均在 %TEMP%，未入库；服务已停。
+### 2026-11-08 22:12 | deepseek-v4.1-flash__trae | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec
+分支补记：tests/test_reader_api_split.py 的 EXPECTED_ENDPOINTS 是「rd-api 导出面精确清单」，新增端点的登记属于清单维护，断言仍是 untime == EXPECTED_ENDPOINTS，未放松为子集。同步把 tests/test_wordcard_ledger.py 登记进 tools/ci_shards.py unit-4 并在 ci_shard_weights.json 记 4.0s（漏登记会被 test_ci_shards_partition_every_test_file_exactly_once 拦下）。
+
+### 2026-11-08 22:12 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
+交付：PR #307（feat/reader: 词卡抽屉单行复习台账，按 lemma 去重），不自动合并。
+CI（run 42488246132，head c16e5ce）逐 job：Detect packaging-surface changes / Go Gates / Go↔Python Integration / cost-cold-start / cost-guards / integration-heavy / unit-1..4 / Secret Scan / Static Invariants / Windows Portable Smoke 全 pass；Master Direct-Push Scope Gate skipping（PR 场景按设计不跑）。此前两轮红分别为 ruff E501/I001、mypy arg-type、漏登记 ci_shards、rd-api 导出面清单，均已修。
+清理：验证服务已停；临时 DB 副本/截图/CDP 脚本均在 %TEMP%（未入库）；已移除合并后的旧 worktree D:\Code\DeLector-reviewstate；本 worktree D:\Code\DeLector-ledger 在推送后移除，分支保留。
