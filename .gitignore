@@ -1,6 +1,10 @@
 __pycache__/
 *.pyc
 
+# P0 视觉回归产物（截图 / computed-style 当前值 / 服务日志），只留本地，不入库。
+# 入库的只有 tests/fixtures/visual/computed_style_baseline.json。
+/_artifacts/
+
 # 敏感配置与密钥（通用基线，与 bootstrap.ps1 $requiredIgnores 同步）
 /config.yaml
 /config.yml
