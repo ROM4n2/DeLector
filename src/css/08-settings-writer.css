@@ -20,7 +20,7 @@
 .settings-modal-box {
   max-width: 540px;
   width: 90vw;
-  background: var(--paper, #fff);
+  background: var(--paper);
   border-radius: 8px;
   padding: 1.5rem;
   box-shadow: var(--elevation-3);
@@ -29,26 +29,32 @@
 .settings-section-title {
   font-size: 0.875rem;
   font-weight: 700;
-  color: var(--ink, #1a1a1a);
+  color: var(--ink);
   margin-bottom: 0.35rem;
 }
 
 .btn-preset-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 0.6875rem;
-  padding: 1px 6px;
+  padding: 1px 0.5rem;
   border-radius: 3px;
-  border: 1px solid var(--border, #d1d5db);
-  background: var(--paper-accent, #f3f4f6);
-  color: var(--ink, #333);
+  border: 1px solid var(--border);
+  background: var(--paper-accent);
+  color: var(--ink);
   cursor: pointer;
-  transition: all 0.1s;
+  transition:
+    background-color 0.1s ease,
+    border-color 0.1s ease,
+    color 0.1s ease;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .btn-preset-pill:hover {
-    background: #dbeafe;
-    color: #1e40af;
-    border-color: #93c5fd;
+    background: var(--paper-tint);
+    color: var(--ink);
+    border-color: var(--accent);
   }
 }
 
@@ -65,6 +71,9 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 0.75rem;
+  /* 头部用一条 hairline 与第一个分组分开；第一个分组自身不再叠线。 */
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line);
 }
 
 .settings-modal-title {
@@ -91,9 +100,21 @@
   padding: 0.5rem 0;
   background: transparent;
   border: none;
+  border-radius: 4px;
   color: var(--ink);
   cursor: pointer;
   text-align: left;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .settings-group-toggle:hover {
+    background: var(--paper-tint);
+  }
+}
+
+.settings-group-toggle:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
 }
 
 .settings-group-title {
@@ -149,8 +170,21 @@
 .settings-field-status {
   display: block;
   margin-top: 0.25rem;
+  padding-left: 0.5rem;
+  border-left: 2px solid transparent;
   font-size: 0.75rem;
   color: var(--pencil);
+}
+
+/* 状态不只用颜色：左侧 2px 竖线给出形状层，文字本身也带语义。 */
+.settings-field-status[data-state="ok"] {
+  border-left-color: var(--moss);
+  color: var(--moss);
+}
+
+.settings-field-status[data-state="warn"] {
+  border-left-color: var(--accent);
+  color: var(--accent);
 }
 
 .settings-preset-row {
@@ -176,9 +210,21 @@
 }
 
 .settings-test-feedback {
+  padding-left: 0.5rem;
+  border-left: 2px solid transparent;
   font-size: 0.75rem;
   color: var(--pencil);
   font-family: var(--mono);
+}
+
+.settings-test-feedback[data-state="ok"] {
+  border-left-color: var(--moss);
+  color: var(--moss);
+}
+
+.settings-test-feedback[data-state="error"] {
+  border-left-color: var(--accent);
+  color: var(--accent);
 }
 
 .settings-footer {
@@ -186,6 +232,51 @@
   justify-content: flex-end;
   gap: 0.75rem;
   margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+/* 设置内的命中区：关闭、按钮、输入统一 ≥44px；只在本模态内生效。 */
+.settings-modal-box .drawer-close {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+}
+
+.settings-modal-box .btn,
+.settings-modal-box .modal-input {
+  min-height: 44px;
+}
+
+.settings-modal-box .btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  box-shadow: none;
+  outline: 2px dashed var(--pencil);
+  outline-offset: 2px;
+}
+
+/* `.hint-text` 此前没有任何规则（设置里按 16px 正文落到说明文字下方），
+   这里只补设置作用域内的层级，不动全局。 */
+.settings-modal-box .hint-text {
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--pencil);
+}
+
+@media (max-width: 1024px) {
+  .btn-preset-pill {
+    min-height: 44px;
+    padding-inline: 0.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-group-chevron,
+  .btn-preset-pill {
+    transition: none;
+  }
 }
 
 @media (max-width: 380px) {

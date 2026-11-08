@@ -785,10 +785,10 @@ export async function openSettingsModal() {
       statusEl.textContent = s.api_key_masked
         ? `当前已配置 Key: ${s.api_key_masked}（留空保存表示不修改）`
         : "当前已配置 Key（局域网不显示）。留空保存表示不修改";
-      statusEl.style.color = "#16a34a";
+      statusEl.dataset.state = "ok";
     } else {
       statusEl.textContent = "当前未配置 API Key（AI 深度语法剖析需配置）";
-      statusEl.style.color = "#ca8a04";
+      statusEl.dataset.state = "warn";
     }
   } catch (err) {
     console.error("Failed to load settings:", err);
@@ -832,7 +832,7 @@ export async function testApiKeyConnection() {
   btn.textContent = "⏳ 测试中…";
   btn.disabled = true;
   feedback.textContent = "";
-  feedback.style.color = "var(--pencil)";
+  delete feedback.dataset.state;
 
   try {
     const res = await api("/api/settings/test-key", {
@@ -846,14 +846,14 @@ export async function testApiKeyConnection() {
     });
     if (res.success) {
       feedback.textContent = `${res.message}`;
-      feedback.style.color = "#16a34a";
+      feedback.dataset.state = "ok";
     } else {
       feedback.textContent = `${res.error}`;
-      feedback.style.color = "#dc2626";
+      feedback.dataset.state = "error";
     }
   } catch (err) {
     feedback.textContent = `请求异常: ${err.message}`;
-    feedback.style.color = "#dc2626";
+    feedback.dataset.state = "error";
   } finally {
     btn.textContent = "测试连通性";
     btn.disabled = false;
