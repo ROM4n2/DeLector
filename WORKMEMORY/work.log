@@ -481,3 +481,24 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 验证：定向 pytest 84 passed（check_css_sync/check_index_html_sync/ci_governance/ci_wiring/source_hygiene/frontend_module_graph/frontend_guards）；ruff + mypy --strict 新文件全绿；build_css --check 与 check_css_sync 均 PASS。
 - 提交：ad29712（CSS 拆分+同步闸）/ 8fb44ee（packaging 触发面）/ 0fa1aa8（showUndoToast），分支未推送、PR 未开（按用户规则等确认后推送）。
 - 边界：无 @layer、无视觉/布局改动、无截图；android/ 与 docs/adr 未碰；全量 pytest 未跑（按约束只跑定向）。
+
+### 2026-11-08 09:30 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+P0 视觉回归基建第一版（独立 worktree `D:\Code\DeLector-visual-p0`，分支 `feat/visual-regression-p0`，基线 origin/master）。
+- 目标：12 界面 × 3 宽度截图矩阵、12 控件 computed-style 基线、三条闸（hex≤582 / rgba≤118 / 对比度 / infinite=7）、一页用法文档。
+- 不做：不碰 `.github/workflows/ci.yml`、`tools/ci_shards*`、`src/css/`；不改样式与页面；不接 CI；不跑全量 pytest。
+- 产物：工具/测试/基线/文档入库；截图与当前导出落 `_artifacts/` 不入库。
+
+### 2026-11-08 09:55 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+P0 视觉回归基建完成（本地跑通，未接 CI）。
+- 新增：`tools/visual_matrix.py`（一键编排：临时数据目录+预置文章+6 张种子卡+启停服务）、`tools/visual_matrix.mjs`（零 npm 依赖 CDP：12 界面 × 393/360/1280 截图 + 12 控件 20 属性导出）、`tools/visual_baseline.py`（compare/update，逐控件逐属性打印 from→to）、`tools/visual_gates.py`（颜色字面量/对比度/infinite 现算）、`tests/test_visual_gates.py`、`tests/fixtures/visual/computed_style_baseline.json`、`docs/agents/visual-regression.md`。
+- 验证 [A]：矩阵两次 36/36 张、约 50.6s、失败 0/控件缺失 0；第二次 computed-style 12 控件基线一致。定向测试 `pytest tests/test_visual_gates.py` 8 passed。
+- 闸门实测：hex 581≤582、rgba 118≤118、infinite 7==7、闸内对比度最低 4.63（正文 4.5/大字图形 3.0）。已演示红绿：改 `--ink:#e8e2d8` → contrast 1.22 红、恢复绿；追加 2 个规则体 hex → 583 红；追加 rgba+infinite → 119/8 红；均恢复后绿。
+- 已知欠账（P0 只报告不阻断）：muted/paper 3.49、ink-faint/paper 3.43、coral/paper 2.82、white/coral 2.99、mustard/paper 1.72，P1 换皮必须清零后移入闸门。
+- 回写检查：稳定结论已写入 `docs/agents/visual-regression.md` 并从 AGENTS.md 路由；截图、当前导出、server.log 均不入库；未改样式/页面/CI。
+- 待办：推送分支并开 PR（不自动合并）。
+
+### 2026-11-08 10:02 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+P0 视觉回归基建已提交并开 PR：commit `05e2c0e`（feat/visual-regression-p0，基线 origin/master a7f1b40），PR #293 https://github.com/ROM4n2/DeLector/pull/293（OPEN，未合并）。worktree `D:\Code\DeLector-visual-p0` 保留供后续 P1 复用。
