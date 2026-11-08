@@ -150,14 +150,14 @@ body.drawer-open #view-reader {
 @media (hover: hover) and (pointer: fine) {
   .typo-btn:hover {
     color: var(--ink);
-    background: rgba(255, 255, 255, 0.6);
+    background: var(--paper-card);
   }
 }
 
 .typo-btn.active {
   background: var(--ink);
 
-  color: #fef9ee;
+  color: var(--paper);
 }
 
 .typo-sep {
@@ -254,7 +254,7 @@ body.drawer-open #view-reader {
   flex-shrink: 0;
 
   /* Hairline right-border acts as visual divider (replaces gap) */
-  border-right: 1px solid rgba(0, 0, 0, 0.12);
+  border-right: 1px solid var(--line);
 }
 
 .heatbar-seg:last-child {
@@ -338,7 +338,7 @@ body.focus-mode .tok.focus-active {
 
   padding: 2.5rem 2.25rem;
 
-  box-shadow: 4px 5px 0 var(--paper-deep);
+  box-shadow: var(--sticker-4) var(--paper-deep);
 
   font-family: var(--sans);
 
@@ -421,7 +421,7 @@ body.focus-mode .tok.focus-active {
 
 @media (hover: hover) and (pointer: fine) {
   .tok:hover {
-    background: rgba(233, 132, 37, 0.2);
+    background: var(--amber-soft);
   }
 }
 
@@ -494,20 +494,30 @@ body.focus-mode .tok.focus-active {
 @media (hover: hover) and (pointer: fine) {
   /* 交互反馈压过一切静态词阶色（含全景热力档） */
   #reader-content .reader-p .tok:hover {
-    background: rgba(233, 132, 37, 0.2);
+    background: var(--amber-soft);
     box-shadow: none;
     /* 交互反馈压过一切静态词阶色（含全景热力档） */
   }
 }
 
-.tok.sel {
+/* 选中态必须压过 05 片的 `.tok.reading-active`（同特异性、后者靠后），故提到 ID 级 */
+#reader-content .tok.sel {
   background: var(--ink) !important;
 
-  color: #fef9ee !important;
+  color: var(--paper) !important;
 
   border-radius: 3px;
 
   box-shadow: var(--ring-ink) !important;
+
+  /* 选中态不只靠反白：加一道与墨底同宽的纸色下划线（形状线索） */
+  text-decoration-line: underline;
+
+  text-decoration-thickness: 2px;
+
+  text-underline-offset: 3px;
+
+  text-decoration-skip-ink: none;
 }
 
 /* ── Sticky Note Drawer (Analysis Hub) ───── */

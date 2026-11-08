@@ -57,13 +57,13 @@
 }
 
 body.drawer-resizing .drawer-resize-handle::after{
-  background: var(--coral, #b44322);
+  background: var(--coral);
 }
 
 
 @media (hover: hover) and (pointer: fine) {
   .drawer-resize-handle:hover::after {
-    background: var(--coral, #b44322);
+    background: var(--coral);
   }
 }
 
@@ -144,7 +144,7 @@ body.drawer-resizing #drawer {
 
   background: var(--tape);
 
-  border: 1px dashed rgba(26, 23, 20, 0.2);
+  border: 1px dashed var(--tape-border);
 
   z-index: 10;
 }
@@ -158,18 +158,18 @@ body.drawer-resizing #drawer {
 
   padding: 1rem 1.5rem 0.75rem;
 
-  border-bottom: 1.5px dashed rgba(26, 23, 20, 0.2);
+  border-bottom: 1.5px dashed var(--tape-border);
 
   flex-shrink: 0;
 }
 
 .drawer-tabs {
   display: flex;
-  background: rgba(26, 23, 20, 0.06);
+  background: var(--line-faint);
   border-radius: 2px;
   padding: 0;
   gap: 0;
-  border: 1px solid rgba(26, 23, 20, 0.15);
+  border: 1px solid var(--line);
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
@@ -188,7 +188,7 @@ body.drawer-resizing #drawer {
   padding: 4px 8px;
   border-radius: 0;
   border: none;
-  border-right: 1px solid rgba(26, 23, 20, 0.15);
+  border-right: 1px solid var(--line);
   background: transparent;
   color: var(--pencil);
   cursor: pointer;
@@ -202,7 +202,7 @@ body.drawer-resizing #drawer {
 
 @media (hover: hover) and (pointer: fine) {
   .drawer-tab-btn:hover {
-    background: rgba(26, 23, 20, 0.08);
+    background: var(--line-soft);
     color: var(--ink);
   }
 }
@@ -210,7 +210,10 @@ body.drawer-resizing #drawer {
 .drawer-tab-btn.active {
   background: var(--ink);
 
-  color: #fef9ee;
+  color: var(--paper);
+
+  /* 激活态除反白外再加一道纸色下沿：形状线索，不依赖颜色辨识 */
+  box-shadow: inset 0 -2px 0 var(--paper);
 }
 
 .drawer-close {
@@ -238,7 +241,7 @@ body.drawer-resizing #drawer {
 @media (hover: hover) and (pointer: fine) {
   .drawer-close:hover {
     border-color: var(--rule);
-    background: rgba(26, 23, 20, 0.07);
+    background: var(--line-soft);
     color: var(--ink);
   }
 }
@@ -299,7 +302,7 @@ body.drawer-resizing #drawer {
 }
 
 .drawer-body::-webkit-scrollbar-track {
-  background: rgba(26, 23, 20, 0.04);
+  background: var(--line-faint);
 }
 
 .drawer-body::-webkit-scrollbar-thumb {
@@ -317,7 +320,7 @@ body.drawer-resizing #drawer {
 /* Word Card inside Sticky Note */
 
 .sticky-word-card {
-  background: #ffffff;
+  background: var(--paper-card);
 
   border: 1.5px solid var(--ink);
 
@@ -410,24 +413,23 @@ body.drawer-resizing #drawer {
   border-radius: 3px;
 
   margin-left: 4px;
+
+  border: 1px solid var(--line);
 }
 
 .gender-der {
-  background: #e3f2fd;
-  color: #1565c0;
-  border: 1px solid #90caf9;
+  background: var(--hl-A1);
+  color: var(--hl-A1-ink);
 }
 
 .gender-die {
-  background: #fce4ec;
-  color: #c2185b;
-  border: 1px solid #f48fb1;
+  background: var(--hl-B2);
+  color: var(--hl-B2-ink);
 }
 
 .gender-das {
-  background: #e8f5e9;
-  color: #2e7d32;
-  border: 1px solid #a5d6a7;
+  background: var(--hl-A2);
+  color: var(--hl-A2-ink);
 }
 
 /* Speaker Buttons */
@@ -472,7 +474,7 @@ body.drawer-resizing #drawer {
 
   border-radius: 4px;
 
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--paper-card);
 
   transition: all var(--dur-fast);
 
@@ -483,7 +485,6 @@ body.drawer-resizing #drawer {
   .speaker-btn-sm:hover {
     border-color: var(--ink);
     color: var(--ink);
-    background: #fff;
   }
 }
 
@@ -541,6 +542,25 @@ body.drawer-resizing #drawer {
 
 .def-input:focus {
   border-color: var(--accent);
+}
+
+/* 已收录态：图标 + 描边 + 字重，不只靠颜色区分 */
+#save-vocab-btn.is-saved {
+  background: var(--paper);
+  color: var(--ink);
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  font-weight: 700;
+}
+
+#save-vocab-btn.is-saved::before {
+  content: "✓ ";
+  font-weight: 700;
+}
+
+#save-vocab-btn.is-saved:hover {
+  background: var(--paper-warm);
+  color: var(--ink);
 }
 
 /* Grammar Note Section */
@@ -602,7 +622,7 @@ body.drawer-resizing #drawer {
 
   font-size: 0.75rem;
 
-  background: rgba(255, 255, 255, 0.7);
+  background: var(--paper-card);
 
   border: 1px dashed var(--pencil);
 
@@ -626,7 +646,7 @@ body.drawer-resizing #drawer {
 /* Context Quote */
 
 .context-box {
-  background: rgba(255, 255, 255, 0.5);
+  background: var(--paper);
 
   border: 1px dashed var(--pencil);
 

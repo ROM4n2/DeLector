@@ -566,3 +566,25 @@ P3 材质轮里程碑（PR #296，feat/material-p3，未合并）。
 - 落地：抽屉/底部弹层/底栏/toast/设置模态/选中工具条/阅读器高亮环全部改走 token；.memo-card 加顶沿 1px 受光边作纸感。旧硬偏移 1.5/2.5/3.5/5 归并到 2/3/4/6。
 - 噪点否决（实测）：0.06 alpha 全屏暗噪点使 muted-on-paper 4.76→4.40、ink-faint 4.98→4.59；0.02 仍只剩 4.64；且 fixed+mix-blend-mode 每帧整屏混合、暗色需换混合模式。
 - 验证：build+sync PASS；gates hex 566/700、rgba 115/150、对比度 4.63、infinite 7、mustard 0；pytest 64 passed；36 张改前/改后矩阵各 36/36；computed-style 12 控件一致（含 box-shadow/尺寸/字体）；同代码二次矩阵作噪声基线（drawer-360 9.2%、home-393 6.9%），确定性变化仅阴影边。writer 工具栏区（08 ≥1000 行）未动。
+
+### 2026-11-08 12:45 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+P2 组件族换肤第一轮：阅读器 + 词卡抽屉。worktree D:\\Code\\DeLector-visual-p4，分支 feat/reader-wordcard-skin；基线取 origin/feat/material-p3 c40ab2b（master 尚无 P3 材质 token）。
+- 范围：03-reader.css / 04-drawer-wordcard.css 字面量收敛、elevation 复用、非颜色状态线索；reader.js 仅接 is-saved 态。
+- 不做：android/、visual_gates.py 阈值、writer 工具栏 44px 命中区、其他组件族；字号/行高/行宽/段距经实测无需改。
+
+### 2026-11-08 12:45 | deepseek-v4.1-flash__trae | WORK_END
+Status: PR_OPEN —— 组件族 P2（阅读器 + 词卡抽屉），分支 feat/reader-wordcard-skin（未合并）。
+- 字面量：03/04 两片 hex 归零；全站 hex 566→550、唯一 rgba 115→109（配额 ≤48/≤14，实际 −16/−6）。infinite 7 未动，闸内最低对比 4.63。
+- elevation：阅读纸面 4px 5px → var(--sticker-4)（4px 4px）；抽屉保持 --elevation-drawer；卡片 #ffffff → var(--paper-card)（同值零视觉变化）。
+- 阅读指标未改（有数）：18px / 33.3px(1.85) / 版心 648 / 文字栏 576（≈51 字符）/ 段距 24（基线距 57.3 = 1.72×，超 WCAG 1.4.8 AAA 1.5×）。
+- 非颜色状态：选中词元 ink 底+paper 字+ring+2px 下划线；tab 激活加 2px 纸色下沿；已收录 = ✓ + 2px outline + 700（对比 17.40）。性别徽章换 --hl-A1/A2/B2(-ink)，对比 5.03/4.88/4.56 → 6.67/6.74/5.59。
+- 基线：仅 tok-selected 4 项（bg/color/border-radius 2→3/border-top-color），其余 12 控件 × 20 属性不变。
+- 矩阵：36 张，受控同源数据 + base-vs-base 噪声对照；真实变化仅 02/14/26-reader 与 03/15/27-drawer。german 随机词、cards 卡数、底栏计数、drawer-360 9px 位移在两次同代码运行中复现 ⇒ 噪声。
+- 交互：elementFromPoint 命中选中词元；抽屉 z=1100 命中抽屉、1280 下与阅读区右缘距 96px；393 全宽 + backdrop z=89。reduced-motion 无新增过渡。
+- 缺口：「复习状态」在本族无 UI，未凭空新增，需另立项。
+- PR base 待裁决：feat/material-p3（依赖 P3 token）或待 #296 合入后 rebase master。
+
+### 2026-11-08 12:45 | deepseek-v4.1-flash__trae | PITFALL
+Caps: filesystem-read, filesystem-write, shell-exec
+tok.sel 选中样式被静默覆盖：05-cards-player.css 的 .tok.reading-active 同特异性且位置更后、同为 !important，压过 03 片 .tok.sel；且 #reader-content .tok 的 2px 圆角覆盖 .tok.sel 的 3px。解法：选择器提升为 #reader-content .tok.sel。另：CDP 探针须在 sel 出现后等 ≥260ms 再读 computed style，否则命中 120ms 过渡首帧得到透明背景。
