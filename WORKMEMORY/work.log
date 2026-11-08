@@ -733,3 +733,20 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - Obsidian 99-Inbox：更新《44px 热区不能靠撑大行高》补充伪元素+行距实测；新增 5 篇（类名零规则三桶、同特异性静默覆盖、视觉回归假差异四源、var() 自引用、合成数值≠像素判据）。
 数字（实跑）：origin/master 00b6e58 上 python tools/visual_gates.py → hex 505 / rgba 99 / infinite 7 / 最低对比 4.63 / mustard 0；P2 消耗 hex −61、rgba −16。五族各自 36 张矩阵未在合并后复跑，closeout 已标待回填。
 验证：docs 标题结构与代码围栏配对检查通过；未跑构建（本任务无代码改动）。
+
+### 2026-11-08 20:10 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec, network
+目标：#304 合并后给 workbench iframe 补独立视觉闸（字面量 / 亮暗对比度 / 无定义引用 / var() 自引用），纯静态、进 CI；先报首次实测与例外。
+分支：feat/workbench-gate，worktree D:\Code\DeLector-visual-p4，基于 origin/master 70409af（#304 merge commit）。
+不做：不改主站 src/css 与 style.css、不动 visual_gates 阈值、不碰 android/、不碰六族已收口规则。
+合并：#304 mergeable=CLEAN，merge commit 合并；master 70409af 的 run 42477301259 = 14/14 success（含 Windows Portable Smoke、Master Direct-Push Scope Gate），0 failure/cancelled/skipped。
+
+### 2026-11-08 20:10 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+产出：
+- tools/workbench_gates.py：扫 tokens.css + workbench.css + workbench.html；字面量上限钉实测 hex 0 / rgba 1；亮暗各 22 对对比度（正文 4.5 / 图形 3.0），暗色按 workbench 自身 [data-theme] 解析；无定义 var() 与自引用扫描。
+- tests/test_workbench_gates.py（12 用例）进 unit-4，ci_shard_weights 0.1；本地 pytest 相关 156 项 PASS，governance PASS。
+- 首次实测 9 项不达标：亮 muted-on-tint 4.29 / accent-on-tint 4.17；暗 muted-on-tint 4.02 / pencil-on-paper 2.47 / pencil-on-tint 2.02 / ink-faint-on-paper 3.45 / on-accent-on-again 3.60 / good-on-good-soft 3.77 / again-on-again-soft 3.38。
+- 修复：暗色补重绑 --pencil/--ink-faint/--paper-warm 并提亮 --muted；--wb-good 5.79、--wb-again 5.29、on-accent-on-again 5.64；新增 --wb-accent-on-tint（亮 coral 4.74 / 暗 accent 4.97）；带正文的 hover/选中面改 --paper-warm。
+- 例外：--rule 装饰边界不套 3:1；modal 遮罩、暗色纯黑 --wb-shadow 按材质保留；console/PWA 品牌色沿用既有例外。
+校验：workbench_gates 全 PASS（44/44 对比度，最低 3.02 图形）；visual_gates 505/99/7/4.63 持平；check_css_sync PASS。

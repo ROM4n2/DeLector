@@ -157,9 +157,40 @@ python tools/visual_gates.py --json   # 机器读
 
 **双份镜像**：主应用只加载 `static/style.css`（`:root` 在 `src/css/01-tokens-base.css`），workbench iframe 只加载 `static/css/tokens.css`，iframe 不继承父文档 `:root`。两处 MUST 同步；`test_token_mirrors_agree_for_p1_pairs` 会逐 token 比对解析值。
 
-**workbench iframe 边界结论（2026-11-08 复核）**：维持现状，**不消除**。父级既不构建期/运行期注入 token，也不向 iframe postMessage 桥接；workbench 内部一律消费自身 `link` 的 `tokens.css`，**禁止依赖父级变量**。证据：父级 `:root --paper` 改为 `rgb(1,2,3)` 后，iframe 内 `--paper` 仍为 `#faf8f5`、body 背景仍为 `rgb(250,248,245)`；iframe 自带 `../css/tokens.css` 链接，主应用 JS 对 `contentDocument` / `contentWindow` 零引用。暗色插槽沿用 workbench 既有 `[data-theme="dark"]`，重绑它实际消费的共享语义名（`--paper` / `--paper-card` / `--paper-tint` / `--ink` / `--muted` / `--rule` / `--accent` / `--line-soft` / `--shadow-tint-*`）与 `--wb-*`，`--wb-on-accent` 负责强调底上的文字色。
+**workbench iframe 边界结论（2026-11-08 复核）**：维持现状，**不消除**。父级既不构建期/运行期注入 token，也不向 iframe postMessage 桥接；workbench 内部一律消费自身 `link` 的 `tokens.css`，**禁止依赖父级变量**。证据：父级 `:root --paper` 改为 `rgb(1,2,3)` 后，iframe 内 `--paper` 仍为 `#faf8f5`、body 背景仍为 `rgb(250,248,245)`；iframe 自带 `../css/tokens.css` 链接，主应用 JS 对 `contentDocument` / `contentWindow` 零引用。暗色插槽沿用 workbench 既有 `[data-theme="dark"]`，重绑它实际消费的共享语义名（`--paper` / `--paper-card` / `--paper-tint` / `--paper-warm` / `--ink` / `--muted` / `--pencil` / `--ink-faint` / `--rule` / `--accent` / `--line-soft` / `--shadow-tint-*`）与 `--wb-*`，`--wb-on-accent` 负责强调底上的文字色，`--wb-accent-on-tint` 负责 tint 叠层上的强调文字。
 
 **零散例外清单（2026-11-08）**：① `workbench.css` 的 `.modal-mask` 用 `rgba(15,18,25,.45)` —— 模态遮罩材质，elevation 阶梯只描述阴影、无遮罩语义，保留；② 暗色块 `--wb-shadow` 用纯黑 `rgba(0,0,0,.35)` —— 暖黑叠在暗底上不可见，属暗色材质例外；③ `workbench.html` 的 `console.info("%c…")` 颜色 `#2e9e5b` / `#d2504a` 只在 DevTools 控制台生效，不进 CSS 计算，无法消费 token；④ PWA `theme-color` / manifest 图标底色 `#3565b0` / `#ffffff` 是品牌常量与应用图标资源，不属 CSS token 层，未改；⑤ `08-settings-writer.css` 2042 / 2149 / 2388 的 `rgba(21,20,15,.05/.08)` 与 `rgba(0,0,0,.06)` 位于写作族已收口区，按本轮约束未动，留待后续统一。
+
+### workbench 独立视觉闸门（2026-11-08）
+
+`tools/visual_gates.py` 只扫主站 `static/style.css`，workbench iframe 的
+`static/css/tokens.css` + `static/css/workbench.css` 长期没有任何视觉闸。新增
+`tools/workbench_gates.py`，纯静态解析，不启浏览器，按 iframe 自身作用域计算：
+
+| 类别 | 口径 | 当前值 |
+| --- | --- | --- |
+| 字面量 | 规则体（`:root` / `[data-theme="dark"]` token 块之外）的 hex 次数、rgba 唯一值；也统计 `workbench.html` 行内 `style` | hex **0 / 0**、rgba **1 / 1**（上限=实测，只降不升） |
+| 对比度 | 亮/暗两套，正文 ≥4.5、图形 ≥3.0；暗色按 workbench 自己的 `[data-theme]` 重绑解析 | 44 项全过，最低 3.02（`moss-on-paper-graphic`，图形） |
+| 无定义引用 | `var(--x)` 在 tokens.css + workbench.css 的 token 块中从未定义；扫 CSS 与 HTML（含脚本字符串） | 0 |
+| 自引用 | `--x: var(--x, …)`（guaranteed-invalid，整条声明静默失效） | 0 |
+
+上线首次实测（修复前）共 **9 项不达标**：亮色 `muted-on-tint` 4.29、`accent-on-tint` 4.17；
+暗色 `muted-on-tint` 4.02、`pencil-on-paper` 2.47、`pencil-on-tint` 2.02、
+`ink-faint-on-paper` 3.45、`on-accent-on-again` 3.60、`good-on-good-soft` 3.77、
+`again-on-again-soft` 3.38。收口方式：
+
+- 暗色补重绑 `--pencil` / `--ink-faint` / `--paper-warm`，并把 `--muted` 提亮；
+  `--paper-warm` 原先未重绑，一旦用于暗色叠层就是浅色块，本轮启用前先补上。
+- 暗色 `--wb-good` / `--wb-again` 提亮（5.79 / 5.29），`--wb-on-accent` 压在
+  `--wb-again` 上也从 3.60 升到 5.64。
+- 亮色叠在 `--paper-tint` 上的强调文字新增 `--wb-accent-on-tint`
+  （亮色 `var(--coral)` 4.74，暗色 `var(--accent)` 4.97）；带正文的悬停/选中面
+  改用 `--paper-warm`，避免 `--muted` 压在 tint 上的 4.29。
+
+**例外（不进对比度闸）**：`--rule` 的 1px 分隔线与卡片描边属装饰性边界，不是
+识别控件所必需的图形，不套 3:1；`.modal-mask` 遮罩与暗色 `--wb-shadow` 纯黑影
+仍按材质例外处理。CI 登记：`tests/test_workbench_gates.py` 进 unit-4，
+`tools/ci_shard_weights.json` 记 0.1；本地等价命令 `python tools/workbench_gates.py`。
 
 ### 材质层级（P3，阴影 / 纸感）
 
