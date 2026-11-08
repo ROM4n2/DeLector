@@ -558,3 +558,11 @@ Status: PR_OPEN —— workbench iframe token 收口，commit `22d32a9`，PR #29
 - 矩阵：36/36 改前/改后；computed-style 12 控件全一致；闸门 581/700、118/150、infinite 7、最低 4.63 全 PASS。噪声复跑确认 home/drawer/cards/search/encounter/settings/german 的内容差异来自随机词/相对时间；german 可解释差异 = accent 装饰恢复 + muted 对齐。
 - 定向测试：156 passed（workbench_tokens / visual_gates / german_workbench / frontend_guards / assets_manifest / static_cache_fingerprint / check_css_sync）。
 - 仅报告未改：`#fff` on-accent、`rgba(21,20,15,.05/.08)`（同值但属阴影语义）、`rgba(0,0,0,.06)`、`rgba(15,18,25,.45)`、`rgba(0,0,0,.25)`、`--wb-shadow` 冷色 rgba；workbench.html `--fg` 无定义（既有死引用）。
+
+### 2026-11-08 12:40 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+P3 材质轮里程碑（PR #296，feat/material-p3，未合并）。
+- 方案：值层 --shadow-tint-1..4 + 语义层 --elevation-1..4 / -drawer / -sheet / -sheet-quiet + --ring-*（含 --ring-paper-lip）+ --sticker-1/2/3/4/6/8 / -card / -card-hover；旧 --shadow-sm/card/hard 保留给 JS 内联。
+- 落地：抽屉/底部弹层/底栏/toast/设置模态/选中工具条/阅读器高亮环全部改走 token；.memo-card 加顶沿 1px 受光边作纸感。旧硬偏移 1.5/2.5/3.5/5 归并到 2/3/4/6。
+- 噪点否决（实测）：0.06 alpha 全屏暗噪点使 muted-on-paper 4.76→4.40、ink-faint 4.98→4.59；0.02 仍只剩 4.64；且 fixed+mix-blend-mode 每帧整屏混合、暗色需换混合模式。
+- 验证：build+sync PASS；gates hex 566/700、rgba 115/150、对比度 4.63、infinite 7、mustard 0；pytest 64 passed；36 张改前/改后矩阵各 36/36；computed-style 12 控件一致（含 box-shadow/尺寸/字体）；同代码二次矩阵作噪声基线（drawer-360 9.2%、home-393 6.9%），确定性变化仅阴影边。writer 工具栏区（08 ≥1000 行）未动。
