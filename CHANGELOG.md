@@ -4,9 +4,22 @@
 > 桌面 / Android 四平台发布资产见 [GitHub Releases](https://github.com/ROM4n2/DeLector/releases)；
 > 开发决策细节见 `docs/plans/archive/` 与 Obsidian Vault `08-Projects/DeLector/01-ADR/`。
 
-**最新版本：v5.21.1（2026-11-03）**
+**最新版本：v5.22.0（2026-11-08）**
 
-### 🛠️ 未发版 (Unreleased)
+**v5.22.0（2026-11-08）**
+
+### 发布收口：v5.21.1 之后累积的用户可见修复
+
+- **阅读与视觉材质收敛（P0–P3）**：颜色字面量迁入 `:root` 与材质 token，主站与 workbench 视觉闸门落地（`tools/visual_gates.py` / `tools/workbench_gates.py`），对比度基线入库；阅读页 `style.css` 拆分为零 diff 分片，静态资源指纹机制修正。
+- **桌宠 P1–P4 与状态机**：气泡钳位与 `visualViewport` 避让、写作页禁停区与编辑态让位、`idle/thinking/acting/speaking/waiting/dragging/sleeping/error` 状态机（真实事件驱动）、默认关闭的自由移动；`prefers-reduced-motion` 下动画静止为终态。
+- **写作区选区 agent 操作条**：选中文本后就地提供改写 / 解释 / 存卡片，接受只替换选区，拒绝与失败不改正文，复用既有 proposal/HITL 协议。
+- **设置与推理强度**：设置页重组为分段式 IA，思考强度「极速 / 平衡 / 深度」动态切换与持久化回显；Go 默认模型来源收敛为单一配置。
+- **端口与运行时握手**：Python 端口文件握手（`DELECTOR_PORT_FILE`），Go supervisor 端口候选避开 Python 实际端口，前端端口守卫读取真实端口，修复「Go 内核静默不启动但界面以为已启用」。
+- **备考与卡盒体验**：备考模块补计数单位（题 / 套 / 词），扑克牌点击翻转修复，播放器托盘重构；卡盒与闪卡收敛材质 token，正误 / 掌握态补非颜色线索。
+- **生词卡复习台账**：新增 `GET /api/cards/vocab/ledger/{lemma}` 与逐词复习记录；读侧对既有重复卡去重。
+- **存量文章按需重算（`PROCESSED_JSON_VERSION` 3.5.0 → 3.6.0）**：旧结果在首次打开单篇时惰性重算并回写，启动路径不扫全表；重算失败保留旧结果并返回 200（响应带 `processed_upgrade_failed: true`），旧结果快照存 `processed_json_backup`，可用 `python tools/recompute_processed.py --restore` 回退。
+- **工程与测试硬化**：pytest 分片改为显式互斥清单（`tools/ci_shards.py`），`--strict-markers` 与恒真断言清理，cost-guards / cost-cold-start 独立分片，静态检查只在 `unit-2` 跑一次，spaCy 模型 wheel 缓存与 Windows smoke 心跳；备份恢复补齐 `articles.stats_json`（PR #217）；Android 新增 `emulator` flavor（`assembleDeviceDebug` 只发设备包）、修复 Python 源码同步与本地 `buildPython` 配置。
+- **依赖**：`spacy>=3.8.18`、`pytest>=9.2.0`（dev）；Python / Node 下限未变。
 
 #### 🧠 NLP 模型档位定案 `sm`（ADR-0027）
 
@@ -20,6 +33,20 @@
 
 - **Debug 构建可被 `chrome://inspect` 连接**：`MainActivity` 仅在 `BuildConfig.DEBUG` 分支调用 `WebView.setWebContentsDebuggingEnabled(true)`，release 保持关闭；`tests/test_android_webview_policy.py` 用静态断言锁住"必须被 DEBUG 守卫、只允许一次"，裸调 `true` 会立即变红。**已修复，真机与模拟器均未点检**：`chrome://inspect` 的实际连接未验证。
 - **更新 chip 外链点击无响应已修复**：此前 `WebViewClient` 未覆写 `shouldOverrideUrlLoading`，`target="_blank"` 的 GitHub Releases 链接被 WebView 自己吞掉。现覆写两个重载并统一委派给 `handleExternalNavigation`：站内回环（`127.0.0.1` / `localhost` / `::1` / `0.0.0.0`）、相对路径、`file://` 留在 WebView；其它 `http(s)` 与 `mailto:` 交系统 App；无可用 App 时静默吞掉并记日志，不崩、不把工作台替换成错误页。判定抽为零 Android 依赖纯函数 `WebUrlPolicy.shouldOpenExternally(url)`，`tests/test_android_webview_policy.py` 以 javac 直编直跑 25 条行为断言，另含静态守卫。**已修复，真机与模拟器均未点检**：外链是否真的唤起系统浏览器未验证。
+
+**已知限制（Known Limitations）**
+- **arm64 真机未覆盖**：本版仅完成 x86_64 模拟器（API 37）覆盖安装与 `versionCode` 检查，未启动点检；arm64-v8a 真机未安装、未启动、未点检。真机不是本版的发版前置，但不得把模拟器结果当作真机结论。
+- **低端机 OOM 未覆盖**：无低端机设备，内存峰值未测量；Android 存量文章惰性重算在低内存设备上的 OOM 风险无证据、无结论。
+- **iOS 键盘态未覆盖**：无 iOS 设备与 Safari 环境；软键盘弹起后的 `visualViewport`、选区手柄与桌宠避让行为均未验证。
+- **生词卡重复卡缺陷仍在**：`vocab_cards` 表无 UNIQUE 约束，写路径仍是裸 `INSERT`；读侧已对重复卡去重，但数据库里仍可能继续累积重复行。本版未做写入侧修复。
+- **大文章首次打开的重算可能阻塞**：`PROCESSED_JSON_VERSION` 3.6.0 的惰性重算在单篇 GET 内同步执行（未下放线程池），10 万字符上限级文章约 4–5s，期间该篇请求等待；其余文章不受影响。
+- **Android 外链与 `chrome://inspect` 未真机点检**：修复已落地并有静态/行为断言，但「是否真的唤起系统浏览器」「调试连接是否成功」均未在设备上验证。
+
+**回滚（Rollback）**
+- **代码 / 产物**：桌面可回退至 `v5.21.1` 发布包；Android `versionCode` 由 `52101` 升至 `52200`，只能卸载重装旧 APK（会清应用私有数据，须先备份）。
+- **数据位置 / 格式**：本版未搬移数据目录、未改变数据文件格式，回滚代码不影响既有学习资产。
+- **Schema / 处理结果**：仅新增 `processed_json_backup` 表，无删列或重命名，旧版可继续读取同一 SQLite 数据库；`PROCESSED_JSON_VERSION` 已推进到 3.6.0，回退代码后旧文章会再次按旧口径读取既有结果，必要时用 `python tools/recompute_processed.py --restore` 逐字恢复。
+- **配置 / 发布通道**：无新增必需配置；git 可 revert 本版提交，Android 版本计数不得复用或回拨。
 
 **v5.21.1（2026-11-03）**
 
@@ -90,7 +117,9 @@
 
 ---
 
-### 📖 自然段排版重塑 + CEFR 视力透视胶囊 + 句法抽屉实时联动同步与 CI 极限加速（v5.20.2）
+**v5.20.2（2026-11-01）**
+
+### 📖 自然段排版重塑 + CEFR 视力透视胶囊 + 句法抽屉实时联动同步与 CI 极限加速
 
 本版本为阅读体验与工程效能的重大质量提升与缺陷修复版本：
 - **阅读器连续段落排版重塑 (ADR-0026)**：正文 `<p>` 彻底移除块级 `<div class="sentence-topology-strip">` 预埋节点，根除 HTML5 强制闭合标签导致的德语长文逐句碎行缺陷，恢复自然连贯的段落排版阅读心流；五场域拓扑分析完全收敛至右侧抽屉。
@@ -108,7 +137,7 @@
 
 **v5.20.1（2026-11-01）**
 
-### 📱 Android 桌宠拖拽手势修复 + 句法默认显示清除 + CI Pytest Matrix 矩阵提速（v5.20.1）
+### 📱 Android 桌宠拖拽手势修复 + 句法默认显示清除 + CI Pytest Matrix 矩阵提速
 
 本版本为紧急缺陷修复与效能增强版本：
 - **Android 移动端桌宠手势修复**：全面补充 `touch-action: none`、`-webkit-touch-callout: none` 与 `window` 全局指针追踪，修复 Android 触屏上萌宠由于移动端系统手势抢占导致的无法拖拽移动缺陷；补充 350ms/400ms 延迟合成 click 屏蔽窗，防止拖拽释放误触选角面板。
