@@ -86,31 +86,78 @@ def test_style_css_imports_tokens_css():
     )
 
 
+# workbench 的 :root 只允许这 8 个独有语义；共享语义名（--paper/--ink/--rule/...）
+# MUST 由 tokens.css 提供。历史形态里 --accent 自引用成为 guaranteed-invalid（无 fallback
+# 的 var(--accent) 整条失效），--muted / --line 同名覆盖成与主应用不同的值 ——
+# 这份白名单就是防复发的机械闸。
+WORKBENCH_LOCAL_VARS = {
+    "--wb-good",
+    "--wb-good-soft",
+    "--wb-hard",
+    "--wb-hard-soft",
+    "--wb-again",
+    "--wb-again-soft",
+    "--wb-shadow",
+    "--wb-radius",
+}
+
+
 def test_workbench_html_imports_tokens_and_maps_editorial_vars():
     assert os.path.exists(WORKBENCH_HTML_PATH), "static/german/workbench.html 必须存在"
     content = open(WORKBENCH_HTML_PATH, encoding="utf-8").read()
 
-    # 1. 检查 tokens.css 引入（仍在 HTML 的 head 里 —— 引入关系不随样式抽取而动）
-    assert '<link rel="stylesheet" href="../css/tokens.css">' in content or re.search(
+    # 1. iframe 不继承父 :root，workbench 必须自己 link 共享 token 文件，且先于本地样式。
+    tokens_link = '<link rel="stylesheet" href="../css/tokens.css">'
+    assert tokens_link in content or re.search(
         r'<link\s+rel=["\']stylesheet["\']\s+href=["\']\.\./css/tokens\.css["\']', content
     ), "workbench.html 必须在 head 中引入 ../css/tokens.css"
+    assert content.index("<link") <= content.index(tokens_link) < content.index(WORKBENCH_CSS_LINK), (
+        "tokens.css 必须先于 workbench.css 加载：后者只留 --wb-* 独有语义与暗色重绑"
+    )
 
-    # 2. 检查 :root 映射（:root 是样式内容，已随抽取搬到 static/css/workbench.css）
+    # 2. :root 只许声明 --wb-*，不得再复刻共享语义名（含自引用 --accent）。
     css = _workbench_css()
     root_match = re.search(r":root\s*\{([^}]+)\}", css)
     assert root_match, "static/css/workbench.css 必须包含 :root 样式声明"
     root_block = root_match.group(1)
+    declared = set(re.findall(r"(--[\w-]+)\s*:", root_block))
+    assert declared == WORKBENCH_LOCAL_VARS, (
+        "workbench :root 只允许 workbench 独有语义 %s，实际声明 %s —— 共享 token 一律引用 "
+        "tokens.css，不得另立同名局部变量" % (sorted(WORKBENCH_LOCAL_VARS), sorted(declared))
+    )
 
-    assert "--bg: var(--paper" in root_block or "--bg:var(--paper" in root_block, "--bg 应映射到 var(--paper"
-    assert "--text: var(--ink" in root_block or "--text:var(--ink" in root_block, "--text 应映射到 var(--ink"
-    assert "--line: var(--rule" in root_block or "--line:var(--rule" in root_block, "--line 应映射到 var(--rule"
-    assert "--accent: var(--accent" in root_block or "--accent:var(--accent" in root_block, (
-        "--accent 应映射到 var(--accent"
+    # 3. workbench 独有语义必须绑定共享 token，而不是复制色值。
+    for name, source in (
+        ("--wb-good", "--moss"),
+        ("--wb-hard", "--mustard-ink"),
+        ("--wb-again", "--cherry"),
+        ("--wb-good-soft", "--note-green"),
+        ("--wb-hard-soft", "--note-yellow"),
+        ("--wb-again-soft", "--note-pink"),
+    ):
+        assert re.search(r"%s\s*:\s*var\(%s\)" % (name, source), root_block), (
+            "%s 必须映射到 var(%s)" % (name, source)
+        )
+
+
+def test_workbench_btn_press_and_focus_ring_match_main_app():
+    """按压与焦点环必须与主应用同口径（2e51233 已落地，此测试防回退）。"""
+    css = _workbench_css()
+    btn_match = re.search(r"(?<![.\w])\.btn\s*\{([^}]+)\}", css)
+    assert btn_match, "static/css/workbench.css 必须包含 .btn 规则"
+    assert "var(--motion-press" in btn_match.group(1), ".btn transition 必须使用 --motion-press"
+
+    active_match = re.search(r"(?<![.\w])\.btn:active\s*\{([^}]+)\}", css)
+    assert active_match, "workbench .btn 必须有 :active 按压反馈"
+    assert "transform:scale(.98)" in active_match.group(1).replace(" ", ""), (
+        "workbench .btn 按压必须与主应用一致为 scale(.98)"
     )
-    assert "--good: var(--moss" in root_block or "--good:var(--moss" in root_block, "--good 应映射到 var(--moss"
-    assert "--again: var(--cherry" in root_block or "--again:var(--cherry" in root_block, (
-        "--again 应映射到 var(--cherry"
-    )
+
+    focus_match = re.search(r"(?<![.\w])\.btn:focus-visible\s*\{([^}]+)\}", css)
+    assert focus_match, "workbench .btn 必须补 :focus-visible 焦点环"
+    focus_css = focus_match.group(1).replace(" ", "")
+    assert "outline:2pxsolidvar(--ink)" in focus_css, "焦点环必须是 2px solid --ink"
+    assert "outline-offset:2px" in focus_css, "焦点环 offset 必须是 2px"
 
 
 def test_workbench_scope_selector_modes():
@@ -199,15 +246,15 @@ def test_workbench_editorial_navigation_contract():
     h1_css = h1_match.group(1)
     assert re.search(r"font-family\s*:\s*var\(--serif", h1_css), "header.top h1 必须使用 var(--serif, ...)"
 
-    # 2. nav.tabs 不得使用旧版厚重卡片容器样式（border-radius:var(--radius) 或 box-shadow:var(--shadow)）
+    # 2. nav.tabs 不得使用旧版厚重卡片容器样式（--wb-radius / --wb-shadow）
     tabs_match = re.search(r"(?<![.\w])nav\.tabs\s*\{([^}]+)\}", css)
     assert tabs_match, "必须包含 nav.tabs 样式声明"
     tabs_css = tabs_match.group(1)
-    assert "border-radius:var(--radius)" not in tabs_css and "border-radius: var(--radius)" not in tabs_css, (
-        "nav.tabs 不得使用厚重卡片圆角 border-radius:var(--radius)"
+    assert "border-radius:var(--wb-radius)" not in tabs_css and "border-radius: var(--wb-radius)" not in tabs_css, (
+        "nav.tabs 不得使用厚重卡片圆角 border-radius:var(--wb-radius)"
     )
-    assert "box-shadow:var(--shadow)" not in tabs_css and "box-shadow: var(--shadow)" not in tabs_css, (
-        "nav.tabs 不得使用厚重投影 box-shadow:var(--shadow)"
+    assert "box-shadow:var(--wb-shadow)" not in tabs_css and "box-shadow: var(--wb-shadow)" not in tabs_css, (
+        "nav.tabs 不得使用厚重投影 box-shadow:var(--wb-shadow)"
     )
 
     # 3. nav.tabs button.active 必须用下划线 border-bottom 与 var(--accent)，不得用实心背景
@@ -231,15 +278,15 @@ def test_workbench_zettelkasten_card_and_stamp_buttons_contract():
     """
     css = _workbench_css()
 
-    # 1. .face background 必须使用 var(--panel)
+    # 1. .face background 必须使用共享 token var(--paper-card)
     face_match = re.search(r"(?<![.\w])\.face\s*\{([^}]+)\}", css)
     assert face_match, "static/css/workbench.css 必须包含 .face 样式规则"
     face_css = face_match.group(1)
     assert (
-        "background:var(--panel)" in face_css
-        or "background: var(--panel)" in face_css
-        or re.search(r"background\s*:\s*var\(--panel", face_css)
-    ), ".face 必须使用 background: var(--panel)"
+        "background:var(--paper-card)" in face_css
+        or "background: var(--paper-card)" in face_css
+        or re.search(r"background\s*:\s*var\(--paper-card", face_css)
+    ), ".face 必须使用 background: var(--paper-card)"
 
     # 2. .face .hw 必须使用 var(--serif
     hw_match = re.search(r"\.face\s+\.hw\s*\{([^}]+)\}", css)
@@ -255,20 +302,20 @@ def test_workbench_zettelkasten_card_and_stamp_buttons_contract():
         ".rate-btn 基础样式不得使用实心白字 color: #fff"
     )
 
-    # 4. .rate-btn[data-g="3"] 必须使用 var(--good-soft 且不得包含 color: #fff
+    # 4. .rate-btn[data-g="3"] 必须使用 var(--wb-good-soft 且不得包含 color: #fff
     btn3_match = re.search(r'\.rate-btn\[data-g=["\']3["\']\]\s*\{([^}]+)\}', css)
     assert btn3_match, "static/css/workbench.css 必须包含 .rate-btn[data-g='3'] 样式规则"
     btn3_css = btn3_match.group(1)
-    assert "var(--good-soft" in btn3_css, ".rate-btn[data-g='3'] 必须使用 var(--good-soft"
+    assert "var(--wb-good-soft" in btn3_css, ".rate-btn[data-g='3'] 必须使用 var(--wb-good-soft"
     assert "color:#fff" not in btn3_css and "color: #fff" not in btn3_css, (
         ".rate-btn[data-g='3'] 不得使用实心白字 color: #fff"
     )
 
-    # 5. .rate-btn[data-g="1"] 必须使用 var(--again-soft 且不得包含 color: #fff
+    # 5. .rate-btn[data-g="1"] 必须使用 var(--wb-again-soft 且不得包含 color: #fff
     btn1_match = re.search(r'\.rate-btn\[data-g=["\']1["\']\]\s*\{([^}]+)\}', css)
     assert btn1_match, "static/css/workbench.css 必须包含 .rate-btn[data-g='1'] 样式规则"
     btn1_css = btn1_match.group(1)
-    assert "var(--again-soft" in btn1_css, ".rate-btn[data-g='1'] 必须使用 var(--again-soft"
+    assert "var(--wb-again-soft" in btn1_css, ".rate-btn[data-g='1'] 必须使用 var(--wb-again-soft"
     assert "color:#fff" not in btn1_css and "color: #fff" not in btn1_css, (
         ".rate-btn[data-g='1'] 不得使用实心白字 color: #fff"
     )

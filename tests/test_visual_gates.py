@@ -142,13 +142,13 @@ def test_token_mirrors_agree_for_p1_pairs() -> None:
 
 
 def test_workbench_hard_token_is_text_safe() -> None:
-    """workbench iframe 不继承父 :root，--hard 必须自己解析到文字安全色。"""
+    """workbench iframe 不继承父 :root，--wb-hard 必须自己解析到文字安全色。"""
     core = (REPO_ROOT / "static" / "css" / "tokens.css").read_text(encoding="utf-8")
     workbench = (REPO_ROOT / "static" / "css" / "workbench.css").read_text(encoding="utf-8")
     tokens = visual_gates.parse_root_tokens(core)
     tokens.update(visual_gates.parse_root_tokens(workbench))
-    hard = visual_gates.resolve_token("--hard", tokens)
-    soft = visual_gates.resolve_token("--hard-soft", tokens)
+    hard = visual_gates.resolve_token("--wb-hard", tokens)
+    soft = visual_gates.resolve_token("--wb-hard-soft", tokens)
     assert hard == "#825c00"
     hard_rgb = visual_gates._parse_color(hard)
     soft_rgb = visual_gates._parse_color(soft)

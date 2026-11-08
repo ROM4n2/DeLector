@@ -541,3 +541,20 @@ Status: PR_OPEN —— P2 形态三点，commit `bad67b0`，PR #295（未合并�
 - 触摸目标：移动 `.btn` 36 / `.btn-xs` 26 视觉不变，命中区实测 49；`#drawer` tab 28→44、close 26→44。例外：writer 工具栏两行按钮重叠 1px，第一行命中区 42，补 44 需重排，留组件族轮次。
 - 矩阵：36/36；仅 03-drawer-393、15-drawer-360、26-reader-1280、27-drawer-1280 变化，其余落噪声；computed-style 12 控件全一致；闸门 581/118 PASS；pytest 41 passed；check_css_sync PASS。
 - 未做：材质/阴影/纹理另开一轮；未自动合并。临时 base worktree 已清理。
+
+### 2026-11-08 12:03 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+P3 workbench token 收口（独立 worktree `D:\Code\DeLector-workbench-p3`，分支 `feat/workbench-token-closeout`，基线 origin/master `6004b96`）。
+- 范围：盘 17 个 workbench 局部变量 → 共享 tokens.css 直用 + 8 个 `--wb-*` 独有语义；暗色块重绑同名共享 token；补按压/焦点环回归守卫。
+- 不做：不改 `src/css/`、主应用 `style.css` 组件规则、`android/`；不跑全量 pytest；不自动合并。
+
+### 2026-11-08 12:06 | deepseek-v4.1-flash__trae | WORK_END
+Status: PR_OPEN —— workbench iframe token 收口，commit `22d32a9`，PR #297（未合并）。
+- 根因（CDP 实测 iframe 内 computed token）：旧 `--accent: var(--accent, #c14a2b)` 自引用 → guaranteed-invalid，`--accent` 计算值为空，所有无 fallback 的 `var(--accent)` 整条失效（`.tabs active` 下划线 0px、`.progress > i` 透明、`.btn.ghost` 失去珊瑚色）；`--muted` 被同名覆盖成 `--pencil #5c554b`（主应用 `--muted #756e61`）；`--line` 同名覆盖成 `--rule #d8d0c2`（全局 `--line` 是 rgba 叠色）。
+- 落地：17 → 8 个局部变量；`--bg/--panel/--text/--accent-soft` → `--paper/--paper-card/--ink/--paper-tint`；`--card/--accent2` 0 引用删除；SRS 收敛 `--wb-good/--wb-hard/--wb-again(+soft)` 并映射 `--moss/--mustard-ink/--cherry/--note-*`；`--shadow/--radius` → `--wb-shadow/--wb-radius`。
+- 方案选定：workbench 独立 link 同一份 tokens.css（iframe 不继承父 :root，但这是同源独立消费者），拒绝父级注入（值二次复制、首帧闪烁、独立打开失效、主题桥接与 CSP 风险）。
+- 实测（改前→改后）：`--accent` ""→#c14a2b、`.tabs active` border 0→2px coral、`.progress > i` 透明→coral、`--muted` #5c554b→#756e61；`.face` 边框 #d8d0c2 不变、SRS 三档色值不变、暗色 body/face 实绘色完全一致。
+- 真机 headless（CDP 真实输入）：iframe 内 `.btn` focus-visible=true、outline 2px solid rgb(21,20,15)、offset 2px；按住时 `:active`=true、transform matrix(0.98,0,0,0.98,0,0)、transition 0.1s（`--motion-press`）。
+- 矩阵：36/36 改前/改后；computed-style 12 控件全一致；闸门 581/700、118/150、infinite 7、最低 4.63 全 PASS。噪声复跑确认 home/drawer/cards/search/encounter/settings/german 的内容差异来自随机词/相对时间；german 可解释差异 = accent 装饰恢复 + muted 对齐。
+- 定向测试：156 passed（workbench_tokens / visual_gates / german_workbench / frontend_guards / assets_manifest / static_cache_fingerprint / check_css_sync）。
+- 仅报告未改：`#fff` on-accent、`rgba(21,20,15,.05/.08)`（同值但属阴影语义）、`rgba(0,0,0,.06)`、`rgba(15,18,25,.45)`、`rgba(0,0,0,.25)`、`--wb-shadow` 冷色 rgba；workbench.html `--fg` 无定义（既有死引用）。
