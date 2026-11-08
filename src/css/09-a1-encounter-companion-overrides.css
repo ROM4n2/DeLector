@@ -2801,7 +2801,7 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   width: 100%;
-  border: 1.5px solid var(--ink);
+  border: 1px solid var(--muted);
   background: var(--paper-deep);
 }
 
@@ -2810,7 +2810,7 @@
   min-height: 44px;
   padding: 0.5rem 0.25rem;
   border: 0;
-  border-right: 1px solid var(--ink);
+  border-right: 1px solid var(--line);
   background: transparent;
   color: var(--ink);
   font-family: var(--mono);
@@ -2825,7 +2825,7 @@
 }
 
 .settings-reasoning-btn:hover {
-  background: rgba(21, 20, 15, 0.06);
+  background: var(--paper-tint);
 }
 
 .settings-reasoning-btn[aria-checked="true"] {
@@ -2861,17 +2861,32 @@
 .settings-reasoning-status {
   min-height: 1.1rem;
   margin-top: 0.2rem;
+  padding-left: 0.5rem;
+  border-left: 2px solid transparent;
   font-family: var(--mono);
   font-size: 0.6875rem;
   color: var(--pencil);
 }
 
+/* 状态不只用颜色：左侧竖线给出形状层，文字本身也带语义。 */
+.settings-reasoning-status[data-state="pending"] {
+  border-left-color: var(--pencil);
+}
+
 .settings-reasoning-status[data-state="ok"] {
-  color: #16a34a;
+  border-left-color: var(--moss);
+  color: var(--moss);
 }
 
 .settings-reasoning-status[data-state="error"] {
+  border-left-color: var(--accent);
   color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-reasoning-btn {
+    transition: none;
+  }
 }
 
 @media (max-width: 420px) {
@@ -2880,7 +2895,7 @@
   }
 
   .settings-reasoning-btn {
-    min-height: 42px;
+    min-height: 44px;
     font-size: 0.75rem;
   }
 }

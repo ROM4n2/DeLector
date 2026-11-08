@@ -653,3 +653,25 @@ Status: PR_OPEN —— P2 组件族第三轮（备考 exam），分支 feat/exam
 - 393/360 实测：横向溢出 0；页签在 353/320px 容器内单行不折、高 44px、距目录末行 16px，不与模块标题同行。
 - 矩阵（同源数据三跑 36/36）：signal 仅 exam 393/360/1280（3.9% / 4.0% / 3.5%）；cards/quiz/reader 全 0（前两族无回归）；drawer-1280 0.219% 与 german 三档均 ≤ 噪声（噪声 8.1% / 1.4% / 1.3% / 0.5%）；computed 基线 0 项更新（控件集未采样子节点，已用定向探针替代）。
 - reduced-motion 模拟：tab / card / ::before 过渡 1e-05s（全局 0.01ms + 本族显式 none）。
+
+### 2026-11-08 17:58 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+P2 组件族换肤第四轮：设置（settings）族。worktree D:\Code\DeLector-visual-p4，分支 feat/settings-skin，基线 origin/master `b9563e8`（#300 merge）。
+- 范围：08 设置段 1-199（模态容器/头部/分组/说明文字/preset chip/动作区）、09 设置 reasoning 分区（分段控件与状态行）、main.js 设置状态内联色改 data-state。
+- 不做：08 的 companion 段 200-943、writer 段 944+（写作族下一轮）、android/、visual_gates 阈值、IA 重排（只做视觉材质与状态表达）。
+- 已知边界：设置模态内无 on/off 开关、无危险操作区（“还原备份”在卡盒页），故“开关开/关、危险区”只按真实存在控件（折叠、分段、状态行、禁用态）落实非颜色状态。
+
+### 2026-11-08 17:58 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+状态审计（回应用户质疑）：上一轮报告后工作并未消失——改动一直以未提交形式落在 D:\Code\DeLector-visual-p4（HEAD b9563e8，分支 feat/settings-skin），`git status` 显示 M 08-settings-writer.css / 09-a1-encounter-companion-overrides.css / static/js/main.js / static/style.css。改后数值来自该 worktree 的 8782 服务（DELECTOR_DATA_DIR=data-after），不是别处副本。visual-before 为 b9563e8 detached 干净；8781/8782 各有一对 uvicorn 父/子进程，已在本轮收尾时杀掉。教训：后台矩阵启动后不得当作阶段完成，必须取回结果再收口。
+
+### 2026-11-08 17:58 | deepseek-v4.1-flash__trae | WORK_END
+Status: PR_OPEN —— P2 组件族第四轮（设置 settings），分支 feat/settings-skin。
+- 字面量：hex 528→519（−9 / 配额12）、唯一 rgba 108→108（删除 1 处 rgba(21,20,15,.06) 但该值他处仍存）；新增 hex/rgba = 0，全部新规则 token-only。infinite 7；闸内最低对比 4.63。
+- 材质/层级：模态头与动作区各加 1px --line；分组折叠行补 hover 底色 + 2px ink focus-visible；分段容器 1.5px ink → 1px --muted（对 paper-deep 3.75:1），内部分隔 1px --ink → --line；hover 由 rgba 改 --paper-tint；preset hover 蓝色三连改为 paper-tint/ink/accent。
+- 命中区（393 实测）：关闭 26×26→44×44（补 flex:0 0 auto 防挤压）、btn 36→44、密钥显隐 44×43→44×44、preset 20→44、分段 ≤420px 42→44、输入 43→44；360 同；横向溢出 0。
+- 状态非颜色通道：字段/反馈/推理状态行加 2px 左竖线 + data-state（warn=accent / ok=moss / pending=pencil），文字本身带语义；分段 aria-checked + 600 + 2px 珊瑚底线；禁用态 2px dashed pencil 外框 + 去 sticker 阴影 + not-allowed。main.js 三处内联 hex 改 data-state（#ca8a04 2.77→4.63、#16a34a 3.11→5.68、#dc2626→4.63）。
+- 审计：149 个 JS 切换类名 / 16 个零规则，本轮设置范围零命中；另发现静态 `.hint-text` 在设置内零规则（16px 正文压过 12px 说明），已补 `.settings-modal-box .hint-text`。
+- 矩阵（同源数据，清空音频缓存后重跑；36/36 × before3/after3）：settings 393 23.04% / 360 23.54% / 1280 7.97% 为唯一信号；cards 三档 0（首次 0.4% 系缓存 0→0.02MB 数据漂移，清缓存后归零）；drawer-393 7.9% 只在 before 首跑出现、before2 与 after 均为 0，判为首次运行态；drawer-1280 0.219% 为猫头鹰眨眼动画；german 三档为随机格言噪声。
+- computed 基线：仅 settings-input.height 43→44px（命中区提升），已 update 并复核 compare 12/12 一致；其余 11 控件 0 漂移。
+- 校验：build_css + check_css_sync PASS；visual_gates 519/108/7/4.63 全 PASS；check_frontend_api_contract PASS；check_silent_degradation 0 未豁免。
