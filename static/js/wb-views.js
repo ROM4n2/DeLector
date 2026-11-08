@@ -121,7 +121,7 @@ function renderStats() {
       letters26.map(L => {
         const v = hm[L] || { total: 0, learnt: 0, solid: 0 };
         if (v.total === 0) {
-          return '<div style="aspect-ratio:1.4/1;background:var(--line);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--muted)">' + L + '</div>';
+          return '<div style="aspect-ratio:1.4/1;background:var(--rule);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--muted)">' + L + '</div>';
         }
         const solidRatio = v.solid / v.total;
         const learntRatio = v.learnt / v.total;
@@ -141,9 +141,9 @@ function renderStats() {
       topEl.innerHTML = '<p style="color:var(--muted)">暂无难词数据（先复习出错几次）</p>';
     } else {
       topEl.innerHTML = top.map((o, i) => {
-        return '<div class="top-row" data-jump-id="' + esc(o.word.id) + '" style="padding:6px 8px;border:1px solid var(--line);border-radius:4px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;cursor:pointer">' +
+        return '<div class="top-row" data-jump-id="' + esc(o.word.id) + '" style="padding:6px 8px;border:1px solid var(--rule);border-radius:4px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;cursor:pointer">' +
           '<div><b style="font-size:12px">' + (i + 1) + '.</b> ' + esc(o.word.hw) + ' <span style="color:var(--muted);font-size:11px">' + esc(o.word.gloss || "") + '</span></div>' +
-          '<span style="background:var(--hard-soft);color:var(--hard);padding:2px 8px;border-radius:10px;font-size:11px">错 ' + o.hardCount + ' 次</span>' +
+          '<span style="background:var(--wb-hard-soft);color:var(--wb-hard);padding:2px 8px;border-radius:10px;font-size:11px">错 ' + o.hardCount + ' 次</span>' +
           '</div>';
       }).join("");
       topEl.querySelectorAll("[data-jump-id]").forEach(el => {
@@ -178,7 +178,7 @@ function renderStats() {
       for (let i = 0; i <= 4; i++) {
         const y = T + (ih * i) / 4;
         const val = (1 - i / 4).toFixed(2);
-        g += "<line x1='" + L + "' y1='" + y + "' x2='" + (W - R) + "' y2='" + y + "' stroke='var(--line)' stroke-width='1'/>" +
+        g += "<line x1='" + L + "' y1='" + y + "' x2='" + (W - R) + "' y2='" + y + "' stroke='var(--rule)' stroke-width='1'/>" +
           "<text x='" + (L - 4) + "' y='" + (y + 3) + "' text-anchor='end' font-size='9' fill='var(--muted)'>" + val + "</text>";
       }
       // X 轴标签
@@ -196,8 +196,8 @@ function renderStats() {
       g += "<path d='" + path + "' fill='none' stroke='var(--accent)' stroke-width='2'/>";
       // 目标 retention 横线
       const retY = T + ih * (1 - (S.settings.retention || 0.9));
-      g += "<line x1='" + L + "' y1='" + retY + "' x2='" + (W - R) + "' y2='" + retY + "' stroke='var(--hard)' stroke-width='1' stroke-dasharray='3,3'/>";
-      g += "<text x='" + (W - R) + "' y='" + (retY - 3) + "' text-anchor='end' font-size='9' fill='var(--hard)'>目标 " + (S.settings.retention || 0.9) + "</text>";
+      g += "<line x1='" + L + "' y1='" + retY + "' x2='" + (W - R) + "' y2='" + retY + "' stroke='var(--wb-hard)' stroke-width='1' stroke-dasharray='3,3'/>";
+      g += "<text x='" + (W - R) + "' y='" + (retY - 3) + "' text-anchor='end' font-size='9' fill='var(--wb-hard)'>目标 " + (S.settings.retention || 0.9) + "</text>";
       fcEl.innerHTML = "<svg viewBox='0 0 " + W + " " + H + "' style='width:100%;height:auto'>" + g + "</svg>";
     }
   }
@@ -318,7 +318,7 @@ async function renderSnapshots() {
     const dateStr = d.toLocaleDateString() + " " + d.toLocaleTimeString();
     const cardCount = Object.keys(s.cards || {}).length;
     const wordCount = (s.words || []).length;
-    return '<div style="padding:6px 8px;border:1px solid var(--line);border-radius:4px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center">' +
+    return '<div style="padding:6px 8px;border:1px solid var(--rule);border-radius:4px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center">' +
       '<div><div style="font-weight:600">' + dateStr + '</div>' +
       '<div style="color:var(--muted);font-size:11px">' + wordCount + ' 词 · ' + cardCount + ' 张卡片</div></div>' +
       '<div style="display:flex;gap:4px">' +

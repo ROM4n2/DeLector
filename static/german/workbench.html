@@ -160,7 +160,7 @@
     <h2>正确率趋势</h2>
     <div id="chartLineBox"></div>
     <div class="legend">
-      <span><i style="background:var(--good)"></i>复习认识率（认识 ÷ 总评价）</span>
+      <span><i style="background:var(--wb-good)"></i>复习认识率（认识 ÷ 总评价）</span>
       <span><i style="background:var(--accent)"></i>自测正确率</span>
     </div>
   </div>
@@ -168,9 +168,9 @@
     <h2>各字母掌握度</h2>
     <div id="letterBarsBox"></div>
     <div class="legend">
-      <span><i style="background:var(--good)"></i>稳固（S ≥ 21 天）</span>
-      <span><i style="background:var(--hard)"></i>学习中</span>
-      <span><i style="background:var(--line)"></i>未学</span>
+      <span><i style="background:var(--wb-good)"></i>稳固（S ≥ 21 天）</span>
+      <span><i style="background:var(--wb-hard)"></i>学习中</span>
+      <span><i style="background:var(--rule)"></i>未学</span>
     </div>
   </div>
 
@@ -328,8 +328,8 @@
         <button class="btn sm ghost" id="btnCopyDiag" style="display:none">复制结果</button>
       </div>
     </div>
-    <textarea id="ttsDiagOutput" readonly style="display:none;width:100%;min-height:160px;font-family:Consolas,monospace;font-size:11px;margin-top:8px;resize:vertical;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:8px"></textarea>
-    <details style="margin-top:12px;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--panel)">
+    <textarea id="ttsDiagOutput" readonly style="display:none;width:100%;min-height:160px;font-family:Consolas,monospace;font-size:11px;margin-top:8px;resize:vertical;background:var(--paper-card);color:var(--fg);border:1px solid var(--rule);border-radius:6px;padding:8px"></textarea>
+    <details style="margin-top:12px;padding:8px;border:1px solid var(--rule);border-radius:6px;background:var(--paper-card)">
       <summary style="cursor:pointer;font-weight:600">如何用 http:// 协议打开（解决 TTS 无声音）</summary>
       <div style="margin-top:10px;font-size:13px;line-height:1.7">
         <p style="margin:0 0 8px">Android 11+ 强制用 <code>content://</code> 协议打开本地文件，浏览器在此协议下禁用了 TTS API。需要切换到 <code>http://</code> 协议：</p>
@@ -1397,7 +1397,7 @@ function quizFinish() {
     listBox.innerHTML = "<h3 style='font-size:14px;margin-bottom:8px'>错题（" + quiz.wrong.length + "）</h2>" +
       quiz.wrong.map(id => {
         const w = wordById(id); if (!w) return "";
-        return "<div style='padding:6px 0;border-bottom:1px dashed var(--line)'>" +
+        return "<div style='padding:6px 0;border-bottom:1px dashed var(--rule)'>" +
           "<b style='font-family:var(--serif, \"Playfair Display\", Georgia, serif)'>" + esc(w.hw) + "</b>" +
           (w.ipa ? " <span class='hint'>" + esc(w.ipa) + "</span>" : "") +
           " — " + esc(w.gloss) + "</div>";
