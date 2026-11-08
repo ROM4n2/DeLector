@@ -138,7 +138,7 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
 
 ## 4. 视觉 Token 全量体系
 
-> **现行（2026-10-16 同步）**：下表逐值取自 `static/css/tokens.css`（`static/style.css` 的 `:root` 与之重复定义、值一致）。**改 token 请改 `tokens.css`**，本表随之更新。
+> **现行（2026-11-08 换皮收口）**：token 的唯一可编辑源是 `src/css/01-tokens-base.css`，构建后进入 `static/style.css`；`static/css/tokens.css` 是 workbench 的独立消费者，必须与前者保持**同名同值镜像**。主应用 `static/index.html` 只加载 `style.css`，workbench iframe 只加载 `tokens.css`，因此**新增 token 必须在两处 `:root` 同时定义**。下表是同步视图，数值以这两个文件为准。
 
 ```css
 :root {
@@ -262,6 +262,133 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
 > - `--paper-warm`（旧注释值）：`#ECE4CF` → `#f7f4ec`
 > - `--shadow-hard`：`3px 3px 0 rgba(21, 20, 15, 0.15)` → `3px 3px 0 var(--ink)`
 > - 排印栈 `--serif-display` / `--sans` / `--mono`：见 §5
+
+### 4.1 Token 分层与双份镜像
+
+规则体只认语义层，值层只放色值，兼容层只做旧名映射。
+
+```text
+值层（只放原始色值，暗色主题只重绑这一层）
+  --color-coral-700 / --color-mustard-400 / --color-gray-500 …
+        ↓
+语义层（规则体唯一允许直接引用的层）
+  --coral / --mustard / --muted / --paper / --ink / --line …
+        ↓
+兼容层（旧规则改名过渡，不新增视觉含义）
+  --accent-color / --bg-secondary / --border-color / --text-color / --forest / --font-*
+```
+
+- **值层**：`--color-*` 只出现一次定义，规则体不得直接引用。暗色主题只改值层，语义层不动。
+- **语义层**：规则体使用 `var(--coral)`、`var(--muted)` 这类语义名；`--mustard` 仅装饰，任何文字色用 `--mustard-ink`。
+- **兼容层**：`--accent-color: var(--accent)` 等旧名映射，只为存量规则不炸；新规则不得新增兼容别名。
+
+**双份镜像（硬约束）**
+
+| 入口 | 加载的 CSS | 必须包含 |
+|---|---|---|
+| `static/index.html`（主应用） | `/style.css`（由 `src/css/*` 构建） | `src/css/01-tokens-base.css` 的 `:root` |
+| `static/german/workbench.html`（iframe） | `../css/tokens.css` | `static/css/tokens.css` 的 `:root` |
+
+- 两处 `:root` 必须**同名同值**；只改一处会让另一侧 `var()` 无值，且不报错。
+- 新增 token 的标准动作：先改 `src/css/01-tokens-base.css`，同步 `static/css/tokens.css`，再跑 `tools/build_css.py` + `tools/check_css_sync.py`。
+- workbench 侧禁止再引入局部同名变量（历史上 `--accent: var(--accent, …)` 自引用导致整条声明失效且不报错，见 `WORKMEMORY/work.log` 2026-11-08 11:56）。
+
+### 4.2 状态不得只靠颜色
+
+**判定标准**：把颜色全部去掉（灰度截图或 forced-colors）后，状态仍必须能靠以下**至少一个**通道区分：
+
+1. **形状**：方角 / 圆角、左侧竖轨、填充 vs 描边；
+2. **边框**：实线 / 虚线 / 点线 / 双线、粗细变化；
+3. **线型**：`text-decoration-style`（solid / dashed / dotted / wavy）；
+4. **字重**：400 → 600/700/800；
+5. **图标**：`✓ / ✗ / ! / ↺` 等可读字形或 inline SVG。
+
+若只能靠色相区分，判不合格；若颜色是唯一载体但文字本身已带语义（如「已保存」），颜色可降为冗余。
+
+五族已落地的正例：
+
+| 状态 | 选择器 / 位置 | 颜色之外的通道 |
+|---|---|---|
+| 选中词元 | `#reader-content .tok.sel`（`03-reader.css`） | 反白 + **2px 纸色下划线**（offset 3px） |
+| 入口页签激活 | `.exam-panel-tab.active`（`06-deck-exam.css`） | **2px 珊瑚底线 + 700 字重** |
+| 分段页签激活 | `.cards-seg-btn.active`（`06-deck-exam.css`） | **填充 vs 描边**（ink 底 / 纸字） |
+| 已收录 | `#save-vocab-btn.is-saved`（`04-drawer-wordcard.css`） | **2px outline + 2px offset + ✓ + 700** |
+| 掌握态 | `.memo-card.is-mastered` / `.card-master-btn.mastered-active`（`06-deck-exam.css`） | **3px 苔绿左轨 + 文案变「↺ 重返待复习」+ moss 填充** |
+| 选项正误 | `.quiz-choice-btn.is-correct` / `.is-wrong`（`07-progress-quiz.css`） | **✓ / ✗ 图标 + 700 + 1px 语义边框** |
+| 写作错误四类 | `.err-kasus` / `.err-praeposition` / `.err-andere` / 默认（`08-settings-writer.css`） | **虚线 / 点线 / 波浪 / 实线** 四种下划线线型 |
+| 设置状态行 | `[data-state]`（`09-...css`） | **2px 左竖线 + 状态文字**（warn / ok / error / pending） |
+| 设置禁用态 | 设置模态 `:disabled` | **2px dashed pencil 外框 + 去 sticker 阴影 + not-allowed** |
+
+验收时必须按「作用层」分别写：选中态、hover 态、禁用态各自有不同载体，不能用一个总规则代替。
+
+### 4.3 命中区标准
+
+1. **下限 44×44px**；孤立主操作可到 48×48，但窄屏不得低于 44。
+2. 视觉尺寸不足时，用**绝对定位伪元素**外扩，不改 padding / 行高 / 字号：
+
+```css
+.hit-target { position: relative; }
+.hit-target::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
+}
+```
+
+3. **相邻命中矩形 MUST NOT 重叠**。伪元素的盒子不参与布局，不会自动把相邻行推开；必须同时检查伪元素高度与行距：
+   - 反例（写作族实测）：48px 伪元素 + 6px 行距 → 第一行有效命中被下一行盖掉 6px，只剩 **42px**，且两行重叠 6px。
+   - 修正：伪元素收到 **44px**，行距加到 **8px**，两行命中矩形**相切**，第一行有效命中回到 44px。
+4. 验收用 `elementFromPoint` 在目标中心 ±22px 的 8 个点逐点验证；伪元素盒子用 `getComputedStyle(el, "::after")` 读宽高，不能只看主元素 `getBoundingClientRect()`。
+5. 滚动容器会裁掉外扩的 `focus-visible` 环：容器内改用 `outline-offset: -2px` 内缩，不要改容器结构。
+
+### 4.4 字面量预算与闸门口径
+
+`tools/visual_gates.py` 从当前 CSS 现算，阈值是产品约定，不是目标值：
+
+| 项 | 口径 | 预算 | 当前 `00b6e58` |
+|---|---|---|---|
+| hex 字面量 | **`:root` 规则体外**；注释先剥离，token 定义内的 hex 不计 | ≤ 700 | **505** |
+| 唯一 rgba/rgb | 全文去重后的唯一值个数 | ≤ 150 | **99** |
+| `infinite` 循环动画 | `static/**/*.css` 中 `animation*: … infinite` | == 7（白名单） | **7** |
+| 对比度 | 语义颜色对；正文 ≥ 4.5，大字/图形 ≥ 3.0 | 全 PASS | **最低 4.63** |
+| `--mustard` 文字承载 | `var(--mustard)` 不得出现在文字色属性 | == 0 | **0** |
+
+- 达到预算 90% 时打印逼近告警，不阻断；新增字面量应优先 token 化。
+- **各族实际消耗**（P2 合计 hex −61 / rgba −16）：
+
+| 族 | hex | rgba |
+|---|---|---|
+| 阅读器 + 词卡 | 566 → 550（−16） | 115 → 109（−6） |
+| 卡盒 + 闪卡 | 550 → 528（−22） | 109 → 108（−1） |
+| 备考 | 528 → 528（0） | 108 → 108（0） |
+| 设置 | 528 → 519（−9） | 108 → 108（0） |
+| 写作 | 519 → 505（−14） | 108 → 99（−9） |
+
+- 五族各自的 hex/rgba 配额以 `WORKMEMORY/work.log` 对应 WORK_START 为准；P2 总配额曾从 48/14 上调到 60/14，硬顶 700/150 与既有阈值始终未动。
+
+### 4.5 动效分层与本族禁用项
+
+完整 token、原语、降级策略见 [ADR-0030](adr/2026-11-07-adr-0030-frontend-motion-system.md)，本节只给分层与禁用清单。
+
+| 层 | 用途 | 时长/位移 | 允许的族 |
+|---|---|---|---|
+| L0 静态 | 阅读面、写作正文、考试题干/选项 | 零动画、零位移 | reader / writer / exam |
+| L1 一次性入场 | 视图首次渲染、卡片网格、搜索结果分组 | ≤ 260ms，`translateY(≤4px)`，stagger 40ms、cap 6 | home / cards / exam 目录 / search |
+| L2 反馈 | 按压、hover | 按压 100–150ms，hover 80–180ms；`scale(.95–1.0)` | 全站 |
+| L3 计数 | 统计数字首现 | 520ms（唯一超过 260ms 的例外） | progress |
+| L4 循环白名单 | 光标、眨眼、待机 ×2、marquee ×2、音频忙碌 | `infinite` 共 7 处，全部有 reduce 降级 | 仅白名单位置 |
+
+**全族禁用**：
+- 禁止 `width / height / top / left / margin` 动画（触发布局）。
+- 禁止第 8 处 `infinite`；新增循环必须先改 ADR-0030 白名单。
+- 阅读面（reader 词元、writer 编辑器正文、exam 题干/选项）禁止入场、位移、缩放、呼吸。
+- 承载文字的元素 hover 不得位移（`translateX/Y`）；反馈改由颜色 / 阴影 / 边框承担。
+- 所有 `:hover` 规则包进 `@media (hover: hover) and (pointer: fine)`，避免触屏粘住。
+- `prefers-reduced-motion: reduce` 下所有动画/过渡压到 0.01ms、`iteration-count: 1`、`scroll-behavior: auto`；`.dl-enter` / `.dl-stagger > *` 显式 `animation: none`。
 
 ---
 
@@ -630,7 +757,9 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
 
 ### 8.1 优雅进场动效 (`[data-reveal]` Protocol)
 
-> **历史稿（v3.0 · 2026-08，未实现）**：`[data-reveal]` / `--reveal-delay` / `data-revealed` 在本仓 `static/` **grep 零命中**，`static/js/` 亦无 `IntersectionObserver` 用例。本协议未落地，仅作设计蓝图（§8.2 里引用的 `.marquee-track` 则**已实现**，见 `static/style.css:4478`）。
+> **历史稿（v3.0 · 2026-08，未实现）**：`[data-reveal]` / `--reveal-delay` / `data-revealed` 在本仓 `static/` **grep 零命中**，`static/js/` 亦无 `IntersectionObserver` 用例。本协议未落地，仅作设计蓝图（§8.2 里引用的 `.marquee-track` 则**已实现**）。
+>
+> **现行实现（2026-11）**：一次性入场走 ADR-0030 的 `.dl-enter` / `.dl-stagger` / `.dl-count` + `static/js/motion.js`，禁止新代码使用本节 900ms / 28px 的旧数值。分层与禁用项见 §4.5。
 
 使用 `artifact4.html` 标准的 `IntersectionObserver` 进场驱动：
 ```css
@@ -660,6 +789,9 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
 ```
 
 ### 8.2 减动效用户保护 (Prefers-Reduced-Motion)
+
+> **历史稿（v3.0 · 2026-08）**：下面的 `[data-reveal]` 规则未落地。现行全局 reduce 兜底在 `static/style.css`：所有动画/过渡压到 `0.01ms`、`animation-iteration-count: 1`、`scroll-behavior: auto`，并对 `.dl-enter` / `.dl-stagger > *` 显式 `animation: none`。数值与降级策略以 ADR-0030 §2.7 为准。
+
 ```css
 @media (prefers-reduced-motion: reduce) {
   [data-reveal] {
@@ -673,9 +805,10 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
 ```
 
 ### 8.3 移动端与触控增强 (Touch Targets & Dock Threshold)
-1. **44px × 44px 黄金触控区**：所有移动端按键、查词高亮词块、发音控制按钮点击区域不得小于 `44px`。
-2. **1024px 宽幅底部常驻导航 Dock**：
-   在屏幕宽度 `<= 1024px` 时，顶部导航栏自动收起，切换为底部拇指操作的极简 Dock，包含 `[ 📖 精读 | 🎴 卡片 | 📊 台账 | ✍️ 完形 ]` 四大核心入口。
+
+1. **命中区下限 44×44px**：所有移动端按键、查词高亮词块、发音控制按钮的命中区不得小于 44px；孤立主操作可到 48px，窄屏不得低于 44。视觉尺寸不是判据，验收用 `elementFromPoint` 与伪元素 computed box。
+2. **伪元素外扩不得与相邻行重叠**：48px 伪元素 + 6px 行距会把第一行有效命中压到 42px 并产生 6px 重叠；写作族已改为 44px 伪元素 + 8px 行距（相切、0 重叠）。完整判定见 §4.3。
+3. **1024px 宽幅底部常驻导航 Dock**：屏幕宽度 `<= 1024px` 时顶部导航栏收起，切换为底部拇指操作的极简 Dock，包含 `[ 精读 | 卡片 | 台账 | 完形 ]` 四大核心入口。
 
 ---
 
@@ -704,4 +837,4 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
 
 ---
 
-*本规范由 DeLector 前端架构与 UI/UX 委员会统一制定并维护，作为全站组件迭代与视觉重塑的设计纲要。**Token 与排印数值的唯一真实数据源 (Single Source of Truth) 是 `static/css/tokens.css`**——本文件 §4/§5 是其同步视图，数值以该文件为准。*
+*本规范由 DeLector 前端架构与 UI/UX 委员会统一制定并维护，作为全站组件迭代与视觉重塑的设计纲要。**Token 与排印数值的可编辑源是 `src/css/01-tokens-base.css`，并与 `static/css/tokens.css` 双份镜像**——本文件 §4/§5 是同步视图，数值以这两个文件为准；两处 `:root` 不同步时，以构建后的 `static/style.css` 主应用侧为准并立即修镜像。*
