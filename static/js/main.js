@@ -110,6 +110,7 @@ import {
   playA1Audio,
   setA1CardViewMode,
   setExamVocabLevel,
+  showUndoToast,
 } from "./cards.js";
 import {
   switchFolioPage,
@@ -1281,6 +1282,9 @@ Object.assign(window, {
   clearAudioCache,
   downloadBackupJson,
   uploadBackupJson,
+  // companion.js 的 SVG 导入/设置反馈以 `if (window.showUndoToast)` 守卫调用；
+  // 此前该全局从未挂载 ⇒ 6 处提示恒静默。这里复用 cards.js 的唯一实现，不另写第二份。
+  showUndoToast,
 
   // Präpositionen-Matrix（卡盒第四段的行内 onclick / oninput）
   filterPrepCase,
