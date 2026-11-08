@@ -702,3 +702,19 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 老账范围：`.has-hint` 可见非颜色状态、`.companion-resume-notice` 恢复提示样式、workbench.html `--fg` 死引用、on-accent `#fff` 与挂账 rgba、暗色未重绑 token、cards.js `🎴` 注释残留。
 - 约束：六族已收口规则不动；闸门 hex/rgba 只降不升、infinite=7、对比 ≥4.63；不碰 android/ 与 visual_gates 阈值。
 - 并行线：同仓另有文档线在写 docs/知识库，work.log 若撞车两边事件都保留。
+
+### 2026-11-08 19:52 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+#302 → master `00b6e58666a0263aaffe5772a9f4747ecd03903f`（merge commit）。master push run `42472574386` 首跑被 #303 新 push 以并发优先级取消（Windows Portable Smoke cancelled），rerun `--failed` 后 **14/14 success**：0 failure / 0 cancelled / 0 skipped（含 Windows Portable Smoke、Master Direct-Push Scope Gate）。
+老账（分支 fix/legacy-debt，PR #304，不自动合并）：
+- `.cloze-input.has-hint`：dashed 2px 底线 + 135° 斜纹底（rgba(21,20,15,.08)），computed：solid/none → dashed/repeating-linear-gradient；截图 _artifacts/legacy-debt/legacy-light.png。
+- `.companion-resume-notice`：3px `--amber` 左线 + `↺` 图标 + `--note-yellow` 底 + 12.48px（正文 14.72px）；图标对比 3.06，正文 7.2。
+- workbench.html `--fg` → `--ink`：改前 `--fg` 计算值空、color 回退继承 rgb(21,20,15)；改后命中 `--ink #15140f`。
+- 新增 `--wb-on-accent`（亮 #fff / 暗 #241512）：暗色按钮对比 2.99 → 5.90；六处阴影 rgba 收进 `--elevation-*`/`--wb-shadow`，modal 遮罩保留并记账。
+- 暗色重绑 `--line-soft`=rgba(237,231,218,.14)、`--shadow-tint-1..4`=纯黑；header/progress 实测同值，face/panel 阴影 rgba(0,0,0,.35)。
+- 删 cards.js 两处 `🎴` 注释（可见标题 `3D 扑克翻牌盒 · POKER FLIP STACK` 未依赖字形）。
+- 去重复 var() fallback（sans/serif/mono/paper-tint/paper-card/line-soft/motion-press/serif-text）、内联 Consolas→`--mono`、`#b8860b/#ccc/rgba(0,0,0,.06)`→令牌。
+P3：iframe 边界维持现状（父级 --paper 改 rgb(1,2,3) 后 iframe 仍 #faf8f5；iframe 自带 tokens.css；主 JS 零 contentDocument 引用），结论写入 docs/agents/visual-regression.md；#297 残留 10 项已修，例外 5 项入文档清单（modal 遮罩、暗色纯黑影、console 颜色、PWA 品牌色、写作族 08 的 3 处 rgba）。
+校验：build_css + check_css_sync + index_html_sync PASS；visual_gates 505/99/7/4.63 持平；相关 pytest PASS。
+PR #304 CI `42473484282`：13 success / 0 failure / 0 cancelled / 1 skipped（Scope Gate 按设计跳过）；Windows Portable Smoke success。
+收尾：本轮起在 8000 的服务已停；未新建临时 worktree。
