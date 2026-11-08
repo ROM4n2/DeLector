@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-11-08T02:37:25.938Z",
+  "capturedAt": "2026-11-08T04:35:41.407Z",
   "controls": {
     "article-row": {
       "error": null,
@@ -325,12 +325,12 @@
       "label": "阅读器选中词元",
       "properties": {
         "animation-name": "none",
-        "background-color": "rgba(217, 119, 28, 0.12)",
-        "border-radius": "2px",
-        "border-top-color": "rgb(21, 20, 15)",
+        "background-color": "rgb(21, 20, 15)",
+        "border-radius": "3px",
+        "border-top-color": "rgb(250, 248, 245)",
         "border-top-width": "0px",
         "box-shadow": "rgb(21, 20, 15) 0px 0px 0px 2px",
-        "color": "rgb(21, 20, 15)",
+        "color": "rgb(250, 248, 245)",
         "display": "inline",
         "font-family": "Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
         "font-size": "18px",
@@ -351,5 +351,5 @@
     }
   },
   "schema": 1,
-  "url": "http://127.0.0.1:8765"
+  "url": "http://127.0.0.1:8782"
 }

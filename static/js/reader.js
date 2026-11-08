@@ -422,7 +422,9 @@ export function inspect(tokenId, sentId) {
   document.getElementById("d-def").value = "";
   document.getElementById("d-def-status").textContent = "词库查询中…";
   document.getElementById("d-sent").textContent = sent.text;
-  document.getElementById("save-vocab-btn").textContent = "+ 加入 Anki 词汇卡";
+  const saveBtn = document.getElementById("save-vocab-btn");
+  saveBtn.textContent = "+ 加入 Anki 词汇卡";
+  saveBtn.classList.remove("is-saved");
   document.getElementById("grammar-result").classList.add("hidden");
 
   const drawer = document.getElementById("drawer");
@@ -841,6 +843,7 @@ export async function saveVocab() {
   if (btn) {
     btn.disabled = true;
     btn.textContent = "保存中…";
+    btn.classList.remove("is-saved");
   }
   const def =
     document.getElementById("d-def")?.value.trim() ||
@@ -861,6 +864,7 @@ export async function saveVocab() {
     if (btn) {
       btn.textContent = "已保存";
       btn.disabled = false;
+      btn.classList.add("is-saved");
     }
     refreshCardCounters();
     Companion.celebrate("card_vocab");
