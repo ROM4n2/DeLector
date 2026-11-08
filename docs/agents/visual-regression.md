@@ -188,6 +188,26 @@ python tools/visual_gates.py --json   # 机器读
 
 告警**不阻断**闸门（`ok` 仍为 `true`），但测试 `test_literal_caps_are_hard_ceilings_with_headroom` 要求实测低于该阈值。选 90% 而不是 95%，是为了在还来得及改 token 时给出一轮完整 PR 的提前量；等到 95% 才提示，剩余空间已不够一次组件族改动。
 
+## 3.3 P2 形态三点（材质另开一轮）
+
+本轮只动三处形态，不重排布局、不改字号，也不把材质一起塞进来。桌面 1280 与移动 393 / 360 分别实测（CDP，非 CSS 声明值）：
+
+| 点 | 改前 | 改后 | 作用面 |
+| --- | --- | --- | --- |
+| 阅读器限宽 @1280 | `#view-reader` clientWidth **760**，正文列 **708** | **700** / **648** | 仅 `#view-reader` 与 `--reader-content-width`（含抽屉打开时的 mobile 兜底） |
+| 抽屉 header padding | 16 / 20 / 12 / 20 | 16 / 24 / 12 / 24 | 仅抽屉第一层 |
+| 抽屉 body padding / gap | 20 / 24 / 80 / 24，gap 20 | 16 / 24 / 80 / 24，gap 16 | 同上 |
+| 抽屉 actions gap | 6 | 8 | 同上 |
+| 抽屉 companion chat | 16 / 20 / 16 / 20，gap 13.6 | 16 / 24 / 16 / 24，gap 12 | 同上 |
+| 移动端抽屉 header | 5.6 / 13.6 / 8 / 13.6 | 4 / 12 / 8 / 12 | 同上 |
+| 触摸目标（移动） | `.btn` 36、`.btn-xs` 26、抽屉 tab 28、close 26 | 命中区 **≥44（实测 49）**；tab / close 实高 **44** | `.btn` 族只放大命中区、不改盒模型；tab / close 仅限 `#drawer` |
+
+触摸目标用 `document.elementFromPoint` 沿按钮中心向上下探测，取命中该按钮的连续像素高度；`.btn` 的视觉高度仍是 36 / 30 / 26，避免为触摸基线重排移动端。抽屉 tab 在 `overflow:auto` 容器里，外扩会被裁掉，只能实高 44。`.drawer-close` 被设置 / 导入 / 润色 / 填空等多个 modal 复用，本轮用 `#drawer` 限定，未顺手撑高其它 modal。
+
+**唯一例外**：writer 工具栏两行按钮在 393 / 360 下有 1px 物理重叠，第一行按钮向下最多只能扩到 **42px**；要补到 44 必须重排该工具栏，超出本轮「不重排」约束，留待组件族轮次处理。
+
+P2 验证记录：36/36 张截图对基线，只有 `03-drawer-393`、`15-drawer-360`、`26-reader-1280`、`27-drawer-1280` 发生变化；其余差异全部落在既有噪声区（german / encounter / cards@360 / 底栏小指示）内。computed-style 基线 12 个控件完全一致，说明没有动到闸内控件。
+
 ## 4. 一次失败怎么判
 
 1. **先看 `summary.json`**：是场景没进入（`failures`）还是控件没找到（`missingControls`）。这类红是脚本/选择器问题，不是视觉回归。

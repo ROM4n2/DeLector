@@ -462,7 +462,7 @@ a {
 
 /* 尺寸第三档。必须重置 min-height —— .btn 的 36px 是 .btn-sm 唯一没盖住的
    属性，所以 index.html:95-97,610,678 才不得不各写一遍 inline style。
-   26px 而非 24px：留出 WCAG 2.5.5 的最小可点高度余量。 */
+   26px 是桌面 pointer:fine 的密度档；触摸视口由 09 末尾的 44px 规则覆盖。 */
 .btn-xs {
   min-height: 26px !important;
 

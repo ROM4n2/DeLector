@@ -526,3 +526,10 @@ P1 PR #294 追加「抬高字面量硬顶」提交（未转任何现有字面量
 - 余量预分：P2 组件族 ≤48/14、P3 收口 ≤24/8、T3–T9 动效阴影 ≤12/6、并行合并机动 ≤35/4。
 - 逼近告警：达预算 90%（hex 630 / rgba 135）打印 `[WARN] ... 新增字面量应优先改成 token`，不阻断；选 90% 是为了留一轮 PR 的改 token 提前量。
 - 验证：`visual_gates.py` 全 PASS（581/118）；pytest 41 passed；Ruff / Mypy strict 全绿；文档新增 §3.2 记录理由与实测。
+
+### 2026-11-08 11:36 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+P2 形态三点（独立 worktree `D:\Code\DeLector-visual-p2`，分支 `feat/form-p2`，基线 origin/master `da48c38`）。
+- 范围：阅读器限宽 760→700；抽屉第一层间距归 4/8/12/16/24；触摸目标 ≥44px。
+- 不做：材质/阴影/纹理另开一轮；不重排三处之外布局；不改字号；不自动合并。
+- 方法：CDP 实测改前 → 改 CSS 分片 → build_css → 改后实测 → 36 张矩阵对基线 + 噪声复跑 → 开 PR 报里程碑。

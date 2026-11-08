@@ -2029,7 +2029,7 @@
 
   /* 移动端更紧凑的抽屉头部与标签横向平滑滚动 */
   .drawer-header {
-    padding: 0.35rem 0.85rem 0.5rem !important;
+    padding: 0.25rem 0.75rem 0.5rem !important;
   }
 
   .drawer-tabs {
@@ -2039,7 +2039,7 @@
   }
 
   .drawer-tab-btn {
-    padding: 6px 9px !important;
+    padding: 8px !important;
     font-size: 0.72rem !important;
   }
 
@@ -2065,7 +2065,7 @@
      底部 sheet 不占横向空间，这里复位两个自定义属性即可（699 行那条规则随之恢复全宽）。 */
   body.drawer-open {
     --reader-usable-width: 100vw;
-    --reader-content-width: min(760px, 100vw);
+    --reader-content-width: min(700px, 100vw);
   }
 
   /* 3D Poker Card on Mobile */
