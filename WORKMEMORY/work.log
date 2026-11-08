@@ -465,3 +465,19 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 顺序结论：零差异拆分可先于 P0；@layer/顺序调整/组件迁移必须 P0 之后；JS 纯逻辑迁移可与 P0 并行，DOM 重切等 P0。
 - 下一步动作：build_css/check_css_sync 单源跑通 sha256 → 8 段拆分 → P0 基线 → 加 layer → 分视图迁内联事件(show/ShadowPlayer/setExamModule 先) → 修双写者与死守卫。
 - 边界：未改任何实现文件；仍无 [A] 运行时截图取证。
+### 2026-11-08 09:05 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：static/style.css 零差异拆分（P0 视觉基建前置）+ 源码/产物同步闸 + window.showUndoToast 死守卫修复；顺手补齐 CI packaging 触发面。
+不做：换皮/加 @layer/合并选择器/去重/删 !important；不碰 android/ 与 docs/adr；不跑全量 pytest；不开自动合并。
+分支：feat/css-zero-diff-split，基于 origin/master a7f1b40（#291 已入）；style.css 冲突只在末尾追加分区，不重排既有内容。
+
+### 2026-11-08 09:13 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+- 拆分：static/style.css 13,560 行 → src/css/ 9 片（tokens/base、home/views、reader、drawer/wordcard、cards/player、deck/exam、progress/quiz、settings/writer、a1/encounter/overrides），纯行切片，零规则改动。
+- 构建/闸：tools/build_css.py（固定清单顺序、逐字节拼接、未登记/缺失分片直接失败）+ tools/check_css_sync.py（原始字节比对 + unified diff），接入 ci.yml unit-2 与 ci_shards/ci_shard_weights。
+- 哈希证据：拆分后重建 sha256=5d4261009b947d0a2c0d7b7f1f5e5305908c934a9c024eeeccd3beea3e88508f，与 origin/master 基线一致；git diff static/style.css 为空（硬哈希验收，不靠截图）。
+- 缺陷：companion.js 7 处 `if (window.showUndoToast)` 守卫从未命中（真实现只在 cards.js 导出，未挂 window）。选「补真实现」：main.js window bridge 登记 cards.js 唯一实现；理由=这些是真实用户反馈（非法/超限 SVG、解析失败、导入成功、发声开关、设置保存），删守卫等于主动砍反馈，另写实现则重复。
+- packaging：ci.yml 过滤清单补 static/**、android/**、tools/sync_android_sources.py、delector/core/assets_manifest.py，并同步 test_ci_hardening_workflow_wiring.py 的 PACKAGING_SURFACE_PATHS；命中时才多跑一台 windows runner（完整 PyInstaller 构建+真启验包，job 上限 30min），未命中零开销。
+- 验证：定向 pytest 84 passed（check_css_sync/check_index_html_sync/ci_governance/ci_wiring/source_hygiene/frontend_module_graph/frontend_guards）；ruff + mypy --strict 新文件全绿；build_css --check 与 check_css_sync 均 PASS。
+- 提交：ad29712（CSS 拆分+同步闸）/ 8fb44ee（packaging 触发面）/ 0fa1aa8（showUndoToast），分支未推送、PR 未开（按用户规则等确认后推送）。
+- 边界：无 @layer、无视觉/布局改动、无截图；android/ 与 docs/adr 未碰；全量 pytest 未跑（按约束只跑定向）。
