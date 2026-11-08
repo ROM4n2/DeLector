@@ -498,3 +498,7 @@ P0 视觉回归基建完成（本地跑通，未接 CI）。
 - 已知欠账（P0 只报告不阻断）：muted/paper 3.49、ink-faint/paper 3.43、coral/paper 2.82、white/coral 2.99、mustard/paper 1.72，P1 换皮必须清零后移入闸门。
 - 回写检查：稳定结论已写入 `docs/agents/visual-regression.md` 并从 AGENTS.md 路由；截图、当前导出、server.log 均不入库；未改样式/页面/CI。
 - 待办：推送分支并开 PR（不自动合并）。
+
+### 2026-11-08 10:02 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+P0 视觉回归基建已提交并开 PR：commit `05e2c0e`（feat/visual-regression-p0，基线 origin/master a7f1b40），PR #293 https://github.com/ROM4n2/DeLector/pull/293（OPEN，未合并）。worktree `D:\Code\DeLector-visual-p0` 保留供后续 P1 复用。
