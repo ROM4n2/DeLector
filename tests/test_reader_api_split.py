@@ -60,6 +60,7 @@ EXPECTED_ENDPOINTS = frozenset({
     "saveVocabCard",
     "saveGrammarCard",
     "fetchCardCounts",
+    "fetchVocabLedger",
     "fetchArticleNotes",
     "saveArticleNote",
     "removeNote",
@@ -329,11 +330,11 @@ def test_rd_api_does_not_reference_reader_js() -> None:
     )
 
 
-# ══ 3/4. 导出面：恰好 14 个，且零死导出 ═════════════════════════════════════
+# ══ 3/4. 导出面：恰好 15 个，且零死导出 ═════════════════════════════════════
 
 
 def test_rd_api_export_surface_is_exactly_the_endpoints() -> None:
-    """导出面必须严格等于 14 个端点函数 —— 以**运行时**为准。
+    """导出面必须严格等于 15 个端点函数 —— 以**运行时**为准。
 
     回归背景：Task 3 首版产出 28 个导出（14 个真函数 + 14 个零引用的
     `*Remote` 别名）。三轮对抗评审又连着证明：任何**静态**导出面解析都会漏掉
