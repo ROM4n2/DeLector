@@ -14,7 +14,9 @@
 from pathlib import Path
 from urllib.parse import quote
 
-from server_helpers import ROOT, clean_db as clean_db, test_db_path as test_db_path
+from server_helpers import ROOT
+from server_helpers import clean_db as clean_db
+from server_helpers import test_db_path as test_db_path
 
 from delector.core.database import db_conn
 
@@ -119,8 +121,20 @@ def test_ledger_counts_duplicates_but_returns_one_row(client):
 def test_ledger_dedupe_is_deterministic_across_insertion_order(client):
     """同一组卡换插入顺序，代表卡逐字段一致（证明不看扫描顺序）。"""
     cards = [
-        dict(due_date="2026-11-12", interval_days=4, repetition_count=3, correct_count=3, created_at="2026-11-08 09:00:00"),
-        dict(due_date="2026-10-01", interval_days=2, repetition_count=1, correct_count=9, created_at="2026-10-01 09:00:00"),
+        dict(
+            due_date="2026-11-12",
+            interval_days=4,
+            repetition_count=3,
+            correct_count=3,
+            created_at="2026-11-08 09:00:00",
+        ),
+        dict(
+            due_date="2026-10-01",
+            interval_days=2,
+            repetition_count=1,
+            correct_count=9,
+            created_at="2026-10-01 09:00:00",
+        ),
         dict(due_date=None, interval_days=1, repetition_count=0, created_at="2026-11-07 09:00:00"),
     ]
     for card in cards:
@@ -168,7 +182,13 @@ def test_ledger_mastered_participates_as_signal(client):
 def test_ledger_older_mastered_does_not_beat_recent_review(client):
     """更早的「已掌握」不会盖过更近的复习：状态词取最近动作那张。"""
     _insert_card(mastered=1, mastered_at="2026-09-01T10:00:00", created_at="2026-09-01 10:00:00")
-    _insert_card(due_date="2026-11-12", interval_days=4, correct_count=2, wrong_count=1, created_at="2026-11-01 08:00:00")
+    _insert_card(
+        due_date="2026-11-12",
+        interval_days=4,
+        correct_count=2,
+        wrong_count=1,
+        created_at="2026-11-01 08:00:00",
+    )
     data = _ledger(client)
     assert data["card"]["mastered"] is False
     assert data["card"]["due_date"] == "2026-11-12"
