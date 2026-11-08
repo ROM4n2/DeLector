@@ -592,3 +592,14 @@ tok.sel 选中样式被静默覆盖：05-cards-player.css 的 .tok.reading-activ
 ### 2026-11-08 12:52 | deepseek-v4.1-flash__trae | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 上条 WORK_END 已落地：commit 3517201，PR #298（base feat/material-p3，未合并）；#296 合入后改基 master 即可。
+
+
+### 2026-11-08 13:07 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+Status: DONE —— 组件族 P2（阅读器 + 词卡抽屉）PR #298 已合并 master，最终 master `16a00fd`。
+- 改基：feat/reader-wordcard-skin rebase 到 origin/master `a012aeb`（含 #296/#297），无 merge commit；唯一冲突在 work.log，双方事件全保留。
+- rebase 后复验：build_css + check_css_sync PASS；闸门 hex 550 / rgba 109 / infinite 7 / 最低对比 4.63，与改基前一致未被旧值污染；pytest 视觉+前端守卫 127 passed。
+- 矩阵改前/改后各 36/36（同源数据）：信号组仅 02/14/26-reader 与 03/15/27-drawer 可解释；同代码两次噪声基线 29/36 有差异且幅度更大 ⇒ 其余为噪声；computed 基线仅 tok-selected 4 项。
+- CI（PR #298）：13 job 全 pass，1 job（Master Direct-Push Scope Gate）按设计 skipped；mergeable=CLEAN 后 merge commit。
+- CI（master `16a00fd` push）：13 job 全 success（含 Windows Portable Smoke）。
+- 临时 base worktree `D:\Code\DeLector-visual-before` 已清理；`D:\Code\DeLector-visual-p4` 保留待回收。
