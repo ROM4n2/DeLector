@@ -4175,6 +4175,9 @@ body.drawer-open .shadow-player {
 
 .exam-module-card.active .exam-module-index {
   color: var(--accent);
+  /* 序号也加字重：激活态此前只有「变珊瑚 + 标签 700 + 左条」，
+     序号本身仍与未选中同形；补一道非颜色差，避免色弱下只剩标签重量。 */
+  font-weight: 700;
 }
 
 .exam-module-card.active .exam-module-label {
@@ -4182,16 +4185,70 @@ body.drawer-open .shadow-player {
 }
 
 /* 计数走等宽 12px：独立第三列右对齐，与标题同行（不再被 Grid 顶到标题上方）。
-   语义暂为纯数字：单位需后端目录返回 unit 字段，见调研文档的挂账项。 */
+   语义为「数字 + 后端单位」：unit 由 catalog 单源给出（题/套/词）。
+   非颜色通道：mono 字体 + 600 字重 + 左侧发丝账线 + 等宽数字对齐；
+   颜色只做冗余，不承担唯一区分。 */
 .exam-module-count {
   display: inline-block;
   justify-self: end;
   white-space: nowrap;
+  padding-left: 0.625rem;
+  border-left: 1px solid var(--line);
   font-family: var(--mono);
   font-size: 0.75rem;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
   color: var(--ink-faint);
+}
+
+/* 模块内入口页签（写作专项 Teil 1 / Teil 2）。
+   既有缺口：.exam-panel-tab 全仓零规则，浏览器默认按钮 + .active 不可见
+   —— 与 .exam-module-card.active 当初「main.js 在切类、CSS 没写规则」同型。
+   沿用目录的编辑式语言：2px 底线 + 字重承担选中态，token-only，不加阴影/卡框。 */
+.exam-panel-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1.25rem;
+  margin: 1rem 0 1.25rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.exam-panel-tab {
+  min-height: 44px;
+  margin-bottom: -1px;
+  padding: 0.55rem 0;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  font-family: var(--serif);
+  font-size: 0.9375rem;
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease-editorial),
+    border-color var(--dur-fast) var(--ease-editorial);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .exam-panel-tab:hover {
+    color: var(--ink);
+  }
+}
+
+.exam-panel-tab.active {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exam-panel-tab {
+    transition: none;
+  }
 }
 
 /* 窄屏：容器水平内边距 20px（393/360 内容宽 353/320px）。
