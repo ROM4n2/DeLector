@@ -17,7 +17,7 @@
 
   border-left: 2px solid var(--ink);
 
-  box-shadow: -8px 0 36px rgba(26, 23, 20, 0.16);
+  box-shadow: var(--elevation-drawer);
 
   display: flex;
 
@@ -325,7 +325,7 @@ body.drawer-resizing #drawer {
 
   padding: 1.25rem;
 
-  box-shadow: 3px 3px 0 rgba(26, 23, 20, 0.1);
+  box-shadow: var(--sticker-3) var(--shadow-tint-1);
 }
 
 .sticky-word-headline {
@@ -554,7 +554,7 @@ body.drawer-resizing #drawer {
 
   padding: 1.25rem;
 
-  box-shadow: 3px 3px 0 rgba(26, 23, 20, 0.1);
+  box-shadow: var(--sticker-3) var(--shadow-tint-1);
 
   display: flex;
 

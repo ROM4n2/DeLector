@@ -23,7 +23,7 @@
   background: var(--paper, #fff);
   border-radius: 8px;
   padding: 1.5rem;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--elevation-3);
 }
 
 .settings-section-title {
@@ -209,7 +209,7 @@
   position: relative;
   background: var(--paper-card, #ffffff);
   border: 1.5px solid var(--ink, #1a1a1a);
-  box-shadow: 3px 3px 0 var(--ink, #1a1a1a);
+  box-shadow: var(--sticker-3) var(--ink);
   padding: 0;
   overflow: hidden;
 }
@@ -251,7 +251,7 @@
   position: relative;
   background: var(--paper, #faf8f5);
   border: 1.5px solid var(--ink, #1a1a1a);
-  box-shadow: 2px 2px 0 var(--ink, #1a1a1a);
+  box-shadow: var(--sticker-2) var(--ink);
   padding: 0.75rem 1rem;
   border-radius: 4px;
   margin-bottom: 1rem;
@@ -337,7 +337,7 @@
 .mascot-choice-btn {
   background: var(--paper, #faf8f5);
   border: 1.5px solid var(--ink, #1a1a1a);
-  box-shadow: 2px 2px 0 var(--ink, #1a1a1a);
+  box-shadow: var(--sticker-2) var(--ink);
   padding: 0.45rem 0.85rem;
   font-family: var(--font-sans, -apple-system, sans-serif);
   font-size: 0.8125rem;
@@ -358,7 +358,7 @@
   background: var(--ink, #1a1a1a);
   color: #ffffff;
   transform: translate(1px, 1px);
-  box-shadow: 1px 1px 0 var(--ink, #1a1a1a);
+  box-shadow: var(--sticker-1) var(--ink);
 }
 
 .mascot-upload-btn {
@@ -546,7 +546,7 @@
   border-radius: 50%;
   background: var(--paper, #faf8f5);
   border: 1.5px solid var(--ink, #1a1a1a);
-  box-shadow: 2px 2px 0 var(--ink, #1a1a1a);
+  box-shadow: var(--sticker-2) var(--ink);
   align-items: center;
   justify-content: center;
   font-size: 1.25rem;
@@ -569,7 +569,7 @@
   max-width: 280px;
   background: var(--paper, #faf8f5);
   border: 1.5px solid var(--ink, #1a1a1a);
-  box-shadow: 3px 3px 0 var(--ink, #1a1a1a);
+  box-shadow: var(--sticker-3) var(--ink);
   padding: 0.65rem 0.9rem;
   border-radius: 4px;
   pointer-events: none;
@@ -660,7 +660,7 @@
   width: 250px;
   background: var(--paper, #faf8f5);
   border: 1.5px solid var(--ink, #1a1a1a);
-  box-shadow: 4px 4px 0 var(--ink, #1a1a1a);
+  box-shadow: var(--sticker-4) var(--ink);
   padding: 0.85rem;
   border-radius: 4px;
   pointer-events: auto;
@@ -715,7 +715,7 @@
 
 .panel-char-btn.active {
   background: var(--ink, #1a1a1a);
-  box-shadow: 1px 1px 0 var(--ink, #1a1a1a);
+  box-shadow: var(--sticker-1) var(--ink);
 }
 
 /* 角色按钮注入的是与浮球/舞台同一套 .companion-svg（模板默认 width/height:100%）。

@@ -101,10 +101,60 @@
   --mono: "IBM Plex Mono", "JetBrains Mono", Consolas, monospace;
   --hand: "Caveat", "Patrick Hand", cursive;
 
-  /* Shadows */
+  /* Shadows（旧三档保留给 static/js 内联样式与历史文档；新规则只用下方阶梯） */
   --shadow-sm: 0 2px 4px rgba(21, 20, 15, 0.06);
   --shadow-card: 0 14px 28px -12px rgba(21, 20, 15, 0.12);
   --shadow-hard: 3px 3px 0 var(--ink);
+
+  /* ── P3 Material ladder（材质轮）：阴影只认这一套有名字的层级 ──
+     值层只放阴影色，暗色主题重绑这一层；规则体不写阴影 rgba/hex。
+       tint-1 贴面接触（0.08）：内嵌条、小方块静息
+       tint-2 轻抬升（0.12）：可点卡片静息
+       tint-3 明显抬升（0.16）：抽屉 / 底部弹层 / 浮层
+       tint-4 深色浮层（0.35）：选中工具条、模态上的深色块
+     层级命名：
+       elevation-1..4    方向无关的抬升（x=0）
+       elevation-drawer  右侧抽屉（负 x）
+       elevation-sheet   底部弹层（负 y）
+       ring-*            1–2px 边环，不占布局
+       sticker-*         硬偏移阶梯（无模糊），颜色由使用处给语义色 */
+  --shadow-tint-1: rgba(21, 20, 15, 0.08);
+  --shadow-tint-2: rgba(21, 20, 15, 0.12);
+  --shadow-tint-3: rgba(21, 20, 15, 0.16);
+  --shadow-tint-4: rgba(21, 20, 15, 0.35);
+
+  --elevation-1: 0 2px 4px var(--shadow-tint-1);
+  --elevation-2: 0 4px 12px var(--shadow-tint-3);
+  --elevation-3: 0 10px 30px var(--shadow-tint-3);
+  --elevation-4: 0 8px 24px var(--shadow-tint-4);
+  --elevation-drawer: -8px 0 36px var(--shadow-tint-3);
+  --elevation-sheet: 0 -8px 24px var(--shadow-tint-3);
+  --elevation-sheet-quiet: 0 -2px 10px var(--shadow-tint-1);
+  /* 语义例外：琥珀提示、蓝色悬浮勾边；不并入中性阶梯 */
+  --elevation-amber: 0 2px 6px rgba(245, 158, 11, 0.25);
+  --elevation-accent: 0 2px 8px rgba(41, 128, 185, 0.12);
+
+  --ring-ink: 0 0 0 2px var(--ink);
+  --ring-inset-track: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  --ring-amber: 0 0 0 1px #f59e0b;
+  /* 阅读器联动词高亮：环 + 同色柔影，两色各自成对 */
+  --ring-linked: 0 0 0 2px #3b82f6, 0 2px 6px rgba(59, 130, 246, 0.35);
+  --ring-clause: 0 0 0 2px #f97316, 0 2px 6px rgba(249, 115, 22, 0.3);
+
+  /* 硬偏移阶梯：只给偏移量，颜色由规则体决定（var(--sticker-2) var(--ink)） */
+  --sticker-1: 1px 1px 0;
+  --sticker-2: 2px 2px 0;
+  --sticker-3: 3px 3px 0;
+  --sticker-4: 4px 4px 0;
+  --sticker-6: 6px 6px 0;
+  --sticker-8: 8px 8px 0;
+  /* 便签卡的非对称「手摆纸片」偏移 */
+  --sticker-card: 3px 4px 0;
+  --sticker-card-hover: 5px 6px 0;
+
+  /* 纸边：卡片顶沿的 1px 受光边，模拟纸页厚度；不占布局、不改文字对比。
+     暗色插槽重绑为低透明度白色或 none。 */
+  --ring-paper-lip: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 
   /* Motion */
   --ease-editorial: cubic-bezier(0.22, 1, 0.36, 1);
