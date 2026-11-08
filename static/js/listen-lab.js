@@ -182,7 +182,7 @@ function _ensureStyle() {
 .listen-badge.A2 { background:var(--hl-A2); color:var(--hl-A2-ink); }
 .listen-mat-title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .listen-mat-src { font-size:0.6875rem; color:var(--ink-faint); font-family:var(--mono); white-space:nowrap; }
-.listen-empty { font-size:0.8125rem; color:var(--pencil); padding:0.5rem 0; }
+.listen-empty { font-size:0.8125rem; color:var(--pencil); padding:0.5rem 0 0.5rem 0.75rem; border-left:3px solid var(--line); }
 .listen-player-group { display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap; }
 .listen-btn { min-height:44px; padding:0.5rem 0.85rem; border:1.5px solid var(--ink); border-radius:6px; background:var(--paper-card); color:var(--ink); font-family:var(--mono); font-size:0.75rem; cursor:pointer; }
 .listen-btn-dark { background:var(--ink); color:var(--paper); }

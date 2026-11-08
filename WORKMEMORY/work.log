@@ -625,3 +625,31 @@ Status: PR_OPEN —— P2 组件族第二轮（卡盒 + 闪卡），分支 feat/
 ### 2026-11-08 16:56 | deepseek-v4.1-flash__trae | PITFALL
 Caps: filesystem-read, filesystem-write, shell-exec
 内联 onclick 取不到 ES module 作用域：cards.js 渲染 onclick="submitChoice(...)"，但 main.js 只把同函数以 window.selectChoiceOption 暴露，点击抛 ReferenceError，正误反馈样式从未生效且无报错。这是「代码看着在、其实没接线」的第二例（前一例 window.showUndoToast）。排查手段：CDP 里 typeof window.<handler> + 真实 click 后看 class 是否落地。修复：改用桥名并就地注释；check_frontend_api_contract.py / check_silent_degradation.py 只扫 py，不覆盖此入口。
+
+### 2026-11-08 17:24 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+#299 已按 merge commit 合并（base master，未 squash），最终 master `c2d1422`；master push run 42466000302 逐 job 全 success，含 Windows Portable Smoke 真跑与 Master Direct-Push Scope Gate 真跑，无 failure / cancelled / skipped。无簿记直推需求。
+
+### 2026-11-08 17:24 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+P2 组件族换肤第三轮：备考（exam）族。worktree D:\Code\DeLector-visual-p4，分支 feat/exam-skin，基线 origin/master `c2d1422`。
+- 范围：06-deck-exam.css exam 区（七模块单列目录 / 激活态 / 计数）、模块内入口页签 `.exam-panel-tab`（原零规则）、模块内空态 `.listen-empty` / `.hs-empty`。
+- 不做：05/07 的 cards 与 quiz、08 设置/写作、android/、visual_gates 阈值、07 写作面板内容区、审计出的 16 个存量零规则类。
+- 预算调整：本族 ≤12 hex / ≤4 rgba；P2 总配额上限 48/14 → 60/14。理由：前两族共用 −38 hex / −7 rgba，按原口径只剩 10/7；本族以补缺失规则为主、预期字面量增量为 0，上调只放宽总上限，硬顶 700/150 与既有闸门阈值不动。
+
+### 2026-11-08 17:24 | deepseek-v4.1-flash__trae | PITFALL
+Caps: filesystem-read, filesystem-write, shell-exec
+「JS 在切、CSS 零规则」同病根第 4 次复发（exam-module-card.active → .tok.sel 同特异性被压 → submitChoice 死绑定 → .exam-panel-tab 零规则）。可复用识别法（纯静态，不必跑起来）：
+1) 列切换点：rg "classList\.(add|remove|toggle|contains)\(\s*['\"]([\w-]+)" static/js
+2) 查规则命中：对每个类名在「CSS 源全集」= src/css + static/css + HTML 内联 <style> + JS 内联 <style> 里搜 (^|[^\w-])\.类名([^\w-]|$)；命中 0 即候选。
+3) 三桶判定：A 纯 hook（只被 querySelector/contains 读取，无视觉意图）；B 视觉由内联 style 或同节点 co-class / 子节点承担（必须指名承担者）；C 真缺样式（类名存在但界面无任何区别）。
+本轮结果：149 个被切类名中 16 个零规则；本轮范围类名零命中（唯一 `.exam-panel-tab` 已补）。C 桶 2 个：`.has-hint`（cloze 首字母提示无任何视觉标记）、`.companion-resume-notice`（断点恢复提示与正文同形）；留作下一轮，本轮不修。
+
+### 2026-11-08 17:24 | deepseek-v4.1-flash__trae | WORK_END
+Status: PR_OPEN —— P2 组件族第三轮（备考 exam），分支 feat/exam-skin。
+- 字面量：hex 528→528（+0 / 配额12）、唯一 rgba 108→108（+0 / 配额4）；P2 累计 −38 hex / −7 rgba；infinite 7；闸内最低对比 4.63 不变。
+- 改动：激活态序号补 700；计数加 1px 账线 + tabular-nums；新增 `.exam-panel-tabs` / `.exam-panel-tab`（token-only，44px 命中区、2px 珊瑚底线 + 700）；`.listen-empty` / `.hs-empty` 加 3px 左线。
+- 实测 1280：页签高 24→44px；计数宽 34.6→45.6px；对比 计数 4.98 / 页签 idle 4.76 / active 17.40 / 底线 5.26 / 空态 6.94。
+- 393/360 实测：横向溢出 0；页签在 353/320px 容器内单行不折、高 44px、距目录末行 16px，不与模块标题同行。
+- 矩阵（同源数据三跑 36/36）：signal 仅 exam 393/360/1280（3.9% / 4.0% / 3.5%）；cards/quiz/reader 全 0（前两族无回归）；drawer-1280 0.219% 与 german 三档均 ≤ 噪声（噪声 8.1% / 1.4% / 1.3% / 0.5%）；computed 基线 0 项更新（控件集未采样子节点，已用定向探针替代）。
+- reduced-motion 模拟：tab / card / ::before 过渡 1e-05s（全局 0.01ms + 本族显式 none）。

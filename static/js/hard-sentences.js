@@ -149,7 +149,7 @@ function _ensureStyle() {
 .hs-material-card { display:flex; align-items:center; gap:0.5rem; min-height:44px; padding:0.55rem 0.85rem; border:1.5px solid var(--rule); border-radius:8px; background:var(--paper-card); font-size:0.9375rem; cursor:pointer; text-align:left; max-width:100%; }
 .hs-material-card.active { border-color:var(--coral); background:var(--paper-warm); box-shadow:var(--shadow-sm); }
 .hs-mat-title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
-.hs-empty { font-size:0.8125rem; color:var(--pencil); padding:0.5rem 0; }
+.hs-empty { font-size:0.8125rem; color:var(--pencil); padding:0.5rem 0 0.5rem 0.75rem; border-left:3px solid var(--line); }
 .hs-btn { min-height:44px; padding:0.5rem 0.85rem; border:1.5px solid var(--ink); border-radius:6px; background:var(--paper-card); color:var(--ink); font-family:var(--mono); font-size:0.75rem; cursor:pointer; }
 .hs-btn-dark { background:var(--ink); color:var(--paper); }
 .hs-btn-main { background:var(--coral); border-color:var(--coral); color:#fff; }
