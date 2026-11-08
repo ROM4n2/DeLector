@@ -285,6 +285,13 @@ jobs:
           # 「打包面」路径清单：命中任一 ⇒ 点亮下面的 Windows 冒烟 job。这份清单即「闸的触发面」，
           # MUST 与 build-release.yml 的 Windows 构建面保持同源（tests/test_ci_hardening_workflow_wiring.py 逐项
           # 钉死，防清单漂移导致"闸永不触发"——本仓有过"正则永不命中"的教训）。
+          # 2026-11-08 补齐四类真实打包输入（此前漏掉 ⇒ 只改 MainActivity/sw.js 的 PR 被判 packaging=false，
+          # 冒烟静默跳过，靠手动 dispatch 补跑）：
+          #   android/**                     = build-release 的 build-android 打包面
+          #   static/**                      = Windows/Android 产物都内嵌的前端资产（JS/CSS/HTML）
+          #   tools/sync_android_sources.py  = Android 打包前把 static + delector 同步进 assets 的唯一入口
+          #   delector/core/assets_manifest.py = 打包期重算/注入 asset-fingerprint 的模块，坏在这里产物才炸
+          # 边界：delector/** 的其余部分由 ubuntu 单测矩阵覆盖，不整目录纳入，避免每次 PR 都点烧 windows runner。
           filters: |
             packaging:
               - 'package_windows.py'
@@ -292,6 +299,10 @@ jobs:
               - 'start.py'
               - 'requirements.txt'
               - 'requirements-desktop.txt'
+              - 'static/**'
+              - 'android/**'
+              - 'tools/sync_android_sources.py'
+              - 'delector/core/assets_manifest.py'
               - 'tools/verify_windows_portable.py'
               - '.github/workflows/build-release.yml'
               # 改闸自己的定义也要重跑闸 —— 否则「接线被改坏」这件事只能等下次真正的打包面变更才暴露
