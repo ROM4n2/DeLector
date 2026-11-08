@@ -695,3 +695,10 @@ Status: PR_OPEN —— P2 组件族第五轮（写作 writer，最后一族）�
 - 校验：build_css + check_css_sync PASS；visual_gates 505/99/7/4.63 全 PASS；reduced-motion 下新元素 1e-05s、无动画。
 - PR #302 已开（base master，不自动合并）；PR CI 13 pass / 0 failure / 0 cancelled / 1 skipped（Master Direct-Push Scope Gate 按设计在 PR 上 skipping）。
 - 收尾：8781–8785 服务已停；临时 worktree D:\Code\DeLector-visual-before 已移除。
+
+### 2026-11-08 18:55 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+#302 已 merge（master `00b6e58`，merge commit，未 squash）。本分支 fix/legacy-debt 从该 master 起，worktree D:\Code\DeLector-visual-p4（起分支前确认干净）。
+- 老账范围：`.has-hint` 可见非颜色状态、`.companion-resume-notice` 恢复提示样式、workbench.html `--fg` 死引用、on-accent `#fff` 与挂账 rgba、暗色未重绑 token、cards.js `🎴` 注释残留。
+- 约束：六族已收口规则不动；闸门 hex/rgba 只降不升、infinite=7、对比 ≥4.63；不碰 android/ 与 visual_gates 阈值。
+- 并行线：同仓另有文档线在写 docs/知识库，work.log 若撞车两边事件都保留。

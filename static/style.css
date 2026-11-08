@@ -6538,6 +6538,17 @@ body.drawer-open .shadow-player {
   box-shadow: 0 2px 0 var(--accent);
 }
 
+/* 「首字母提示已填入」状态：虚线底线 + 斜纹底（形状通道，不依赖颜色）。
+   与 .cloze-hint-badge 的虚线小签成对，扫读即可分辨哪些空格是系统补的。 */
+.cloze-input.has-hint {
+  border-bottom-style: dashed;
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 5px,
+    var(--line-soft) 5px 6px
+  );
+}
+
 .cloze-input.is-correct {
   background: #eafaf1;
   color: var(--moss);
@@ -12677,6 +12688,25 @@ body.drawer-open .companion {
   font-style: italic;
   background: var(--paper-tint, #f2ece1);
   border-radius: 0 4px 4px 0;
+}
+
+/* 断点恢复提示：贴在正文末尾，左侧竖线 + ↺ 图标层 + 便签底，
+   与普通段落区分（非纯颜色：边框形状与图标）。 */
+.companion-resume-notice {
+  margin-top: 0.7rem;
+  padding: 0.4rem 0.7rem;
+  border-left: 3px solid var(--amber);
+  background: var(--note-yellow);
+  color: var(--ink-mute);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.companion-resume-notice::before {
+  content: "↺";
+  margin-right: 0.35rem;
+  font-weight: 700;
+  color: var(--amber);
 }
 
 /* ── Companion Thought Accordion (1A: Claude 无框极简微墨线流) ────────── */

@@ -315,7 +315,7 @@ export function renderDeckStage(vList, gList) {
         <!-- 3D Flipping Card Container -->
         <div class="deck-active-card ${cardState.deck.flipped ? "is-flipped" : ""}" id="deck-active-card">
 
-          <!-- 🎴 FRONT FACE (正面) -->
+          <!-- FRONT FACE (正面) -->
           <div class="deck-card-face card-front">
             <div class="deck-card-head">
               <div>
@@ -349,7 +349,7 @@ export function renderDeckStage(vList, gList) {
             </div>
           </div>
 
-          <!-- 🎴 BACK FACE (背面 180° 旋转) -->
+          <!-- BACK FACE (背面 180° 旋转) -->
           <div class="deck-card-face card-back">
             <div class="deck-card-head">
               <div>
