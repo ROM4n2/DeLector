@@ -14,6 +14,7 @@
 | **三、界面重构与布局探索** | 移动端 393px 触控断点适配、设置页 IA 分段、备考单列目录 | `*-exam-*.md` · `*-player-tray-*.md` · `*-settings-ia-*.md` · `*-writer-mobile-*.md` |
 | **四、视觉换皮与设计系统** | 全仓 CSS 现状量化、横向对标 M3/HIG/Fluent2、复习状态设计 | `*-full-site-visual-reskin-research.md` · `*-wordcard-review-state-research.md` |
 | **五、随附研究原型与代码模板** | 不接入构建链的独立静态对比原型、动效辅助函数脚手架 | `*.html` · `*.css` · `*.js` |
+| **六、启动性能与本地服务架构** | 冷启动指标口径、WebView 预热、sidecar 就绪握手、Web 首屏指标在本地 HTTP 场景的可迁移性 | `*-first-screen-startup-*.md` |
 
 ---
 
@@ -70,3 +71,10 @@
   - 独立静态 HTML 页面，并排展示「原版彩色 Emoji」、「纯删 Emoji」与「克制编辑排版」效果。
 - `2026-11-07-motion-templates.css` / `2026-11-07-motion-templates.js`
   - 原型期验证通过的动效 CSS 类（fade-up / enter / stagger）与 JavaScript 错峰控制辅助函数。
+
+---
+
+## 六、 启动性能与本地服务架构（Startup Performance & Local-Service Architecture）
+
+- [2026-11-09 首屏启动业界实践调研](2026-11-09-first-screen-startup-industry-research.md)
+  - **核心价值**：按「Android 原生 → 混合外壳 → Web 首屏 → 可迁移性」四层核对一手来源（Android 启动指标 / Splash / `startUpWebView`、Electron / Tauri / VS Code、NN/g、web-vitals / Lighthouse / MDN）。给出 4.0s 端到端的分段归因：**2.3s 是「壳等 Python sidecar」，不是 Web 首屏**；可并行余量仅约 0.55s 轮询对齐 + WebView 预热，1.2s 重依赖 import 是进程内结构性成本。结论：业界顺序是「先削串行，再诚实遮盖」，本项目缺口集中在 TTFD 口径缺失、splash 撤场看定时器而非首帧、`androidx.webkit` 1.10.0 缺 `startUpWebView`。未核实项见文末 §7（含 web.dev 原文抓取失败、预热收益无官方数字、实测未复跑）。

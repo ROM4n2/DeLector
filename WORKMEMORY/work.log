@@ -452,3 +452,35 @@ PR：plan #311（docs/plans/2026-11-09-android-startup-latency.md）、③ #312�
 视觉：逐张截图统计像素，② 把基线既有的转场白帧（white 94.75%）换成同色启动壳（splash 99.73%），无新增空白帧。
 踩坑：CI 的 pull_request 只对 base=master 触发，叠在非 master 分支上的 PR 拿不到 checks——② 已从 ③ 上 rebase 到 master 独立成 PR；改 base 不会自动重跑，需 close/reopen 触发。
 边界：仅模拟器，不可外推真机；① import spacy 挪位需 ADR，未做。
+
+### 2026-11-09 17:46 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec, web-fetch
+任务：首屏启动业界实践调研（Android/混合架构/Web/可迁移性），只读不改代码；产出 docs/reviews/2026-11-09-first-screen-startup-industry-research.md。
+不做：不改代码、不开 PR、不改 #312/#313/plan、不重跑模拟器。
+注：本机时钟 17:46 早于尾条 19:40，按实际时钟记录。
+
+### 2026-11-09 17:47 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, web-fetch
+产出：docs/reviews/2026-11-09-first-screen-startup-industry-research.md（只读调研，314 行）。
+结论：2.3s 是壳等 sidecar，不是 Web 首屏；业界顺序是“先削串行，再诚实遮盖”；1.2s import 结构性，遮盖为主，壳须稳定、撤场看首帧而非定时器；TTID 726ms 是自欺，需 TTFD。
+证据：Android 启动/Splash/Baseline/App Startup/WebView startUpWebView（1.16.0+，我们 1.10.0）、Electron ready-to-show 取舍、VS Code activation、Tauri sidecar、NN/g 1s/10s、web-vitals 5.1.0 阈值、Lighthouse TTI、MDN no-cache。
+验证：未改代码；来源 URL 与“未核实”边界见报告 §7/§8。
+未做：未重跑模拟器；web.dev 原文抓取失败，阈值以 web-vitals/Lighthouse 源码核对。
+
+### 2026-11-09 17:52 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, web-fetch
+合并 PR #310（fix/article-payload-dedup）→ master：mergeable CLEAN，merge commit（未 squash），最终 master SHA 8e33ac8。该 SHA 的 master push run 42588804089 逐 job 14/14 success（含 Windows Portable Smoke；attempt 4：Build 74s / Verify 真启闸 31s），无 failure / cancelled / skipped。
+PITFALL：master push CI 被并发组 `ci-refs/heads/master`（cancel-in-progress: true）反复取消——attempt 1 因 Verify 步骤卡死，最终由 job 级 30m 超时取消（该次 step 级 10m 超时未生效，Verify 实跑 ~32min）；rerun attempt 2/3 分别被更新的 master push（0457b0a、c88b4bf）在约 5 分钟内顶掉（annotation: "Canceling since a higher priority waiting request for ci-refs/heads/master exists"）。解法：等最新 master run 结束、确认无新 push 时再 `gh run rerun --failed`，attempt 4 通过；若仍抢不到窗口，可 workflow_dispatch 到隔离 ref（并发组随 github.ref 变化）避开。
+清理：临时 worktree D:\Code\DeLector-payload 已移除（分支 fix/article-payload-dedup 保留）；无 8123/8000 监听、无残留验证进程；%TEMP% 探针脚本已删。
+主工作树：已 FF 到 c88b4bf（origin/master 同步）；工作区含**他方会话**未提交改动（WORKMEMORY/work.log M、docs/reviews/2026-11-09-first-screen-startup-industry-research.md 未跟踪），本任务未触碰。
+
+
+### 2026-11-09 17:52 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+调研报告落库（按 docs/research/ 现行约定归档，走分支 + PR）：
+1. 路径迁移：docs/reviews/2026-11-09-first-screen-startup-industry-research.md → docs/research/ 同名文件（原为未跟踪文件，直接移动）。上方 17:46/17:47 事件中的旧路径属历史记录，按追加制不改写。
+2. 索引登记：docs/research/README.md 速查表新增「六、启动性能与本地服务架构」并补该报告条目；docs/README.md 规则 4（技术调研→research/）已覆盖，无需改动。
+3. 报告正文未改，§7 未核实项（web.dev 原文抓取失败、阈值改用 web-vitals 5.1.0 / Lighthouse 12.8.2 源码核对、WebView 预热无官方数字、4.0s/2.3s/1.2s 未复测）随文件一并提交。
+4. 工作树中另有他方会话未提交的 NOTE（17:52，PR #310 合并复盘），本次未覆盖或回退，两份事件同时保留并随本分支提交。
+5. 分支 docs/first-screen-startup-research，走 PR，不直推 master。
+注：本机时钟仍为 17:52（回拨未恢复），按实际时钟记录。
