@@ -236,6 +236,32 @@ def test_windows_smoke_verify_step_has_bounded_timeout() -> None:
     )
 
 
+def test_windows_smoke_verify_step_has_internal_deadline() -> None:
+    """真启闸必须有工具内硬截止，且早于步骤级 10 分钟上限。
+
+    job 级超时给出的结论是 ``cancelled``，与「被后续 push 顶掉」同形；步骤级
+    timeout 由 runner 执行，遇到不响应终止的子进程树仍可能烧到 job 级。工具内
+    截止在进程内杀树并返回 124 ⇒ 步骤 failure，才能把真卡死区分出来。
+    """
+    step = _smoke_verify_step_block()
+    assert "tools/ci_heartbeat.py" in step and "--stage verify" in step, (
+        "`Verify Windows Portable` 没有走 ci_heartbeat 包装器：\n"
+        "缺少它就没有工具内硬截止，卡死只能靠 job 级 30 分钟 cancelled 收场。"
+    )
+    match = re.search(r"--deadline-seconds\s+(\d+)", step)
+    assert match, (
+        "`Verify Windows Portable` 的 ci_heartbeat 没有传 `--deadline-seconds`：\n"
+        "脚本级卡死将无法在步骤内变成可识别的 failure。\n"
+        "修法：传 480（正常 27s、最坏约 6 分钟），给步骤级 10 分钟留 2 分钟余量。"
+    )
+    seconds = int(match.group(1))
+    assert 0 < seconds <= 540, (
+        f"`Verify Windows Portable` 的工具内截止 = {seconds}s，"
+        "必须早于步骤级 10 分钟上限（建议 480s）：\n"
+        "截止 ≥ 步骤级上限时，runner 仍会先插手，failure/cancelled 的区分失效。"
+    )
+
+
 # ── Node 工具链显式化守卫（2026-10-05 清债轮 C 组）──────────────────────────────
 # 背景：`tests/` 下有一批 wrapper 会 `node tools/*.mjs` 真跑 .mjs 行为探针（把前端真源码
 # 切进 node:vm 沙箱执行）。但 ci.yml 此前**从不安装 node**，也没提过 setup-node ——
