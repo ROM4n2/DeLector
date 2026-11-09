@@ -19,7 +19,8 @@
 | 听力微训 / 长难句精读工坊 + v5.7.x 真机热修（含 spaCy E050 / pydantic v1）  | `archive/work-2026-09-13.log` · `archive/work-2026-09-14.log` ~ `archive/work-2026-09-15.log`（2026-10-11 WARM 化） |
 | 词库单一真相化 / 主干分层 / 富字段 / A1 取数（ADR-0011~0015，v5.8.0~v5.10.0） | `cold/digest-2026-09.md` · `archive/work-2026-09-15.log` ~ `archive/work-2026-09-17.log`（09-15 ~ 09-17，2026-10-11 WARM 化）· `work.log`（09-18 ~ 09-21） |
 | 遇见区 i+1 / 已读状态 + 工程债收口（v5.11.0~v5.12.1）                       | `cold/digest-2026-09.md` · `work.log`（2026-09-23 ~ 09-26）                                           |
-| **2026 年 10 月全月**（v5.14.0~v5.17.0 四次发版 / ADR-0017~0024 决策链 / 裁判集扩充 / §4.3 对照实验 60 局真跑 / 审计修正 A+B 批 / `database.py` 切分） | **`cold/digest-2026-10.md`**（COLD 层蒸馏；细节回源见该文件末节「来源」） |
+| **2026 年 10 月全月**（v5.14.0~v5.19.0 六次发版 / ADR-0017~0024 决策链 / 裁判集扩充 / §4.3 对照实验 60 局真跑 / 审计修正 A+B+C 批全量闭环 / `database.py` 切分 / 桌面单实例 / 伴学 Agent 奠基） | **`cold/digest-2026-10.md`**（COLD 层蒸馏；细节回源见该文件末节「来源」） |
+| **2026 年 11 月上旬**（v5.20.0~v5.22.0 六次发版 / ADR-0025~0030 决策链 / 伴学 Agent 双内核与多动作 HITL / Android spaCy 主路径定案 / 前端去 Emoji 与动效生机 / 视觉回归基建 / 存量重算 3.6.0） | **`cold/digest-2026-11.md`**（COLD 层蒸馏；覆盖 2026-10-31 ~ 11-08） |
 | 2026-09-28 起（Docker/WAL 修复、ADR-0016 统一池 Phase 3 等，未发版）        | `work.log`（HOT；09-28 起的记录缺口由 10-02 的 2 条 `NOTE(gap-backfill-1/2)` 补记；细节见 `docs/reviews/2026-09-28-swarm-audit-master.md`） |
 | ADR-0023 交互层「验证驱动 agent 循环」Task 0~6（Go 门禁三红灯 / LLM 收口 / 循环内核 / 工具白名单 / 契约+前端） | `archive/work-2026-10-14.log` · `work.log`（10-15~10-16 段）· 计划正本 `docs/plans/2026-10-14-interactive-agent-loop.md` · PR #136 |
 | Fog 清空（2/3/4）+ v5.16.0 发版 + search 高亮递延项（2026-10-06）            | `archive/work-2026-10-06.log`（2026-10-16 WARM 化） |
@@ -30,9 +31,10 @@
 | 去控制台 + 桌面化观感收尾 / 直推 master 流程缺陷复盘（2026-10-13~14）        | `archive/work-2026-10-13.log` · `archive/work-2026-10-14.log`（2026-10-16 WARM 化） |
 | C5 分层解耦 / 巨石路由拆分 + C7 收尾遗留（2026-10-15~18）                | `archive/work-2026-10-15.log` · `archive/work-2026-10-16.log` · `archive/work-2026-10-17.log` · `archive/work-2026-10-18.log`（2026-11-01 轮转 WARM 化）· PR #154 / #155 / #156 / #158 |
 | `static/index.html` 拆分与同步门禁（Task 1~6）+ Windows CI 编码红灯修复（2026-10-18） | `archive/work-2026-10-18.log` · 计划 `docs/plans/archive/2026-10-18-index-html-split-and-modularization.md` · PR #159 |
-| 非在途面专家评估（5 报告）+ 未决项 18 项 + 审计修正 A/B 两批 + ADR-0024 + `database.py` 切分（2026-10-16） | `work.log`（10-16 段）· `docs/reviews/2026-10-16-open-items-backlog.md` · `docs/plans/2026-10-16-audit-fixes-a-series.md` · `docs/plans/2026-10-16-audit-fixes-b-series.md` · `docs/plans/2026-10-16-database-split.md` |
+| 非在途面专家评估（5 报告）+ 未决项 18 项 + 审计修正 A/B 两批 + ADR-0024 + `database.py` 切分（2026-10-16） | `work.log`（10-16 段）· `docs/reviews/2026-10-16-open-items-backlog.md` · `docs/plans/archive/2026-10-16-audit-fixes-a-series.md` · `docs/plans/archive/2026-10-16-audit-fixes-b-series.md` · `docs/plans/archive/2026-10-16-database-split.md` |
 | 2026-10-18 13:12 ~ 2026-11-01 00:35 发版周期与伴学/运行时决策链 | `archive/work-2026-10-18.log` · `archive/work-2026-10-19.log` · `archive/work-2026-10-20.log` · `archive/work-2026-10-21.log` · `archive/work-2026-10-22.log` · `archive/work-2026-10-31.log` · `archive/work-2026-11-01.log`（2026-11-03 轮转 WARM 化） |
-| 2026-11-01 01:15 起（v5.20.x 后续、伴学边界与本地验证） | `work.log`（HOT；2026-11-03 轮转后保留 50 事件） |
+| 2026-11-01 01:15 ~ 2026-11-08 01:25 发版推进与伴学/动效/换皮工程 | `archive/work-2026-11-01.log` · `archive/work-2026-11-03.log` · `archive/work-2026-11-04.log` · `archive/work-2026-11-05.log` · `archive/work-2026-11-06.log` · `archive/work-2026-11-07.log` · `archive/work-2026-11-08.log`（2026-11-09 轮转 WARM 化） |
+| 2026-11-08 00:46 起（v5.22.0 发版与收尾：桌宠 P1–P4、复习台账、全站视觉闸门、3.6.0 存量重算） | `work.log`（HOT；2026-11-09 轮转后保留 50 事件） |
 
 
 ## 蒸馏登记（WORKMEMORY → vault）
@@ -50,5 +52,10 @@
 | 2026-10-18 | 搬迁类改动的验证面 = 所有引用该文件的测试（并入 `CODING-UNIVERSAL §7`） | `vault://99-Inbox/2026-10-18-搬迁类改动的验证面-=-所有引用该文件的测试，不是本工作流的文件.md` |
 | 2026-10-18 | 资源校验必须先于 CLI 的用法短路（并入 `AUTOMATION-GOTCHAS §7`） | `vault://99-Inbox/2026-10-18-资源校验必须先于-cli-的「用法提示-+-exit-0」短路，否则失败被静默吞掉.md` |
 | 2026-10-18 | 构建工具 `--extract/--patch` 必须默认只读（新增 `AUTOMATION-GOTCHAS §8`） | `vault://99-Inbox/2026-10-18-构建工具的-extract-patch-必须默认只读：一次误跑就把手工维护的模块覆盖成生成物.md` |
-
 | 2026-10-18 | subprocess `text=True` 不指定 encoding：按 locale 解码崩在读线程 ⇒ 退出码 0 但 stdout 为 None（假绿，不是红） | `work.log`（10-18 PITFALL 事件；候选并入 `CODING-UNIVERSAL §11` / `AUTOMATION-GOTCHAS`） |
+| 2026-11-04 | Chaquopy ABI 变体与 AGP getAbis 过滤机制 | `vault://99-Inbox/2026-11-04-chaquopy-abi-变体与-agp-getabis-过滤机制.md` |
+| 2026-11-04 | pytest --ignore 对显式指定文件路径无效（并入 `TESTING-PATTERNS §7`） | `vault://99-Inbox/2026-11-04-pytest-ignore-对显式指定文件路径无效.md` |
+| 2026-11-07 | 合成数值≠像素判据：设计文档常数与实际渲染偏离（归档目标 `01-Rules/DESIGN-DOC-CONSTANTS-VS-PIXELS.md`） | `vault://99-Inbox/2026-11-07-合成数值-≠-像素判据：设计文档的常数怎么害人.md` |
+| 2026-11-07 | 前端去 Emoji 分级规范与外部实测法（并入 `01-Rules/FRONTEND-DESIGN-PATTERNS.md §9`） | `vault://01-Rules/FRONTEND-DESIGN-PATTERNS.md` |
+| 2026-11-08 | 44px 触控热区不能靠撑大行高（伪元素与行距相切实测） | `vault://99-Inbox/2026-11-08-44px-触控热区不能靠撑大行高.md` |
+| 2026-11-08 | JS 动态类名零规则三桶静态识别法 | `vault://99-Inbox/2026-11-08-js-动态类名零规则三桶静态识别法.md` |

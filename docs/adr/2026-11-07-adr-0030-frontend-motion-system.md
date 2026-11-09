@@ -3,14 +3,14 @@
 - **状态**：Accepted（2026-11-07）
 - **日期**：2026-11-07
 - **决策者**：DeLector 维护者 + 用户（计划 §8 四项拍板后执行）
-- **关联**：ADR-0029（不变量 I1、动效边界、失败信号 §6）、[动效调研](../reviews/2026-11-07-motion-vitality-research.md)、[实施计划](../plans/2026-11-07-frontend-completion-and-motion-vitality.md)
+- **关联**：ADR-0029（不变量 I1、动效边界、失败信号 §6）、[动效调研](../research/2026-11-07-motion-vitality-research.md)、[实施计划](../plans/archive/2026-11-07-frontend-completion-and-motion-vitality.md)
 - **性质**：**新增**，不取代 ADR-0029。ADR-0029 §3.5 只把「动效 token」列为一个待新增类别，未定义系统、降级策略与验收口径；本 ADR 补上这一层。
 
 ---
 
 ## 1. 背景
 
-ADR-0029 完成字形清零后，界面需要新的注意力锚点。调研（`docs/reviews/2026-11-07-motion-vitality-research.md`）给出三条约束：
+ADR-0029 完成字形清零后，界面需要新的注意力锚点。调研（`docs/research/2026-11-07-motion-vitality-research.md`）给出三条约束：
 
 1. 阅读面接近零动效也能成立（Obsidian Help 正文无位移，NN/g 文章页仅 4 个元素、150ms）。
 2. 功能面 hover 预算应花在颜色/阴影上，不花在位移上（GitHub 抽样 80 条 hover，仅 2 条带 `transform`）。
@@ -151,6 +151,6 @@ ADR-0029 完成字形清零后，界面需要新的注意力锚点。调研（`d
 ## 6. 参考
 
 - [ADR-0029：前端去 Emoji 与编辑节奏重构](2026-11-06-adr-0029-frontend-de-emoji-and-editorial-rhythm.md)
-- [动效与生动力调研](../reviews/2026-11-07-motion-vitality-research.md)
+- [动效与生动力调研](../research/2026-11-07-motion-vitality-research.md)
 - [前端补全与生动力实施计划](../plans/2026-11-07-frontend-completion-and-motion-vitality.md)
 - WCAG 2.2 §2.3.3 Animation from Interactions；MDN `prefers-reduced-motion`

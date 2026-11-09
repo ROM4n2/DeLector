@@ -11,7 +11,8 @@
 | `plans/archive/` | 已交付的历史计划，含成对的 `-ledger.md`（vault-exec 执行台账）与 `-review.md`（评审子产物） | 只进不出 |
 | `specs/` | **设计稿**：统一命名 `<日期>-<主题>-design.md` | 无归档层（设计意图长期有效） |
 | `adr/` | **仓内 ADR 副本**：`<日期>-adr-XXXX-<主题>.md`（正式件在 Vault）；状态视图见 `adr/INDEX.md` | 无归档层 |
-| `reviews/` | 审计 / 评审报告（一次性、带日期） | — |
+| `reviews/` | 审计 / 评审报告（一次性、带日期；分类导引见 `reviews/README.md`） | — |
+| `research/` | **可复用技术调研**（设计经验、外部产品对标、交互动效与排版实测、独立原型与模板） | 无归档层（调研经验长期有效） |
 | `agents/` | 面向 agent 的常青文档：`architecture.md`（架构与跨端契约）、`ops.md`（运维）、`ci-speed-budget.md`（CI 闸门成本/并发预算）、以及需人工/agent 逐项填写的复测清单 | — |
 | 顶层 `*.md` | 跨领域的常青规范：`design-system.md`（设计系统；token / 排印现值以 `static/css/tokens.css` 为准）、`svg-character-spec.md`（角色 SVG 规格） | — |
 
@@ -20,13 +21,14 @@
 1. **要实现一个功能** → 计划写 `plans/<日期>-<主题>.md`；**做完并进入某个发布版本后**，`git mv` 到 `plans/archive/`。
    - 判据是「成果已发版」，不是「我感觉做完了」。
 2. **要写设计稿** → `specs/<日期>-<主题>-design.md`；**要放 ADR 副本** → `adr/<日期>-adr-XXXX-<主题>.md`。
-3. **要交一份审计 / 评审结论** → `reviews/`。
-4. **不要再开平行目录**：历史上的 `docs/superpowers/plans/`（15 份 2026-08-18~22 的最早期计划）与 `docs/compose/spec/`（1 份 YAML frontmatter 格式的 spec）已分别并入 `plans/archive/` 与 `specs/`；`specs/` 里混放的 4 份 ADR 副本也已拆到 `adr/`。
+3. **要交一份审计 / 评审结论** → `reviews/`（落位后在 `reviews/README.md` 补登分类索引）。
+4. **要做技术调研 / 外部对标 / 设计探索** → `research/`（落位后在 `research/README.md` 补登分类索引）。
+5. **不要再开平行目录**：历史上的 `docs/superpowers/plans/`（15 份 2026-08-18~22 的最早期计划）与 `docs/compose/spec/`（1 份 YAML frontmatter 格式的 spec）已分别并入 `plans/archive/` 与 `specs/`；`specs/` 里混放的 4 份 ADR 副本也已拆到 `adr/`。
 
 ## 归档待办（已执行）
 
 > 判据重申：计划进 `plans/archive/` 的条件是**成果已发版**，不是"做完了"。
-> 当前 `plans/` 根目录已无在途计划——`v5.18.0`（10-19）/ `v5.19.0`（10-22）/ `v5.20.0`（11-01）的在途计划已全部随发版 `git mv` 归档至 `docs/plans/archive/`，且代码/测试/文档中的路径引用已同步改为 `docs/plans/archive/<file>.md`（路径存在性校验可覆盖）。
+> 当前 `plans/` 根目录已无在途计划——`v5.18.0`（10-19）~ `v5.22.0`（11-08）的在途计划已全部随发版 `git mv` 归档至 `docs/plans/archive/`，且代码/测试/文档中的路径引用已同步改为 `docs/plans/archive/<file>.md`（路径存在性校验可覆盖）。
 
 | 计划 | 交付版本（PR） | 归档去向 |
 | --- | --- | --- |
@@ -42,8 +44,19 @@
 | `2026-11-01-companion-harness-persistence-and-refactor.md` | v5.20.0（#179，SQLite 会话/消息/Proposal 三表 + 洋葱中间件） | `docs/plans/archive/` |
 | `2026-11-01-reader-immersive-continuous-flow-and-cefr-noise-reduction.md` | v5.20.2（#191，ADR-0026 正文连续段落流 + CEFR 三档视力透视） | `docs/plans/archive/` |
 | `2026-11-03-companion-transport-loop-drawer-refactor.md` | v5.21.1（#199，SSE 跨 chunk 分帧修复 + Go RunLoop / submitPrompt 行为不变重构） | `docs/plans/archive/` |
+| `2026-11-03-companion-multi-action-hitl.md` | v5.21.0（#194，写作修订与周目标多动作 HITL 闭环） | `docs/plans/archive/` |
+| `2026-11-03-companion-sse-resume.md` | v5.21.1（#199，伴学 SSE 传输断流按 session 恢复） | `docs/plans/archive/` |
+| `2026-11-04-android-emulator-variant.md` | v5.21.1（#205/#212，Android x86_64 模拟器完整变体） | `docs/plans/archive/` |
+| `2026-11-05-ci-cost-guards-split.md` | v5.21.1（#224，CI cost 分片解耦与关键路径缩短） | `docs/plans/archive/` |
+| `2026-11-05-syntax-tree-split-assessment.md` | v5.21.1（#228，AST 与复杂度度量评估） | `docs/plans/archive/` |
+| `2026-11-06-android-spacy-parity.md` | v5.22.0（#235/#237，Android 主分析路径统一为 spaCy 预热与硬失败） | `docs/plans/archive/` |
+| `2026-11-06-frontend-de-emoji-slice1.md` | v5.22.0（#248/#249/#252/#253/#255，前端去 Emoji 与排版阶梯切片） | `docs/plans/archive/` |
+| `2026-11-07-companion-p3-state-machine-design.md` | v5.22.0（#287，伴读桌宠 P3 生机状态机） | `docs/plans/archive/` |
+| `2026-11-07-frontend-completion-and-motion-vitality.md` | v5.22.0（#257~#265，动效系统与循环动画静态收敛） | `docs/plans/archive/` |
+| `2026-11-07-next-batch-roadmap.md` | v5.22.0（规划归口，全量收口于 #308 发版） | `docs/plans/archive/` |
+| `2026-11-08-wordcard-review-state-ledger.md` | v5.22.0（#307，词卡抽屉单行复习台账） | `docs/plans/archive/` |
 
-> 发版批次判据（与上方一致）：计划归 `plans/archive/` 的充要条件是「对应成果已随某 tag 发版」。最近 tag 现为 `v5.21.1`（2026-11-03）；凡已合入 master 且 PR 编号晚于上一 tag 的计划即「已交付未发版」，等下次发版随批次 `git mv`。
+> 发版批次判据（与上方一致）：计划归 `plans/archive/` 的充要条件是「对应成果已随某 tag 发版」。最近 tag 现为 `v5.22.0`（2026-11-08）；凡已合入 master 且 PR 编号晚于上一 tag 的计划即「已交付未发版」，等下次发版随批次 `git mv`。
 
 **命名豁免（历史既成事实，不改）**：`plans/archive/` 里 4 份**早于 `<日期>-` 命名规则**的文件（`workbench-scope-control-and-live-settings.md`、`workbench-progress-server-sync.md`、`workbench-core-words-mode.md`、`plan-companion-mascot.md`）**保留原名**——改名会打断既有引用（含 vault 侧），收益不足以抵风险。此后新增的归档件一律带 `<日期>-` 前缀。
 

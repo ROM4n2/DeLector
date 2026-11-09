@@ -1,7 +1,7 @@
 # 词卡抽屉「复习台账」（方案 B）实施计划
 
 > 日期：2026-11-08　|　状态：已裁决，进入实施
-> 上游：[词卡抽屉复习状态 UI 立项调研](../reviews/2026-11-08-wordcard-review-state-research.md)（PR #306，已合并）
+> 上游：[词卡抽屉复习状态 UI 立项调研](../research/2026-11-08-wordcard-review-state-research.md)（PR #306，已合并）
 > 基线：`64428d7`　|　分支：`feat/wordcard-review-ledger`　|　worktree：`D:\Code\DeLector-ledger`
 > 一句话：**读侧**按 lemma 去重后取一张卡，在抽屉里用一行等宽文本排版既有列；不改写入路径、不加 UNIQUE、不造状态。
 

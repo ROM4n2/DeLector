@@ -8,7 +8,7 @@
   - `[来源]` 有外部链接支撑，链接见附录 B；
   - `[推断]` 基于实测与来源的判断，未做用户实验；
   - `[未验证]` 本轮无法证实，已列入第 10 节。
-- **配套原型**：`docs/reviews/2026-11-06-emoji-vs-typography-prototype.html`（独立静态页，未接入构建链）。
+- **配套原型**：`docs/research/2026-11-06-emoji-vs-typography-prototype.html`（独立静态页，未接入构建链）。
 
 ---
 
@@ -555,7 +555,7 @@ EMOJI_RANGES = [
 
 ## 附录 C：配套原型
 
-`docs/reviews/2026-11-06-emoji-vs-typography-prototype.html` 是一个**独立静态页**，不参与 `tools/build_index_html.py` 的组装，不被 `static/index.html` 引用，也不进入 Android 包。它用三列并排展示：
+`docs/research/2026-11-06-emoji-vs-typography-prototype.html` 是一个**独立静态页**，不参与 `tools/build_index_html.py` 的组装，不被 `static/index.html` 引用，也不进入 Android 包。它用三列并排展示：
 
 1. **现状**：emoji 版底栏、考试宫格、状态行、toast、空状态；
 2. **仅删 emoji**：同一结构，只删除装饰；

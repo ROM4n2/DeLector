@@ -6,3 +6,150 @@ U2 拍板：Android 主分析路径统一为 spaCy（用户原话「纯python的
 同步：docs/agents/architecture.md:118-130 与 docs/agents/android-local-runtime.md §5 第 1 条改为 spaCy 主路径；删掉已过时的「PR #233 未合并」（实为已合并 2a7867a）。
 边界：本轮零代码/零测试/零 workflow 改动；未建分支、未提交、未开 PR。存量文章仍为纯 Python 产物（同 3.5.0，惰性迁移不命中），默认不重算。
 
+
+
+### 2026-11-06 11:41 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+README 叙事对齐 + 首屏句子解剖台，收尾于 PR #239（base master，未合并）。
+基线：master@dd8036e（run 42155129738）。新口径：分母 2794（pytest --collect-only -q），分子 2779（七分片 678+681+348+712+316+19+25 passed），差集 15 skipped；旧 2773/2788 已废弃。
+README：徽章与注释块换成可复算口径；CI 覆盖行改为实际内容（md 路径按 ADR-0027 已删）；目录树 js/(42 模块)、tests 180 个 test_*.py；新增「工程取舍」5 条（均带 ADR/文档链接与真实数字）；「已知限制」补 Android spaCy 主路径、PROCESSED_JSON_VERSION 仍 3.5.0 不自动重算、加载耗时/内存/OOM 未测量、模型失败硬失败。
+首屏：hero 改「把德语长句拆开看」；新增 #satz-lab（3 句真实示例、五场域、格位、从句树，全部实时调 /api/syntax/analyze）；导航「拆句」入口；阅读器空态加示例入口。新增 static/js/satz-lab.js，index.html 由 build_index_html.py 重生成（sync PASS）。
+验证：tests/test_check_index_html_sync.py、test_frontend_guards.py、test_index_dom_probe.py、test_writer_mobile.py 共 47 passed；三个前端闸 PASS；浏览器实测入口/空态/三句渲染正常。
+未做：未跑全量 pytest；未启动模拟器/adb/Android 构建；未改 docs/reviews/2026-11-05-code-quality-decoupling-review.md。
+### 2026-11-06 13:33 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+德语复数第四格误标主格：最小复现记录已落 docs/reviews/2026-11-06-german-plural-akkusativ-mislabeled-nominativ.md（一次性缺陷记录，沿用 2026-10-20 guard-escape 先例）。
+输入 `Die Lehrerin gibt den Schülern die Bücher.`，真实引擎 analyze_syntax_tree 返回 Bücher=NOUN/oa/Nom，同 NP 的 die=DET/nk/Acc；单数对照 `Die Lehrerin gibt dem Schüler das Buch.` 的 Buch=oa/Acc 正确。
+根因（实测+读码）：spaCy de_core_news_sm 3.8.0 的 morphologizer 阶段就把 Bücher 标成 Case=Nom，parser 只把 dep 改成 oa、不回写 Case；DeLector 在 syntax_tree.py:113 与 processor.py:429 直接透传 token morph，无 NP 级格位归一化。不是限定词/名词配对错位。
+最小：`Bücher geben.`（2 词）即复现；完整陈述句 `Wir geben Schülern Bücher.`（4 词）；原句词形边界 `Gibt den Schülern Bücher.` 删 den 后 Bücher=oa/Acc 不再复现。
+影响：首屏句子解剖台（satz-lab.js CASE_POS/caseLabel）与阅读器单词详情（reader.js:395-397）直接显示错标；process_german_text 也写入同一错误 case，存量 processed_json 不自动重算。Anki 导出与 /api/lookup/grammar 不读 token.case；写作规则实测本句返回空列表（dep 优先于名词 morph）。
+边界：本轮零代码改动、未跑全量 pytest、未碰 Android；未修改 docs/reviews/2026-11-05-code-quality-decoupling-review.md。
+
+### 2026-11-06 17:45 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
+前端去 Emoji 决策收尾：PR #247 已合并（merge commit a12c6e6，base master 25feb4a→a12c6e6；head 8f55806；CI 12 pass / 1 skip）。前一轮因 #245/#246 并行未写本日志，现补录。
+四项拍板（用户原话→落位）：1「先保留，但要之后做」角色 🦉🐱🦊🤖 保留、SVG 化后置，本轮补 aria-label/aria-pressed（ADR §10.1）；2「README只中文」仅中文、德文只留术语，删标题 emoji 与英文双写；3「后面按建议来可以引入」MIT/ISC 图标集（Lucide/Tabler）vendor 进仓、不引入运行时依赖；4 推广方式：垂直切片验收后推广。追加原则「ADR 是受限于当时的决策，所以后续可以推翻」「不要怕完全推翻…否定然后再否定」→ ADR §12 留痕机制（四态 + 四硬规则 + INDEX）。
+文档：ADR-0029（§10 决策确认、§11 E1–E7 有效期、§12 推翻留痕、§13 自我修正、§14 T7 纳入）；计划 docs/plans/2026-11-06-frontend-de-emoji-slice1.md（T0–T10、Deferred Gap 11 行、Deviation Table 空、不变量 I1–I5）。
+自我推翻：脚本统计→人工表（T1）；exam 拆 T2/T3；README 收窄为「仅中文」。
+T7 拍板 A：progress studio 纳入切片（同一控件的第二宿主，避免两种 a11y 质量）；ADR §14 记录，计划 T7 由 HITL 改 AFK。
+延迟（不进本切片）：tests/test_listen_lab_probe.mjs:316 精确 emoji 断言、cards.js:1176 空态、style.css .mob-icon 死规则、图标集 vendor、角色 SVG 化。
+工作树：主树 5 个未跟踪文档与 origin/master 逐字一致（忽略 CRLF），已删除后 ff 到 a12c6e6；_artifacts/ 与 docs/reviews/2026-11-05-* 未动。
+下一步：feat/frontend-de-emoji-slice1 执行 T0→T7/T9/T10；T8 README 独立分支 docs/readme-zh-only。
+### 2026-11-06 18:09 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
+第一垂直切片合并完成：PR #248（README，merge 2132462）→ PR #249（代码，merge 38433de）；两次均 merge commit、未 squash；CI 最新 head 全绿。已验证两个 merge commit 均为 origin/master 祖先（exit 0）。master 可见：index.html 7 处 exam-module-index、1 处 panel-sound-icon、1 处「角色配色：歌德紫」；companion.html 6 处 aria-pressed；progress.html 6 处；companion.js 4 处 setAttribute aria-pressed；README 10 个 H2、emoji 0、226 行。
+T0–T10 记录：T0 docs/adr/INDEX.md（29 份 ADR）；T1 基线清点（源片段 aria-label 11，切片 emoji 61）；T2 exam 01–07 序号；T3 exam 非注释 emoji 0；T4 nav 8 图标删除；T5 cards 空态删 🎉🛡️🎴；T6 companion 15 按钮 unnamed 0（含 4 色点 + color input）；T7 studio（A）6 aria-pressed + 5 色块 + picker 补名；T9 design-system §10；T10 回执（185 passed，sync PASS）。偏差 4 条：T2 德文括号、T6/T7 颜色控件补名、T1 计量口径（含生成物 18 / 源片段 11）；ADR-0029 §15 留痕。
+用户视觉验收 #249：「没问题，但是现在很干吧」——判定为计划预判的中间态（原型 B 列），要求走到 C 列；明确不加回装饰。下一步：实证诊断（视觉重量/间距节奏/色彩锚点，给 file:line 与数值）→ 3 个气质不同的方向（排版阶梯/间距比例/色彩锚点/分割手段/状态动效/代价）→ 独立自包含对比原型（不改 static/ 与 README）→ 回答「不加 emoji 与插画，活泼靠什么」。
+边界：第二步不改生产代码；不推进第二批（图标集 vendor、角色 SVG 化）；不碰 delector/、start.*、Android、tests/test_*、ADR-0028、spaCy spec/plan、2026-11-05 review、_artifacts/。
+### 2026-11-06 18:22 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+「很干」第二步：实证诊断 + 三方向对比原型（pending 用户选型，零生产代码改动）。
+诊断（master@4611640，坐标 static/style.css）：1) 无主次——exam 7 张模块卡共用 3655-3671 一套声明（14px/1.5px 边框/3px 4px 阴影/18px padding），全面板只有 700 与 600 两种字重；2) 选中态不可见——main.js:392-395 会加 .active，但 style.css 无 .exam-module-card.active 规则（现存 bug）；3) 节奏单一——exam section 32px(3607) ÷ 元素 16px(3652)=2.0，卡片 padding 18 ÷ gap 16=1.13；progress 32px(4524) ÷ 13.6px(4530)=2.35；4) 零锚点——exam 直接颜色声明 0 条，cards 空态(cards.js:131-154) 64px 上下 padding + 白底虚线无彩色，progress 仅 kicker(4462-4468) 11px 珊瑚 + 7px 圆点(4539-4543)。
+原型：docs/reviews/2026-11-06-dryness-contrast-prototype.html（自包含，不引用 static/，不参与构建；沿用同目录 2026-11-06-emoji-vs-typography-prototype.html 先例）。含基线/A 克制编辑排版/B 卡片层次 bento/C 只剩排版 四列 + 「试衣间」全宽切换 + 「活泼靠什么」量化回答。浏览器实测 PASS（三列无溢出、stage 切换 b/c 正常）。
+数值口径：--accent #c14a2b on #faf8f5 = 4.6:1（过 AA）；--mustard #e9b94a = 1.7:1（只能做色带）。
+推荐：A + B 的选中态动效（2px 色条 scaleY 260ms），理由是零新增颜色、可整段回退，并顺带补上 .active 缺失。
+边界：未改 static/、README.md、delector/、tests/；未跑全量 pytest；未推进第二批（图标集 vendor、角色 SVG 化）。
+
+### 2026-11-06 18:41 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+与外部实测参考库（docs/reviews/2026-11-06-external-ui-design-reference-library.md）对账：三处冲突全部判定为「校准」，并自查出我上一轮报的两个数是错的。
+1) section ÷ content：原报 4.0 是拿 64px section ÷ 16px「列间距」算的，真实行间距 40px → 实际 1.6，两端都错。定稿 48 ÷ 16 = 3.0（落在 2–3.5）。
+2) 标题 ÷ 正文：原报 40/15=2.67，但 .da h2 实际写的 28px → 真实 1.87，连参考库「应用内 2.0–3.0」下界都没到。定稿 48/16 = 3.0（同时满足首页 ≥3 与应用内上界）。
+3) 微动效：180/260 → 120/160，面板 200。理由：参考库 Linear 195 / Raycast 98 个元素样本均在 80–160，且我们的动画全是 transform/opacity 合成层，提速零成本；260ms 是状态反馈不是入场。
+唯一保留偏离：列表行距 33px，不按 3.0 撑开——7 项是扫描面非散文段落，参考库自己的列表样本（Raycast 32/4、Linear 40/4）都比散文密；按 3.0 会 >900px，手机滚两屏。缓动曲线参考库未测（§8.5），标为待测，不冒充结论。
+8 条手法对照：已含 2（颜色状态冗余、等宽 12 元数据已有雏形）；补 3（第 4 档灰阶复用既有 --ink-soft/-mute/-faint 零新 token；等宽计数；焦点调暗）；校准 3（间距、标题、动效）；不做 1（真实内容作为视觉，需要语料+产品决策）。
+焦点调暗落在句子级：非焦点 --pencil = 6.7:1 仍过 AA；刻意不用 --muted（3.4:1 对正文不达标）。
+原型已更新：docs/reviews/2026-11-06-dryness-contrast-prototype.html（新增对账表、48px 页头、专注句演示、8 条手法表）。Edge headless 实测三处 PASS。
+边界：未改 static/、README.md、参考库文档、delector/、tests/；未跑全量 pytest。
+
+### 2026-11-06 18:56 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+参考库会话更正判定后重做对账：真正分界是「应用内阅读面/文档正文」vs「营销 hero/落地页」，不是「阅读 vs 工具」。上一轮我按错基准改的两处已回退。
+改了：
+1) section/content 从「全局常数」改为按作用层取值 —— 应用内阅读面 40÷16 = 2.5（带 0.8–2.6，推荐 2.5–3.0）；应用内功能面 48÷41 = 1.17（带 0.8–2.6，刻意取低因为 7 入口要一屏扫完，分隔靠 2px 全宽横线+40px 标题）；首页/落地页保留 4.0（带 2.7–6.0）。
+2) 原型 .da h2 从 28px 修回 40px —— 这是我原型 CSS 漏写，不是规范错（规范一直是 40/15=2.67）。
+3) 补入焦点调暗：句子级，非焦点降到 --pencil = 6.7:1 仍过 AA；刻意不用 --muted（3.4:1 对正文不达标）。
+4) 补入 mono 12 做计数类元数据（3/7、词数、到期数），序号/德语名本来就是 12px mono。
+5) 原型新增「阅读面」示例块，让 2.5 与 1.17 在同屏可见。
+明确没改：40/15 = 2.67（应用内 2.0–3.4 带内）；180ms hover（核心区 140–200）；260ms 选中色条（面板档）；cubic-bezier(.22,1,.36,1)（参考库未测，标待测）；列表行距 41px；字号阶梯仍 6 档。
+8 条手法：已含 4（阶梯、颜色状态冗余、40px 标题、180ms）；本轮补 3（第 4 档灰阶复用 --ink-soft/-mute/-faint 零新 token、焦点调暗、mono 计数）；改规则 1（section/content 按层）；明确不做 1（真实内容作为视觉，需语料+产品决策）。
+教训：拿区间前必须确认该区间测的是哪个作用层，否则会把对的值改坏（本轮两次先改后撤）。
+边界：未改 static/、README.md、参考库文档、delector/、tests/；未跑全量 pytest。
+
+### 2026-11-06 19:20 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+方向 A 落地第一批（exam 视图）：
+1) 修复真 bug：main.js:392-395 一直 toggle .exam-module-card.active，style.css 从未有该规则。现补 ::before 2px 色条（scaleY 0→1, 260ms）+ 序号变 accent + 标签 700，三通道冗余满足 I1。
+2) exam 视图按 A 重排：容器 padding 2.5rem；.exam-topbar 下 48px + 2px 横线；h2 1.5rem/700 → 2.5rem/400 italic（40÷15=2.67）；等级页签去外框改下划线式；模块网格 auto-fill 多列卡片 → 单列目录（max-width 820px，行距 41px = 20px padding×2+1px 线），去掉边框/圆角/阴影；计数改等宽 12px。
+3) 焦点调暗：纯 CSS，.reader-p:has(.tok.sel) .reader-sent-unit:not(:has(.tok.sel)) .tok → --pencil（6.7:1，过 AA），复用已有单选态，无新增 JS 状态；作用范围限同段，去 .reader-p 即全篇。
+验证：build_index_html 3356 行；check_index_html_sync PASS；tests/test_check_index_html_sync.py 5 passed。浏览器实测 grid 820px、card 44px+760px、h2 40px italic 400。
+未做（挂账）：progress / cards 两处的按层间距与字号阶梯；第二批次（图标集 vendor、角色 SVG 化、cards 空态）。
+状态核对：#248 2132462 / #249 38433de 已合并，master head 4611640；work.log T0–T10 已在 4611640；6 个未跟踪副本此前经 --ignore-cr-at-eol 比对一致后已删，当前 untracked 仅 _artifacts/、2026-11-05 评审、两份 2026-11-06 新文档，均为有意保留。
+
+### 2026-11-06 19:38 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+方向 A 落地第一批补充（两条零风险项，均在已校准口径内）：
+1) .seg-count 0.6875rem(11px) → 0.75rem(12px) + letter-spacing .02em —— 卡片段计数器（#seg-due-count / #seg-pending-count / #seg-mastered-count / #seg-prep-count）统一 mono 12 元数据档，与 .exam-module-count 同档。
+2) #view-cards padding-top 2rem → 2.5rem —— 与 #view-exam 顶边 40px 对齐。
+验证：build_index_html 3356 行；check_index_html_sync PASS。
+刻意未做：.cards-topbar h2 未抬到 2.5rem —— 该 topbar 是三栏工具栏（返回键 + 标题 + 5 个操作按钮），在 760px 容器内 40px 标题必然挤爆；要做成 exam 那种编辑抬头必须先改 HTML 结构（标题独占一行、操作下移），属设计决策，等用户拍板。progress 视图未动 —— 它属首页/落地页作用层，按校准口径 section/content 4.0 保留。
+
+### 2026-11-06 19:52 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+用户拍板与 A 剩余落地：
+1) 焦点调暗维持段落级（.reader-p:has(.tok.sel) 保持原样），明确不做全篇调暗。
+2) .cards-topbar h2 结构改造（标题独占一行、操作下移）暂不做 —— 已登记 docs/plans/2026-11-06-frontend-de-emoji-slice1.md 的 Deferred Gap Register，注明「需先改 HTML 结构，属设计决策」。
+3) 落地：.cards-seg-btn / .cards-mode-btn 的 transition:all 0.15s ease → background-color + color，var(--dur-fast)=180ms + var(--ease-editorial)，与 .exam-level-tab 同档；去掉 all 避免卷进布局属性。
+4) 未做且不建议硬凑：#view-progress 属首页/落地页作用层，section/content 4.0 保留；#reader-content 正文只有 .reader-p、无小节标题，阅读面 2.5 没有落点，不强行造标题。ADR-0029 决策 5「tokens 只增不迁、只迁 nav/cards/reader、不扫 78 处 11px」据此未动 .dossier-panel-meta / .article-row-meta。
+T0–T10 覆盖补正：work.log:538 一行合并记录了 T0–T7、T9、T10；T8 此前只以「PR #248」形式出现在 work.log:537，未按 T8 编号记。现补：T8 = README 仅中文（独立分支 docs/readme-zh-only，merge 2132462，226→226 行，11 增 11 删，正文/表格装饰 emoji 约 8 处登记 Deferred Gap）。至此 T0–T10 全部有记录。
+验证：build_index_html 3356 行；check_index_html_sync PASS。
+
+### 2026-11-06 20:12 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+PR #251 已合并（merge commit，未 squash）。
+- 分支 feat/frontend-editorial-rhythm，head 7214436 → 合并提交 21956a1
+- 最终轮 CI run 42218648694：12 success、2 skipped（Master Direct-Push Scope Gate 仅守 master 直推；Windows Portable Smoke 因 packaging-surface 无变更跳过），0 failure、0 cancelled
+- 中途红过一轮：run 42212970963 中 unit-2 真实失败 1 例 —— tests/test_exam_domain.py::test_exam_css_grid_uses_auto_fill 钉死旧的 auto-fill + minmax 多列网格；unit-1 / unit-3 / cost-guards / integration-heavy 是矩阵 fail-fast 取消（unit-1 全部 step success 后被 cancel），不算失败
+- 处置：按用户拍板的方案 A 重写断言，改名 test_exam_css_grid_is_single_column_directory，三条断言并存（grid 规则存在 / 1fr 与 max-width 820px 同时命中 / 禁止残留 repeat(auto-fill)），style.css 未动，其他用例未动
+- 本机 .venv 内有 pytest，tests/test_exam_domain.py 33 passed；全量套件由 CI 分片验证
+
+### 2026-11-06 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+ADR-0029 第二批（去字形）落地，四项范围：
+1) 图标 vendor：Lucide lucide-static v0.468.0（ISC），落 static/icons/，同文档 <use href="#id"> 引用；10 → 12 个 symbol（volume-2/volume-x/play/pause/skip-back/skip-forward/rotate-ccw/trash-2/upload/sparkles + chevron-left/right）。不引 CDN/npm，未改 path 坐标。
+2) 全部字形替换：33 个按钮（34 个 <use>，player 播放键在 play/pause 间切换）；口径从最初 23 处/8 种扩大到全量扫描结果。
+3) 角色 SVG：companion.js 4 个调用点（浮球主体 / 浮球头像 / progress 舞台 / 面板 4 个角色按钮）+ 声音开关 use 切换；CHARACTERS[*].emoji 字段删除。
+4) cards 两处空态重做（三态用 --accent/--moss/--rule 竖线 + mono eyebrow；介词矩阵去 📡/🧭），文案不变。
+5) listen-lab 测试同步（:316 去掉模式栏 emoji、:322 去掉 🔒）；另修 tests/test_companion_context_probe.mjs DOM 桩缺 setAttribute。
+风险点：内联 sprite 的 Lucide path 含坐标 4.702，撞上 test_exam_domain.py「禁硬编码 702」的裸字符串断言。处置：sprite 加 data-ui-sprite="lucide" 标记，测试仅剥离该块，其余全文逐字检查；变异验证（注入 702 词仍被抓到）通过。
+验证：build_index_html 3432 行；check_index_html_sync PASS；pytest 7 文件 98 passed；listen-lab 探针 43 断言 + 3 变异捕获；companion 探针 358 checks。
+约束遵守：未碰 android/、未跑 tools/sync_android_sources.py、未 git add -A。
+
+### 2026-11-06 22:44 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
+PR #252 合并完成（ADR-0029 第二批收尾）：merge commit `d7fdd2c`，未 squash；base master `236269c` → 新 master `d7fdd2c`；head `b598be2`。合并前复查 head 上 CI：12 success / 2 skipped（Master Direct-Push Scope Gate 只守 master 直推；Windows Portable Smoke 因 packaging-surface 无变更跳过），0 failure、0 cancelled；mergeStateStatus=CLEAN。分支 `feat/frontend-de-emoji-slice2` 本地 + 远端均已删除。
+本批内容（细节见上一条 NOTE）：1) **33 处图标替换**，34 个 `<use>`，12 个 Lucide symbol；含 cp-drawer 上下句导航 `◀/▶` → chevron-left/right `<use>`，并补 `aria-label="上一句"/"下一句"`；2) **角色 SVG 接入**：companion.js 4 个调用点（浮球主体 / 浮球头像 / progress 舞台 / 面板 4 个角色按钮）+ 声音开关 use 切换，删除 `CHARACTERS[*].emoji`；3) **cards 空态重做**：三态用 `--accent/--moss/--rule` 竖线 + mono eyebrow，介词矩阵去 📡/🧭，文案不变；4) **测试同步**：listen-lab 探针 :316/:322 去 emoji 断言，companion 探针 DOM 桩补 setAttribute 系列。
+`test_exam_domain.py` 断言改动理由与变异验证：内联 sprite 的 Lucide volume-2 path 含坐标 `4.702`，撞上「禁硬编码词条数 702」的裸字符串断言，属误报而非回归。处置：sprite 根加 `data-ui-sprite="lucide"`，比对前只剥离该 `<svg>` 块（页面其余部分仍逐字检查），并新增「标记必须存在」断言防剥离静默失效。变异验证：仅剥离 `4.702` 后不再命中；人工注入 `702 词` 仍被抓到 —— 判定强度未降。
+操作方式：主工作区由他人占用，全程 gh API 合并 + 临时 worktree 写日志；未 `git add -A`、未碰 `android/`；临时 worktree 用后已清理。
+
+### 2026-11-06 23:13 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
+ADR-0029 第三批（A 类 16 处去字形）落地，分支 `feat/frontend-de-emoji-slice3`（从 origin/master `05e1b86` 开），B 类 360 处未动。
+处置分布：**可删 2 / 需加文字 5 / 需加 aria 6 / 需加文字+aria 3**。
+1) 关闭键 5 处补 `aria-label`（drawer 关闭工作台 / import 关闭导入 / polish 关闭润色预览 / settings 关闭设置 / version_preview 关闭版本预览），§ 共用 `.drawer-close`，`✕` 保留为视觉冗余；`tests/test_frontend_guards.py` 新增 `test_modal_close_buttons_have_accessible_name`（扫 `static/modals/*.html`，DOTALL 匹配跨行开标签，要求 aria-label/aria-labelledby，命中数 ≥6 防正则失效）。
+2) 密码显隐 3 处：`main.js:719-736` 与 `settings_modal.html` 的 👁️/🔒 → 可见文字「显示/隐藏」+ `aria-label`「显示/隐藏 API 密钥」；状态同时由 `input.type` 表达。
+3) `listen-lab.js:474/476` ✓/✗ → 「✓ 正确」/「✗ 错误」，颜色仅作冗余；探针新增 4 条中文断言（D/C 各正误）。`↷` 跳过标记属 B 类未动。
+4) `a1_writer.js` 导向点 ⚪/🟢 → `.lp-status` 文字「未覆盖/已覆盖」+ `data-state`，`is-covered` 颜色保留。
+5) `reader.js:907` 收藏成功 → 「✓ 已保存」（与 :862 同构）；`cp-drawer.js:372` 解除绑定补 `aria-label`。
+6) 判为纯装饰删除：`cp-drawer.js:1341` 的 ✓（标题已写「深度推演完成」）；`encounter.js:148` 的 `COVERAGE_DEGRADED_MARK="⚠"`（同行已有「数据不完整」），同步把 2 个 enc 探针的 `MARK` 断言改为只认中文、B4 钉「文案仅一份」。
+验证：`build_index_html` 3438 行；`check_index_html_sync` PASS；pytest 受影响 10 文件 42 passed、回扩 7 文件 157 passed；`test_listen_lab_probe.mjs` 47 断言 PASS、`enc_coverage_degraded` 14 项 PASS、`enc_degraded_concurrency` 21 项 PASS、`test_companion_context_probe.mjs` 全 case pass。变异：关闭键删 aria-label → 守卫红；listen 标记改回单 ✓ → 探针红。
+约束遵守：并行 5 个子代理按文件所有权切分（index.html 仅主代理重建）、未碰 android/、未跑 sync_android_sources.py、未 `git add -A`。
+
+### 2026-11-06 23:29 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
+PR #253 合并完成（ADR-0029 第三批）：merge commit `fa7aae2`，未 squash；base master `05e1b86` → 新 master `fa7aae2`；head `2d7944e`。合并前复查 head CI：12 success / 2 skipped（Master Direct-Push Scope Gate 仅 push→master 触发；Windows Portable Smoke 因 packaging paths-filter 为 false），0 failure、0 cancelled，mergeStateStatus=CLEAN。
+本批 A 类 16 处处置分布：**2 可删**（cp-drawer 推演完成 ✓、encounter 覆盖率 ⚠，相邻已有中文）/ **5 加文字**（listen-lab ×2、a1_writer ×2、reader ×1）/ **6 补 aria**（5 个模态框关闭键 + cp-drawer 解除难句绑定）/ **3 文字+aria**（密码显隐）。
+新增守卫：`tests/test_frontend_guards.py::test_modal_close_buttons_have_accessible_name`，扫 `static/modals/*.html`、DOTALL 跨行匹配 `<button class="...drawer-close...">`，要求 `aria-label`/`aria-labelledby`，命中数 ≥6 防正则静默失效。变异验证：删 `drawer.html` 的 aria-label → 红并点名文件；恢复 → 绿。
+三个探针从「钉字形」改为「认行为」：1) `tests/test_listen_lab_probe.mjs` 不再依赖单个 ✓/✗，新增 D/C 模式正误的中文断言（47 断言）；变异（改回单 ✓）→ 红。2) `tools/enc_coverage_degraded_probe.mjs` 删 `MARK="⚠"`，B1/B2/B3 只认「数据不完整」，B4 钉「标注有且仅一份」。3) `tools/enc_degraded_concurrency_probe.mjs` 同口径（S1–S5）。变异验证：加回 `"⚠ "` 前缀仍绿（已不依赖字形）；把「数据不完整」拼两遍 → B4 红（证明断言非恒真）。分别 14 / 21 项 PASS。
+分支 `feat/frontend-de-emoji-slice3` 本地 + 远端均已删除；临时 worktree `dlector-slice3` 已清理。B 类 360 处未动；未碰 `android/`、未 `git add -A`。
+

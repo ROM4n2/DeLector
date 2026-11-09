@@ -2,7 +2,7 @@
 
 > 日期：2026-11-07　|　性质：**只出设计，不写实现、不改 `static/`、不开 PR**
 > 依赖：P2「禁停区让位」（worktree `D:\Code\DeLector-companion-p2`，分支 `fix/companion-p2-no-parking`，**尚未合并**；本文引用其代码时行号会漂移）
-> 关联：[气泡与生机调研](../reviews/2026-11-07-companion-bubble-and-vitality-research.md)、[ADR-0030 动效系统](../adr/2026-11-07-adr-0030-frontend-motion-system.md)、[ADR-0029 §16](../adr/2026-11-06-adr-0029-frontend-de-emoji-and-editorial-rhythm.md)
+> 关联：[气泡与生机调研](../research/2026-11-07-companion-bubble-and-vitality-research.md)、[ADR-0030 动效系统](../adr/2026-11-07-adr-0030-frontend-motion-system.md)、[ADR-0029 §16](../adr/2026-11-06-adr-0029-frontend-de-emoji-and-editorial-rhythm.md)
 
 ---
 
@@ -477,7 +477,7 @@ P3 的接口要求（供 P2 合并前对齐，或 P3 落地时修）：
 
 ## 9. 参考
 
-- [伴读桌宠：气泡自适配、遮挡冲突、生机状态机与自由移动调研](../reviews/2026-11-07-companion-bubble-and-vitality-research.md) §2.6、§5、§7
+- [伴读桌宠：气泡自适配、遮挡冲突、生机状态机与自由移动调研](../research/2026-11-07-companion-bubble-and-vitality-research.md) §2.6、§5、§7
 - [ADR-0030：前端动效系统](../adr/2026-11-07-adr-0030-frontend-motion-system.md) §2.5–§2.7、§4
 - [ADR-0029：前端去 Emoji 与编辑节奏重构](../adr/2026-11-06-adr-0029-frontend-de-emoji-and-editorial-rhythm.md) §16
 - [动效验证方法](../agents/motion-verification.md)

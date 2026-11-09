@@ -1,7 +1,7 @@
 # 全站视觉换皮：组件族收口记录
 
 > 日期：2026-11-08 · 范围：P2 组件族五族 · 基线：`origin/master` `a012aeb` → `00b6e58`
-> 关联文档：[调研与结构解耦评估](2026-11-08-full-site-visual-reskin-research.md)、[设计系统规范](../design-system.md)、[视觉回归基线](../agents/visual-regression.md)、[ADR-0029](../adr/2026-11-06-adr-0029-frontend-de-emoji-and-editorial-rhythm.md)、[ADR-0030](../adr/2026-11-07-adr-0030-frontend-motion-system.md)
+> 关联文档：[调研与结构解耦评估](../research/2026-11-08-full-site-visual-reskin-research.md)、[设计系统规范](../design-system.md)、[视觉回归基线](../agents/visual-regression.md)、[ADR-0029](../adr/2026-11-06-adr-0029-frontend-de-emoji-and-editorial-rhythm.md)、[ADR-0030](../adr/2026-11-07-adr-0030-frontend-motion-system.md)
 > 本文只记录「做完了什么、刻意没做什么、还剩什么」，不复述 token 值与过程流水；规范条款见 `docs/design-system.md`。
 
 ## 0. 结论先行

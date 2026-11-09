@@ -4,7 +4,7 @@
 - **日期**：2026-11-06
 - **决策者**：DeLector 维护者 + 用户（2026-11-06 拍板）
 - **有效期**：见 §11。满足任一失效条件即由新 ADR 取代，**不得就地改写本文**
-- **关联**：ADR-0026（读者沉浸式编辑流与 CEFR 噪声削减）、[第一轮调研](../reviews/2026-11-06-emoji-and-ai-tone-frontend-research.md)、[第二轮外部证据](../reviews/2026-11-06-emoji-round2-external-evidence-and-mapping.md)
+- **关联**：ADR-0026（读者沉浸式编辑流与 CEFR 噪声削减）、[第一轮调研](../research/2026-11-06-emoji-and-ai-tone-frontend-research.md)、[第二轮外部证据](../research/2026-11-06-emoji-round2-external-evidence-and-mapping.md)
 - **上游方案**：第一轮 P0/P1/P2 提案（本次被本 ADR 部分否决与重排）
 
 > 目录说明：本 ADR 写入仓库 `docs/adr/`，而不是 vault 的 `08-Projects/DeLector/01-ADR/`。原因是仓库序列已到 0028，vault 镜像停在 0026；把 0029 写进 vault 会产生两个不同步的真值源。vault 侧只保留调研草稿。
@@ -168,8 +168,8 @@ inline SVG 只是 HTML/JS 字符串，不新增请求，`tools/build_index_html.
 
 ## 9. 参考
 
-- [第一轮调研：现状清点与替换矩阵](../reviews/2026-11-06-emoji-and-ai-tone-frontend-research.md)
-- [第二轮：外部产品与 README 实测](../reviews/2026-11-06-emoji-round2-external-evidence-and-mapping.md)
+- [第一轮调研：现状清点与替换矩阵](../research/2026-11-06-emoji-and-ai-tone-frontend-research.md)
+- [第二轮：外部产品与 README 实测](../research/2026-11-06-emoji-round2-external-evidence-and-mapping.md)
 - GOV.UK Design System, Images: https://design-system.service.gov.uk/styles/images/
 - W3C WAI, Decorative Images: https://www.w3.org/WAI/tutorials/images/decorative/
 - MDN, aria-hidden: https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Attributes/aria-hidden
@@ -358,7 +358,7 @@ inline SVG 只是 HTML/JS 字符串，不新增请求，`tools/build_index_html.
 
 #### 16.2.1 `section/content = 4.0` 从未落在像素上
 
-- **原文**：外部参考评审把 `section/content` 间距比目标写作 **4.0**（`docs/reviews/2026-11-06-dryness-contrast-prototype.html`）；§3.5 据此落成「section 间距 40–64px」。
+- **原文**：外部参考评审把 `section/content` 间距比目标写作 **4.0**（`docs/research/2026-11-06-emoji-vs-typography-prototype.html` 的配套原型）；§3.5 据此落成「section 间距 40–64px」。
 - **实测**：该原型实际渲染是 **64 ÷ 40 = 1.6**；4.0 是按「section = 元素 × 2.5–3」倒推的**合成目标值**，从未落在任何像素上。T9 实测功能面内部块间 28–32px（1.17 档），阅读面 70 字符/行、1.85 sans / 1.95 serif。
 - **结论**：**【失效】** 4.0 不能作为验收常数。替代口径按作用层拆分：
   1. 阅读面（reader 正文块）保持现状；
@@ -392,7 +392,7 @@ inline SVG 只是 HTML/JS 字符串，不新增请求，`tools/build_index_html.
   1. **断点问**：这个文字在窄屏断点下还在吗？`display: none` / `font-size: 0` / `visibility: hidden` 都算**不在**。
   2. **状态问**：这个字形是不是某类状态或身份（音色、模式、在线状态、性别等）的唯一可辨载体？
   3. **可达问**：`title` 在触屏不算文字；`aria-label` 只服务屏幕阅读器、不服务肉眼。二者都不能用来证明「旁边有文字」。
-- **留痕**：本节；`WORKMEMORY/work.log` 2026-11-07 沉淀批次补记；播放器托盘调研 `docs/reviews/2026-11-07-player-tray-redesign-research.md`（PR #267，未合并）。
+- **留痕**：本节；`WORKMEMORY/work.log` 2026-11-07 沉淀批次补记；播放器托盘调研 `docs/research/2026-11-07-player-tray-redesign-research.md`（PR #267，未合并）。
 
 ### 16.3 未被推翻但口径收窄的条款
 

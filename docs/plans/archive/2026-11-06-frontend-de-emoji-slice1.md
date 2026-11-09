@@ -2,7 +2,7 @@
 
 > **Goal**：在不改变任何功能语义的前提下，于 4 个界面建立一套可复用的「删字形 / 补可访问名 / 补排版」替换语法，并让 4 个界面的可见彩色 emoji 归零，为后续批量推广提供已验证的样板。
 > **Tech Stack**：原生 HTML 片段（`static/views|layout/*.html`）+ 原生 JS（无构建器）+ 单一 `static/style.css` + Python 3.11（仅用于构建/校验脚本与 pytest）。
-> **Spec Reference**：[ADR-0029](../adr/2026-11-06-adr-0029-frontend-de-emoji-and-editorial-rhythm.md)（§3 决策、§5 实施顺序、§6 失败信号、§10 决策确认、§11 有效期、§12 推翻留痕）；[第一轮调研](../reviews/2026-11-06-emoji-and-ai-tone-frontend-research.md)；[第二轮外部证据](../reviews/2026-11-06-emoji-round2-external-evidence-and-mapping.md)
+> **Spec Reference**：[ADR-0029](../adr/2026-11-06-adr-0029-frontend-de-emoji-and-editorial-rhythm.md)（§3 决策、§5 实施顺序、§6 失败信号、§10 决策确认、§11 有效期、§12 推翻留痕）；[第一轮调研](../research/2026-11-06-emoji-and-ai-tone-frontend-research.md)；[第二轮外部证据](../research/2026-11-06-emoji-round2-external-evidence-and-mapping.md)
 > **Global Constraints**：
 > - **不变量 I1**：「任何字形都不得是意义的唯一载体。」删除任一 emoji 后，该控件的可访问名必须来自可见文字、`aria-label` 或 `aria-labelledby` 之一；`title` **不计入**（触屏与部分 AT 组合不可靠，见 ADR §13.2）。
 > - **不变量 I2**：本切片不新增任何运行时依赖、不改构建链、不改 `static/sw.js`、不引入 CSP。

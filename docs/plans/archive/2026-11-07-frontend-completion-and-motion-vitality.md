@@ -2,7 +2,7 @@
 
 - **状态**：In Progress —— 四项决策已拍板；M1 已实施并开 PR，T2–T8 逐项推进；T9 拆下一批
 - **日期**：2026-11-07
-- **上游**：[ADR-0029](../adr/2026-11-06-adr-0029-frontend-de-emoji-and-editorial-rhythm.md)、[动效调研与模板](../reviews/2026-11-07-motion-vitality-research.md)、`../reviews/2026-11-07-motion-templates.css`、`../reviews/2026-11-07-motion-templates.js`
+- **上游**：[ADR-0029](../adr/2026-11-06-adr-0029-frontend-de-emoji-and-editorial-rhythm.md)、[动效调研与模板](../research/2026-11-07-motion-vitality-research.md)、`../research/2026-11-07-motion-templates.css`、`../research/2026-11-07-motion-templates.js`
 - **前置批次**：第四批 B 类 390 处装饰字形清零（PR #255，扫描 0 残留）
 - **性质**：加法（补全 + 生动力），但**先做一步减法**（循环动画收口，见 §1 D1）
 
@@ -26,10 +26,10 @@
 | 文档 | 用途 |
 | --- | --- |
 | `docs/adr/2026-11-06-adr-0029-frontend-de-emoji-and-editorial-rhythm.md` | 不变量 I1、动效边界、失败信号 §6 |
-| `docs/reviews/2026-11-07-motion-vitality-research.md` | 外部实测值、可抄手法 §4、循环判定 §8、反例 §7 |
-| `docs/reviews/2026-11-07-motion-templates.css` / `.js` | 可直接落地的模板（stagger / countUp / fade） |
+| `docs/research/2026-11-07-motion-vitality-research.md` | 外部实测值、可抄手法 §4、循环判定 §8、反例 §7 |
+| `docs/research/2026-11-07-motion-templates.css` / `.js` | 可直接落地的模板（stagger / countUp / fade） |
 | `docs/design-system.md` + `static/css/tokens.css` | 现有 token 与视觉语言 |
-| `docs/reviews/2026-11-06-external-ui-design-reference-library.md` | 更早一版外部参考 |
+| `docs/research/2026-11-06-external-ui-design-reference-library.md` | 更早一版外部参考 |
 
 ## Global Constraints（全批次硬约束）
 

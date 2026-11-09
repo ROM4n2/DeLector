@@ -1,0 +1,53 @@
+### 2026-11-08 00:47 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, github-pr
+P1-4 存量重算收口：PR #288（fix/stale-article-recompute，从 origin/master 起，不合并）。
+- 现状：PROCESSED_JSON_VERSION 在 processor.py，两条写入分支共用；GET 惰性迁移只比版本号。ADR-0028 前 Android 纯 Python 结果的 pos/case/topology 错或缺却同标 3.5.0 ⇒ 永不重算。Android 数据在私有 SQLite delector.db（filesDir）。
+- 方案：版本 3.5.0→3.6.0；只做按需惰性重算（不启动全量）。备份表 processed_json_backup（覆盖前上一版，与 UPDATE 同事务）；失败回滚 + 200 旧结果 + processed_upgrade_failed；raw_text 只读；BLOB/坏 JSON 内存容错。新增 tools/recompute_processed.py（按批/dry-run/逐字 restore，可中断幂等）。
+- 回退：--restore 逐字写回 + 把常量改回 3.5.0（否则下次打开会再迁移）。
+- 实测（桌面 spaCy 3.8.18）：典型 22ms/篇，10 万字符 5.2s；init_db 69ms、create_app 16ms；二次跑 migrated=0；restore 逐字相等。
+- 测试：新增 tests/test_processed_json_migration.py（17 例）；全量 pytest 2897 passed / 9 skipped / 1 xfailed（exit 0）；ruff + mypy strict 通过。
+- 未验证：Android 模拟器单篇耗时与 PSS（本机未执行）。
+
+### 2026-11-08 01:44 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, android-build, emulator-run
+「静态资源更新后仍跑旧 UI」四层收口（worktree D:\Code\DeLector-asset-fp / fix/static-asset-fingerprint，基于 origin/master bf0110a，PR 待审不合并）。
+- 指纹：新增 delector/core/assets_manifest.py（SHA256 over 排序后的 相对路径+长度+内容，12 hex；HTML meta / js BUILD_STAMP 先归一化避免自指）；/api/health 与 sync 工具共用同一算法。
+- APK 资产：sync_android_sources.py 写 asset-fingerprint.txt + 注入 meta/js 戳；--check 由「存在性」改为「内容指纹比对」，仓库改 CSS 未 sync 直接非零。
+- Android：static.version marker 改为 `versionCode:资产指纹`（无指纹文件退回纯 versionCode）；staging 完整解包→校验 index.html→rename 原子换入；失败保留旧目录并写 static.version.error，新增 recoverStaticDir 处理换入中途崩溃；buffer 64。
+- SW/页面：network-first + cache:"no-cache" + waitUntil(cache.put) + skipWaiting/clients.claim；页面 build-stamp.js 三方自证（meta/js/server），失配 postMessage 清缓存并提示刷新；register 加 updateViaCache:"none"。
+- PITFALL（设备实测抓到的真 bug）：`sorted(Path)` 在 Windows 大小写不敏感、Android/Linux 敏感，`icons/README.md` vs `icons/lucide-sprite.svg` 顺序相反 ⇒ 构建期写死的指纹 3061541188d7 与设备运行期现算 cc1efb3c37f8 永不相等。修法：排序键固定为 rel.as_posix() + 回归测试 test_file_order_is_platform_independent。
+- 验证：pytest 全量 2897 passed/4 skipped/1 xfailed；ruff、mypy --strict delector tools、mypy tests 通过；干净重建后 assembleEmulatorDebug/assembleDeviceDebug、lintDeviceDebug、testDeviceDebugUnitTest 全绿（增量重建会让 APK local header 出现对齐空隙，contiguity 测试需 clean build，属既存构建行为）。
+- 模拟器（API37 emulator-5554）同 versionCode 52101 闭环：仅改 style.css --paper（#faf8f5→#faf8f4）→ sync → 重建 → 覆盖安装 → marker 52101:78c95b6c885b、health/CDP 四方指纹一致、computed --paper=#faf8f4；回退后 marker 回 52101:cc1efb3c37f8、computed 回 #faf8f5；两次均无 static.version.error，delector.db/progress.db 未动。反向 --check（改 CSS 不 sync）exit 2 报「静态资源已过期」。
+- 说明：tokens.css 的 --paper 被 style.css 同名 token 覆盖，故视觉闭环用 style.css 临时改动取证后已还原，最终 diff 未包含这两个文件。
+
+### 2026-11-08 04:10 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, emulator-run, github-pr
+P4 桌宠「自由移动」PR（feat/companion-p4-free-move，基线 origin/master 240d38f，不合并）。
+- 开关默认关，位于抽屉「伴学」区顶部 #drawer-companion-section（原生 checkbox + role=switch + aria-describedby；「已开启/已关闭」文字同步，不靠颜色）。
+- 约束分工沿用 P3：拖拽中不约束（collectNoParkRects 仅用于提示态），pointerup 调既有 settleIfNeeded()，settle-end 后再 savePosition()；未另写判定。
+- 位置记忆：delector_companion_roam / delector_companion_pos；视口差 ≤32px 用布局 left/top 精确回位，跨断点才用 rx/ry；尺寸只用 offsetWidth/offsetHeight + transform-origin/scale 换算。
+- 视图切换 onNavIntent 先 restoreSavedPosition 再 scheduleRefresh(280)；抽屉开→关由既有 MutationObserver 识别：开启恢复记忆位、关闭清 inline 回 CSS 角落，延迟 380ms 避开 0.36s 滑出动画。
+- 动效：未新增 infinite（仍 7 处）；prefers-reduced-motion 下 .companion transition:none。
+- 桌面 1280×800（CDP 真实鼠标拖拽）：角落 {1169,704}→开抽屉 {196.95,621.25}→开启→拖过 nav mid {596.48,29.03}（is-over-no-park=true）→落 (1169,420) 即 {left:1132.98,top:384.63}；saved {left:1133,top:384.63,rx:.9497,ry:.5283,vw:1265,vh:800,scale:1}；reload 恢复 {1133,384.625}；writer {1133,250.375}、exam/cards/home {1133,384.625}；关闭→{1169,704}，重开→inline {1133,384.48}；松手压 nav→{596.5,106}；1280→393 夹回 {329.64,675.09,63.36}；reduced-motion 0s。AX role=switch name=自由移动，空格可切换。
+- 模拟器 API37（411×813 CSS，dpr 2.625，adb 真触摸）：tap 桌宠开抽屉→tap 开关 (525,1244) 得 checked/已开启；adb swipe 104,597→656,1370 → saved {left:209.65,top:379.63,rx:.6271,ry:.5177,vw:411,vh:813,scale:.88}；reload 精确回位后被可点击 clause-node 让位到 top 296.49（P3 松手避让，非漂移）；换非交互空区重拖 adb swipe 656,1152→871,1664 → {left:291.67,top:491.81}/visual {300.31,500.45}，reload 后 t0–t1250 稳定；备考⇄文库位置不变。
+- PITFALL：新分区误用未定义 token var(--hairline)，被 test_no_undefined_css_variables_in_writer_surfaces 抓住；改用 var(--line-soft)。
+- 门禁：check_index_html_sync / check_frontend_layers / check_layer_invariants / check_companion_contract / check_frontend_api_contract / check_silent_degradation 全 exit 0；3 个 companion node 探针 PASS；全量 pytest 2909 passed / 9 skipped / 1 xfailed（exit 0）。
+- 未验证：真机（仅模拟器）；iOS Safari 的 visualViewport 差异。
+
+### 2026-11-08 00:40 | deepseek-v4.1-flash__trae | NOTE
+P3 第二轮（追加到 PR #287，未合并）：把非拖拽自动让位也统一到 settle-end 求解。
+- 改动只 1 文件 `static/js/companion.js`（+48/−22）；`_bubbleResolvePending` 与 `bubbleExpiresAt` 仍是唯一挂起/过期来源，未新增标记。
+- `repositionBubble()` 现在对**所有** `is-settling` 挂起（原先只判拖拽释放）；`_isSettling()` 抽出复用。模态（`.writer-sidebar.mobile-panel-open`）判断前移到挂起之前，sheet 开合仍立即让位。
+- `say()` 落在滑动窗口内时不再先显形于默认位置：展示请求一起挂起，`_onSettleEnd` 补显（未过期 + 未被拖拽/聚焦抑制）后一次求解。
+- `_finishDragRelease` / `_resumeBubbleIfPending` 改为返回「是否已求解」，避免 settle-end 重复求解。
+- CDP 采样：自动让位 settle 窗口 168–451ms 内气泡内联位置仅 1 个值、胶囊坐标变 2 次（无中间跳动）；settle 后 1 次有效求解；单次 settle 44–487ms 后 2.1s 稳定、无 pending 泄漏；滑动中 say() 期间 hidden=true 且无内联位置；sheet 关（滑动中）恢复延后到 settle-end（gapY=12）。
+- 门禁：lifecycle 20 断言 PASS；build_index_html + check_index_html_sync PASS；check_companion_contract PASS；check_frontend_layers PASS；infinite=6（不变）；reduce 0 运行动画。
+- 证据：`_artifacts/p3/settle-unify-probe.json` / `settle-unify-probe2.json` / `say-during-settle.json`（未跟踪）。
+
+### 2026-11-08 01:25 | deepseek-v4.1-flash__trae | NOTE
+PR #287 CI 修复（f3b0515 unit-1 红 → 751076d 全绿）。
+- 根因：`companion.js` 新增 `./companion-lifecycle.js` import，但两个 vm 探针 harness 各自维护 stub map，缺这项，link 抛「探针未提供依赖桩」；bubble_resume 的 .py 因拿不到 JSON 退化为 JSONDecodeError。
+- 修法：新增 `tests/companion_probe_deps.mjs` 作为唯一依赖登记处（player/cd-state 最小桩；obstacles/lifecycle 读真源码；`realCdState:true` 供上下文探针）。两个 mjs 用 `DELECTOR_PROBE_ROOT` + 绝对 file URL 动态 import 共享表（tmp 变异副本也能用）。未登记 specifier 仍在 link 阶段抛原报错。
+- bubble 探针 DOM 桩补齐 classList / setAttribute / getAttribute / dispatchEvent / CustomEvent（真实 DOM 必有），断言 0 改动。
+- 本地：两个 .py 5 passed；`ci_shards.py unit-1` 687 passed / 6 skipped；CI 全 job pass（unit-1 1m22s）。
+

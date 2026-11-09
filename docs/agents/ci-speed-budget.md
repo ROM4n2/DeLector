@@ -107,7 +107,7 @@
 
 ### 1.5 cost-guards 拆分与前端探针去重（2026-11-05，PR #216）
 
-实施（`docs/plans/2026-11-05-ci-cost-guards-split.md`）：
+实施（`docs/plans/archive/2026-11-05-ci-cost-guards-split.md`）：
 
 - cost 专项分片拆成两个**各自只含 cost 文件**的分片：`cost-guards`（articles + cards）、
   `cost-cold-start`（cold_start），各自独立 runner、无 xdist、不与普通测试共享进程；
@@ -210,7 +210,7 @@ pre-change PR run（`41811788954` / `41813339091` / `41852745136` / `41851476946
 ### TODO-CI-04（已完成，PR #216）：`cost-guards` 是新关键路径（约 143s）
 
 - 问题：3 个 cost 基准文件本身 107.9s（CI），环境准备约 35s，加 4 条前端探针 5s；unit 分片已全部 ≤107s。
-- 实施（2026-11-05，计划见 `docs/plans/2026-11-05-ci-cost-guards-split.md`）：
+- 实施（2026-11-05，计划见 `docs/plans/archive/2026-11-05-ci-cost-guards-split.md`）：
   - cost 分片拆成 `cost-guards`（articles + cards）与 `cost-cold-start`（cold_start），
     两个分片各自只含 cost 文件、独立 runner、无 xdist；
   - 4 条前端探针从 6 个分片去重到 `unit-2`（Node 安装保留，根 conftest 要求）；

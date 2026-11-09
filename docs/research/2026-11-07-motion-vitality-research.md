@@ -195,8 +195,8 @@ node C:\Users\Haoyu\AppData\Local\Temp\del_motion\measure.mjs d:\Code\DeLector\_
 
 完整文件：
 
-- [motion-templates.css](file:///d:/Code/DeLector/docs/reviews/2026-11-07-motion-templates.css)
-- [motion-templates.js](file:///d:/Code/DeLector/docs/reviews/2026-11-07-motion-templates.js)
+- [motion-templates.css](2026-11-07-motion-templates.css)
+- [motion-templates.js](2026-11-07-motion-templates.js)
 
 只挂现有 token（`--accent` / `--moss` / `--pencil` / `--paper-*` / `--shadow-*` / `--dur-fast` / `--dur-mid` / `--ease-editorial`）。唯一字面量是 `260ms`（ADR-0029 选中色条，与 `style.css:3763` 一致）。
 

@@ -1,0 +1,222 @@
+### 2026-11-07 00:31 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
+ADR-0029 第四批（B 类 390 处清零）落地，分支 feat/frontend-de-emoji-slice4（基于 origin/master 4477251）。
+处置分布（390 处 / 40 文件）：
+1) 直接删 354 处（只去字形与其后多余空格；不动文案/CSS/布局）。
+2) 换图标 21 处：✕×15→ui-ico-x（5 个模态框关闭键、cloze/quiz 关闭、cards 三处删除键、workbench 例句删除、cp-drawer 解除键）、🔀×4→refresh-cw、▾×1→chevron-down、➕×1→plus；sprite 12→16（含 workbench.html 内联副本），LICENSE/README 同步。
+3) 空态重做 10 处（用户口述 11，第 11 处 import_modal:100 ✦ 并入直接删）：workbench 🎉、a1_cards 🔍×2、writer.js ✍️、views/writer ✍️、quiz 模式 🎴/✍️/🎯 + 完成 🏆、import dropzone 📄；统一左 2px 竖线 + mono eyebrow + serif 标题 + 13px pencil 正文（内联，未动全局 .empty-state / style.css）。
+4) folio.js 5 个 icon 字段：renderMarquees 从未消费 s.icon，直接删字段+渲染点（连带 🔥/⏱），不新增 symbol。
+验证：全量扫描 0（40 文件全部落零）；build_index_html 3479 行；check_index_html_sync PASS；受影响 pytest 33 文件 626 passed / 1 skipped。
+探针同步（只断言文字，不删用例/不放宽）：listen-lab（✓/✗ 前缀）、companion chips、hard-sentences、cards catalog/wb source tags、german_workbench 徽标、writer_mobile 按钮定位、audit_hardening notify 文案、server 设置回环文案。
+约束：6 路子代理按文件所有权切分（index.html/sprite 仅主代理）、未碰 android/、未跑 sync_android_sources.py、未 git add -A。
+
+### 2026-11-07 08:05 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, browser-cdp
+M1（加法批次前置减法）实施并开 PR #257，分支 feat/motion-infinite-m1（基于 master 1a40986）。
+1) 删除 5 组循环：tokenPulse / pulseDot 的 @keyframes，以及 pulse-linked / pulse-clause / thoughtInkPulse 的 keyframes（5 个名字在 static/ 已 0 命中）。
+2) 静态降级：顶栏 .pulse 与 .folio-pulse 改静态圆点；.tok.focus-active 保留 scale(1.06)+2px ink ring；.linked-separable / .clause-highlight 保留静态 2px 蓝/橙边；.thought-pulse-dot 保持静态（语义由「Eule 正在推演句子结构...」承担）。
+3) 白名单 7 处保留并补 reduce：typingCursorBlink、charBlink、companionIdle ×2、marqueeLeft/Right、workbench .audio-btn.busy；每处旁有中文注释说明允许循环的理由。
+4) 偏差（写入计划 §7）：计划原写「静态边 + 一次性 260ms 高亮」，实际只做静态边 —— 停止门 #2 不给正文 .tok 新增动画；思考指示不拆三点（DOM 本就只有一个点）。
+运行时实测（不是只查 CSS 文本）：headless Chromium + CDP 注入 13 个受影响元素，正常态 7 个白名单动画各 1 个运行实例、被删动画 gap 0；Emulation.setEmulatedMedia 切 reduce（matchMedia=true）后全部 animationName=none、getAnimations()=0，静态标记（scale/描边/色点）保留。
+静态闸门：grep infinite=7（全落白名单）；build_index_html 3479 行；check_index_html_sync PASS；pytest test_frontend_guards + test_grammatik_radar + test_writer_mobile = 43 passed。
+约束：未改 JS class 切换逻辑、未碰 android/、未跑 sync_android_sources.py、未 git add -A（worktree 内两份 B 类草稿未入库）。
+
+### 2026-11-07 09:45 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, browser-cdp
+M1 已 merge（#257 → master e840467，merge commit）；§7 偏差按用户结论改为「已确认：用户选择纯静态，停止门 #2 优先」，D1 表原「一次性 260ms 高亮」标注被取代。
+T2 动效基建已实施并开 PR，分支 feat/motion-t2-infra（基于 e840467）。
+1) tokens.css 新增 5 个 motion token：--motion-enter / --motion-enter-shift / --motion-press / --motion-count / --motion-stagger-step（未迁移旧 --dur-*）。
+2) style.css 新增 @keyframes dl-fade-up、.dl-enter、.dl-stagger > *、.dl-count；新增全局 reduce 兜底（animation/transition 0.01ms、iteration 1、scroll-behavior auto），并让 .dl-enter/.dl-stagger 在 reduce 下 animation:none。
+3) 新增 static/js/motion.js：prefersReducedMotion / stagger(root,{step,cap}) / countUp(el,to,{duration,format})；数值从 CSS token 读，不复制 40/520。step/cap 的调用方在 T5/T6。
+运行时实测（CDP，正常 vs reduce）：正常态 .dl-enter animationName=dl-fade-up、1 个运行实例；8 子项 index 0..5 封顶、delay 0/40/…/200ms；countUp 从 0 走到 42。reduce（matchMedia=true）下 stagger 返回 0、无 --stagger-index、animationName=none、getAnimations()=0、delay 全 0；countUp 调用瞬间即 42。
+静态闸门：node --check motion.js 通过；新 token 仅 tokens.css 定义、style.css 仅 var() 引用；build_index_html 3479 行；check_index_html_sync PASS；pytest test_frontend_module_graph + test_frontend_guards = 24 passed。
+约束：未碰 android/、未跑 sync_android_sources.py、未 git add -A。
+
+### 2026-11-07 10:10 | deepseek-v4.1-flash__trae | NOTE
+T2 PR #258 CI 真实结论：unit-4 FAILURE（cost-guards CANCELLED，因失败被取消），失败用例 tests/test_writer_mobile.py::test_no_undefined_css_variables_in_writer_surfaces，报「用到了未定义的 CSS 变量：--motion-enter / --motion-enter-shift / --motion-stagger-step / --stagger-index」。
+根因（不是测试过严）：主应用 static/index.html 只加载 /style.css，tokens.css 仅 workbench.html 加载；T2 把新 token 只写进 tokens.css，导致主应用运行时拿不到时长（烘焙进 CSS 的 .dl-enter 会解析失败），测试抓的是真 bug。此前 CDP 探针页手动 link 了 tokens.css，掩盖了该问题。
+修法（未放宽任何断言、未改测试）：style.css :root 补同名 motion token 与 --stagger-index（仓库两套 token 本就互为镜像），tokens.css 保持镜像；计划 §7 新增偏差行 #3。
+复验：目标用例 + module_graph + guards = 25 passed；build_index_html 3479 行；check_index_html_sync PASS。
+### 2026-11-07 11:47 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, browser-cdp
+T3（hover 收敛，口径 C）在 worktree dlector-m1 / 分支 feat/motion-t3-hover 实施。
+1) 位移类：HEAD 实测 hover transform 30 条（9 translate/translateX + 21 translateY），移除 29 条改色/边框/阴影；仅 .stat-badge 保留 translateY(-2px)（计划允许的单卡上浮），裸 0.15s → var(--dur-fast)。
+2) 非布局 scale/rotate 保留 10 处并逐条登记计划 §7：article-row-del(1.1)、speaker-btn(1.15)、hl-color-btn×2(1.2)、deck-flip-icon(rotate180+1.1)、dossier-stamp.unlocked(rotate0+1.01)、mascot-stage-char(1.06)、mascot-color-dot(1.2)、companion-char(1.1)、companion-avatar(1.1)。原估算 12 处，另 2 处实为 translate(-1px,-1px)，已按 C 移除。
+3) 全部 :hover 包进 @media (hover: hover) and (pointer: fine)：style.css 113 块 / workbench.css 11 块；与 :focus-visible 混写规则拆分，非 hover 态留外层；删除 reduce 块里已失效的 encounter transform:none。
+4) .exam-module-card 补 background/border-bottom-color/box-shadow 反馈；.satz-lab-chip/.folio-anchor-pill/.modal-tab/.import-tab/.rate-btn 等时长 token 化并去 transform 过渡。
+验收：脚本审计 hover 选择器 0 条裸露；style/workbench 规则对比 HEAD，变化项全部为预期（transform 移除、反馈替换、时长 token）。
+CDP 实测（desktop 1440x900）：article-row hover transform=none、top 397.1→397.1、底色变 paper-tint；exam-module-card transform=none、bg/底线/阴影变化；progress .stat-badge translateY(-2)、top -2px；touch 模拟（mobile:true + touch，matchMedia hover:none=true）下三者 hover 强制均零变化。
+逐页目测（截图 d:\\Code\\DeLector\\.screenshots\\t3\\）：首页/搜索列表仅底色、不位移；备考卡反馈更明显（新增底线+阴影）；统计徽章仍轻浮 2px；卡片/写作/生词本/词汇页 hover 明显变静（只剩底色/阴影/描边）。
+测试：build_index_html 3479 行；check_index_html_sync PASS；test_writer_mobile 等目标 5 文件全绿；全量 pytest 722 passed / 6 skipped / 1 failed —— 失败为 test_companion_services::test_chat_endpoint_saves_turns_to_session，已在本机 master 复现同样失败（真实 LLM 响应泄漏，非本批引入）。
+约束：未碰 android/、未跑 sync_android_sources.py、未 git add -A；截图在 .screenshots（未跟踪）。
+
+### 2026-11-07 11:56 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, browser-cdp
+T4（选中态左侧色条）完成：.nav-tab.active / .mobile-nav-btn.active / .dock-item.active 增加 ::before 2px 色条（accent/coral），scaleY(0→1)、transform-origin: top、260ms ease-editorial；两个容器补 position: relative，不改变布局盒。
+aria-current：模板只标初始 home；main.js 的 show() 切换时同步增删（计划偏差 §7-7，静态属性会在切换后陈旧）。
+实测（CDP 1440x900 / 390x844）：active 色条 matrix(1,0,0,1,0,0)，inactive matrix(1,0,0,0,0,0)；show(exam) 后色条与 aria-current 同步迁移；7 个 nav-tab 的 left/width 切换前后完全一致（无 1px 抖动）；移动端 390px 同样生效；reduce 下 ::before transitionDuration=1e-05s（即时）。
+测试：test_index_dom_probe + test_frontend_guards + test_writer_mobile 43 passed；build_index_html 3480 行；check_index_html_sync PASS。
+截图：d:\Code\DeLector\.screenshots\t4\（未跟踪）。
+约束：未碰 android/、未跑 sync_android_sources.py。
+
+### 2026-11-07 12:20 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, browser-cdp
+T5（一次性入场 + 列表 stagger）在 worktree dlector-t5 / 分支 feat/motion-t5-enter-stagger 实施（基于 origin/master e19a11a）。
+1) motion.js 新增 enterOnce(root,{cap=6})：给可见直接子元素挂 .dl-enter、root 挂 .dl-stagger、序号封顶，动画结束（enter + step*(cap-1) + 50ms）后自动摘类与序号。摘类是必须的：.view 靠 display 切换，display 变化会让 CSS 动画重播，不摘就等于每次切回重播。reduce 下不挂任何类。
+2) search.js：首次出现结果时对 #search-results 的可见分组 section 入场（结果文本本身不逐条入场）；_s.entered 保证换词/切范围/回来不重播。
+3) cards.js：词汇网格 .card-grid 首次生成时入场一次（_gridEnterPlayed）；切段/翻页/增删卡重渲染不加。
+4) main.js：exam-module-grid 是模板静态 DOM，由首次 show('exam') 触发、_examEnterPlayed 只播一次（views/exam.html 不改）。
+计划 §7 新增偏差 #8（.dl-stagger 在父、.dl-enter 在可见子元素；exam 由 main.js 触发）。
+CDP 实测（1440x900）：exam 7 项 delay 0/40/…/200/200ms、duration 180ms，cleanup 后 animationName=none、anims=0；二次 show('exam') 零重播；搜索 4 组 delay 0..120ms，cleanup 后零类，换词重渲染零重播；卡片网格 43 项 delay 封顶 200ms、cleanup 后零类，切段后 143 项零重播；reduce（matchMedia=true）下三处均 enterCount=0、opacity=1、animName=none。搜索最迟组 120ms 起播 +180ms，无「最后一项等半秒」。
+静态闸门：node --check 4 个改动 JS 通过；build_index_html 3480 行；check_index_html_sync PASS；pytest test_frontend_module_graph + test_frontend_guards + test_index_dom_probe + test_writer_mobile = 59 passed。
+约束：未碰 android/、未跑 sync_android_sources.py、未 git add -A。
+
+### 2026-11-07 12:46 | deepseek-v4.1-flash__trae | NOTE
+T5 CI 首轮 7 个 Python shard 全红：check_frontend_layers 报 cards.js 顶层 `let _gridEnterPlayed` 违反「零顶层 let/var」契约（cards.js 在 MUTABLE_STATE_MODULES）。
+先试图放进 cd-state.js catalog.enterPlayed，被 test_cards_state_split 的 24 叶子逐字钉死测试拒绝（4 failed），已撤销。
+改为容器 dataset：`#cards-container.dataset.enterPlayed`，既无顶层可变状态也不动状态容器契约。gate PASS，72 passed，CDP 复测 C1/C2/C3 行为不变（43 项错峰→cleanup→切段 143 项零重播）。
+
+### 2026-11-07 12:58 | deepseek-v4.1-flash__trae | NOTE
+T5 CI 二轮：7 个卡片探针仍红，根因是沙箱 mock 的 `container = { innerHTML: "" }` 没有真 DOM 必有的 dataset / querySelector，renderCatalogGrid 读 dataset 时 TypeError。按「mock 保真」修 3 个探针桩（cards_catalog_tag_probe / cards_workbench_no_review_probe / cards_wb_source_probe），补 dataset:{} 与 querySelector:()=>null；未改任何断言或期望值。相关 21 个用例全绿。
+
+### 2026-11-07 13:08 | deepseek-v4.1-flash__trae | NOTE
+T5 CI 三轮：仅 unit-3 为真实红 —— wb_search_probe 沙箱切片 renderSearchGroups，新增的 enterOnce 未注入（ReferenceError）。补 `enterOnce: () => 0` 桩（该探针只验转义/分组，不验动画）。unit-4 与 cost-guards 是 matrix fail-fast 触发的 cancelled（日志末尾 "The operation was canceled"，进度 92% 无断言红），不是真失败。probe_json_contract + wb_search 相关 5 个用例全绿。
+
+### 2026-11-07 13:30 | deepseek-v4.1-flash__trae | NOTE
+补记 T3/T4 回执（用户指出中间缺回报）：
+- T3 = PR #259，merge commit 3936999ae43a2bd4a8b46ce400728b2848f6245d，已在 master；master CI success。改动 6836670：30 条 hover 位移中 29 条移除（仅 .stat-badge 保留 translateY(-2px)），10 处非布局 scale/rotate 保留并登记 §7 #4/#5，所有 :hover 包进 @media (hover:hover) and (pointer:fine)（§7 #6）。逐页目测结论当时只在 T3 对话回报里给过、未落盘；现补：列表行/卡片上浮变静最明显（首页文章行、卡片网格、写作问题行），考试模块卡改用底色+底线+阴影后仍可辨，桌宠 scale 与 .stat-badge 上浮是仅剩的活跃点，触屏 hover 不再粘住。
+- T4 = PR #260，merge commit e19a11a2eab8772d88622d3118dd1174045b433b，已在 master；master CI success。改动 4850cae 只碰 style.css/main.js/nav 两模板：.nav-tab::before 与 .mobile-nav-btn/.dock-item::before 2px 色条 + aria-current；.tok 与正文行内元素零改动（diff 中无 .tok 选择器），符合「不能用于行内元素」。
+
+T6 实施（worktree dlector-t6 / feat/motion-t6-count-up，基于 8217dfd）：
+- progress.html 6 个 .stat-ring 静态挂 .dl-count；folio.js 用 countUp()（520ms token 默认、easeOutCubic），aria-label 直接终态，无 aria-live；#view-progress.dataset.countPlayed 只播一次。
+- CDP 实测（1440x900）：首入 t0 articles/accuracy/minutes = 1/14%/6 → t150 4/58%/23 → t600 6/80%/31；aria-label 从首帧即 6/80%/31；六项 aria-live=null、无 aria-live 祖先；font-variant-numeric=tabular-nums、宽度恒 38px；切走再回数值立即终态且 200ms 不变；reduce 下立即终态。
+- 静态闸门：build 3480 行、sync PASS、node --check PASS、check_frontend_layers PASS、59 passed。
+
+### 2026-11-07 14:05 | deepseek-v4.1-flash__trae | NOTE
+T7（浮层过渡统一）在 worktree dlector-t7 / feat/motion-t7-popover 实施（基于 97f4ac3）。
+- static/style.css `.enc-popover`：animation 时长从 `var(--dur-fast, 180ms)` 改为 `var(--motion-enter, 180ms)`；easing 仍为 `var(--ease-editorial)`。keyframes `enc-note-in` 保持唯一，未新增第二套；`.open { display:block }` 即时关闭不变，未加 JS 定时器 / animationend。
+- CDP 实测（1440x900）：先 show('encounter') 再开浮层（隐藏视图不跑动画，T3 stat-badge 同款坑）；t40ms opacity 0.375、anims=1、duration 0.18s、timing cubic-bezier(0.22,1,0.36,1)；t360ms opacity 1、anims=0；移除 .open 后 display=none、anims=0（无关闭动画）；reduce 下 animationName=none、opacity=1、transform=none。
+- 闸门：test_encounter_ui_probes 22 passed；build 3480 行；sync PASS。
+
+### 2026-11-07 12:46 | deepseek-v4.1-flash__trae | NOTE
+T8（按压反馈）在 worktree dlector-t8 / feat/motion-t8-press 实施（基于 4821bf3）。
+- static/style.css 新增 `.btn:active { transform: scale(0.98); transition: transform var(--motion-press, 100ms) ease; }`（放在 `.btn-del:active` 之后）；全局 reduce 块追加 `.btn:active { transform: none; }`。
+- 计划选择器的偏差：`.icon-btn` / `.deck-card` 本仓不存在；实际卡片为 `.deck-active-card`，携带滑动手势 transform，纳入会与手势冲突，故不加；workbench.css 已有独立 `.btn:active { transform: scale(.97) }`（transition .05s），属独立样式源未动。登记 §7 #9。
+- CDP 实测（1440x900）：idle transform none / transition all .15s；按下 60ms matrix(0.981502…) / transitionProperty transform / duration 0.1s；释放 250ms 后 none；长按 1.2s 保持 matrix(0.98…) 且释放后 none（不粘住）；强制 :active 的 `.tok` 与 `.a1-option-label` 均 transform none（未触停止门 #2）；reduce 按下 transform none、duration 1e-05s。
+- 闸门：test_frontend_guards + test_index_dom_probe + test_writer_mobile + test_encounter_ui_probes = 65 passed；build 3480 行；sync PASS。
+
+### 2026-11-07 14:12 | deepseek-v4.1-flash__trae | NOTE
+T9（静态补全）在 worktree dlector-t9 / feat/t9-static 实施（基于 61be846）。
+- 排印项按用户定 B 口径，不改代码：计划 §T9 拆成阅读面（70 字符/行、1.85/1.95 保持）/ 功能面（28–40px 为 1.17 档刻意取值）/ `.view` padding 40/64；§7 #10 点明这是第二次「合成数值 ≠ 像素判据」（第一次 section/content = 4.0）。
+- 卡片三态：cards.js 空态改 `.cards-empty` 结构，芯片文字 已完成/无卡片/已归档 + `--accent`/`--ink`/`--moss` + 3px 左竖线；实测芯片 54×24、390px 不重叠。
+- focus 环：12 个 T3–T8 控件 `outline: 2px solid var(--ink); outline-offset: 2px`；键盘 Tab 实测全部 2px ink / offset 2px；对照 `.cards-seg-btn` 仍 UA 1px auto，证明未扫全站。
+- 坑：`.btn` 有 `transition: all .15s`，focus 后 40ms 读到的是 outline 过渡中间值（rgb(10,9,7) / offset 1px），必须等 ≥360ms 再读，否则会误判规则没生效。
+- `.lp-status`：原先无任何 CSS，补 mono 11px + 1px 同色描边芯片；pending 用 `--pencil`、covered 用 `--moss`；实测 49×21，移动端不与文本重叠。
+- 闸门：index sync PASS；test_frontend_guards + test_cards_state_split + test_german_workbench = 126 passed；a1/german/writer 相关 62 passed。
+
+### 2026-11-07 14:31 | deepseek-v4.1-flash__trae | NOTE
+沉淀批次（PR #266，**未合并**，等用户审）：分支 `docs/sediment-motion` 基于 master `1790f70`；初始 4 份文档、`static/` 零改动、未跑全量 pytest（后续追加 countUp 修复时只跑定向 2 个测试文件）。
+- ADR-0029 追加 §16「落地与失效条款」：T1–T9 的 PR #257–#265 与 merge commit 全表；4 条推翻/判错留痕（第 4 条见 16.2.4）——前三条：`section/content = 4.0` 原型实渲染 1.6 从未落像素、hover 位移真问题是文字横向跳而非推布局、循环动画实测 13 处而非 4 处；第 4 条为 TTS 音色字形误判。原文未删，按 §12.2 规则 1 追加。
+- ADR 判定：ADR-0029 §3.5 决策 5 只写「新增…动效 token」，未定义 token 集合/三件套类/降级策略 ⇒ **未覆盖**，另开 `ADR-0030`（Accepted，补充关系不取代）；INDEX 同步两行。
+- 新增 `docs/agents/motion-verification.md`：CDP 三层采样（CSSOM / `getAnimations` / reduce 模拟）、触发式采样、stagger 还原、可复现命令；写入两坑：`transition: all` 读终态须等 ≥360ms（40ms 时读到 UA 环+过渡中间值）、`index.html` 只加载 `style.css` 故 token 必须 `style.css :root` 与 `tokens.css` 双份镜像。
+- vault 归档：去 emoji 分级 → `01-Rules/FRONTEND-DESIGN-PATTERNS.md` 新增 §9（含 §9.3 外部实测区间与复现口径）；外部 UI 实测法并入 §9.3；两篇 inbox 草稿已删除。新增草稿 `99-Inbox/2026-11-07-合成数值-≠-像素判据：设计文档的常数怎么害人.md`，归档目标 `01-Rules/DESIGN-DOC-CONSTANTS-VS-PIXELS.md`。
+
+### 2026-11-07 15:05 | deepseek-v4.1-flash__trae | NOTE
+追加到 PR #266（仍未合并）：两件小修。
+- `countUp` 首帧负值：`motion.js` progress 补下界 `Math.max(0, …)`；新增 `tools/motion_count_probe.mjs`（node:vm 跑真源码，首帧时间戳早于 start 20ms）钉死「首帧 0% / 全程无负值 / 单调不减 / 终值精确 / reduce 不排 rAF」，配 `tests/test_motion_count_probe.py` 接线；`tests/test_motion_count_probe.py` 2 passed，probe wiring + json contract 10 passed。
+- ADR-0029 §16 新增 16.2.4：第四批 B 类把 `player_and_tooltip.html:52/60` 的 👩/👨 判成「相邻有 Katja/Conrad 文字 → 安全删除」**判错**；对不熟悉 TTS 音色的使用者，字形是唯一可辨载体。判据补强：删除前问「这个字形是不是某类状态或身份的唯一可辨载体」，而不是只问「旁边有没有文字」。播放器托盘未动，等专项调研。
+
+### 2026-11-07 15:40 | deepseek-v4.1-flash__trae | NOTE
+PR #266 追加（仍不合并）：ADR-0029 §16.2.4 判据由一问补成三问，原文保留。
+- 第二层根因（播放器托盘调研 PR #267）：`static/style.css:3419-3431` 在 ≤768px 把 `.voice-btn` 设为 `font-size:0`、`.vb-lbl{display:none}`；源码里 Katja/Conrad 文字在，手机断点下字宽恒为 0。当时只查源码、没查断点。
+- 三问口径：断点问（`display:none`/`font-size:0`/`visibility:hidden` 都算不在）→ 状态问（是否状态/身份的唯一可辨载体）→ 可达问（`title` 触屏不算文字，`aria-label` 只服务屏幕阅读器）。
+
+### 2026-11-07 15:52 | deepseek-v4.1-flash__trae | NOTE
+思考强度真实接线在 worktree D:\Code\DeLector-thinking / feat/reasoning-effort-wiring（基于 origin/master 766a98c），PR #277，未合并。
+- 改前：四档只落在设置 DB；companion 的 CompanionChatReq 无该字段、dispatch payload 只有 messages/context；Go 只把请求里的值写 trace，streamReq 没带；4 条 Python 生成路径也没带 ⇒ 界面显示与请求脱节。
+- 映射（Python `llm_client.map_reasoning_effort` 与 Go `companion.MapReasoningEffort` 同构）：none→none、low→low、medium→high、high→max。依据官方文档（2026-11-07）：合法值 none/low/high/max，medium/xhigh 被上游吞成 high，原样透传会让平衡/深度同档。
+- 接入：llm_client.chat(reasoning_effort=) 单点合并 payload；main/articles/writing 与伴学回退内核全部传设置值；连通性自检固定 none；companion body>X-Reasoning-Effort>设置；Go RunLoop 入口归一化并同时用于 trace 与 streamReq，Ollama 回退清空该字段。
+- 证据：Python 相关 111 passed；Go `go test -count=1 ./internal/companion/...` ok、vet clean；ruff 全绿；6 条具名变异全部被捕获后还原。
+- 未验证：四档响应差异。本地 4 份 .env 的 key 对 api.deepseek.com 全 401；探针实测四档已带不同字段发出（none/low/high/max）但未过鉴权。换有效 key 跑 `python tools/probe_reasoning_effort.py` 可补齐。取证记录 docs/agents/reasoning-effort-chain.md。
+- 风险：DEFAULT_MAX_TOKENS=4096 未改，思考 token 与正文共享预算，max 档长输出可能截断，待实测再定；bench_judge_gaming 刻意不带该字段（要钉 temperature）。
+- 过程踩坑：前 7 个 Python 文件误改到主工作树（另一条线 fix/poker-tap-flip 的工作副本），已确认 diff 仅含本次新增后按文件 git restore 精确还原，未触碰他人改动；后续全部改在 thinking worktree。
+
+### 2026-11-07 16:30 | deepseek-v4.1-flash__trae | NOTE
+拆掉请求级 max_tokens 硬编码（同 worktree D:\Code\DeLector-thinking / feat/reasoning-effort-wiring，PR #277 仍 OPEN）。
+- 删除：llm_client.DEFAULT_MAX_TOKENS=4096、CONNECTIVITY_MAX_TOKENS=5、payload 必带字段；main x2 / articles / settings / companion_agent 的 4096 / polish_loop per_call_cap / writing adapter 形参 / probe 的 4096 / bench_judge_rater RATER_MAX_TOKENS=512 / bench_judge_gaming 连通预检的 5。llm_client.chat 的 max_tokens 改为 Optional=None，仅显式传值才进 payload。
+- 四档仍只用 reasoning_effort（none/low/high/max），未加 thinking 开关二次覆盖。
+- 保留：polish_loop(4096) / companion_agent(8192) 的 max_tokens_total —— 不进入请求体，仅多轮累计刹车。
+- 断言更新（先报告后改）：test_llm_client 改为「默认 payload 不含 max_tokens」；test_ai_polish_loop 删「per-call 2×余量」「TOTAL<per-call×3」两闸，改断言每次调用 max_tokens=None；bench 两处改「不下发 / is None」。
+- 验证：相关 6 套 Python 179 passed；Go companion ok；ruff 全绿；探针仍 401（本地 key 失效），四档请求已不再携带 max_tokens。
+
+### 2026-11-07 17:12 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+前端硬编码端口取证 + 守卫（worktree D:\Code\DeLector-port-guard / fix/frontend-port-guard，PR 待开不合并）。
+- 取证结论：static/ 无「请求硬编码 8000」；统一出口 core.js:api() 原样 fetch(url)，各模块默认相对路径 ⇒ 用户报障在静态前端属误报。静态度里 8000 仅文案/占位符/第三方说明。
+- 真 bug（未改，仅报告）：tools/verify_windows_portable.py 仍假定 --server-only 固定 8000（start.py 已自动顺延）；agent/cmd/delector/job.go 与 agent.go 默认 127.0.0.1:8000 仅在独立 CLI 无参时生效；start.py 托管路径显式传实际端口。
+- Android：固定 8000 由 start.py:_android_ready 短路（PORT_CANDIDATES[0]），MainActivity 同值就绪轮询 + loadUrl，两端一致；8000 被占则启动失败，改法需端口握手，按指示只报告不改。
+- 守卫：tests/test_frontend_port_guard.py（static/** 绝对 API 带字面端口；static/js 回环带字面端口；api() 不得拼 origin）已登记 tools/ci_shards.py unit-2 + ci_shard_weights.json 0.1。
+- 验证：相关 59 passed；3 条具名变异均被捕获后已还原；未跑全量。
+
+### 2026-11-07 18:10 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, android-build, emulator-run
+#278 已合（merge commit bc4b433）+ 端口运行时握手（worktree D:\Code\DeLector-port-runtime / fix/runtime-port-handoff，PR 待开不合并）。
+- 合并：#278 CI 逐 job 复核无 failure/cancelled（两条 skipping 为设计过滤），merge commit bc4b433，不 squash 不 rebase。
+- 矛盾根因：端口只有 start.py 知道；进程外宿主（Android MainActivity / portable 验收脚本）各自假设 8000。解法是新增 DELECTOR_PORT_FILE 握手：Python 选定端口后原子写十进制端口，宿主轮询读文件，不再猜。
+- tools/verify_windows_portable.py：删除 SERVER_PORT=8000 / HEALTH_URL 常量与「起服前端口空闲」门禁，改 child_env 注入端口文件路径 → 等文件 → 用文件里的端口探活；terminate 检查也按真实端口。
+- Android：start.py:_android_ready 改为 _pick_port 顺延（8000 被占取 8002；全占 RuntimeError 响亮失败）；MainActivity 启动前删 stale 端口文件、注入 DELECTOR_PORT_FILE、readServerPort() 轮询 1..65535 校验、serverBaseUrl(port) 拼 URL 后 loadUrl；5 处 127.0.0.1:8000 字面量清零。传参路径：Python os.environ[DELECTOR_PORT_FILE]=<filesDir>/server-port.txt → 选定端口写入 → Java FileInputStream 读文本 → serverBaseUrl 拼 http://127.0.0.1:<port>。
+- 验证（8000 全程被独占占住）：① 源码 E2E：端口文件=8002、/api/health 200、横幅 http://localhost:8002；② 便携产物（PyInstaller onedir，.build-info.json 用 package_windows.write_build_fingerprint 补齐）验收 16 项全 PASS，两次真启均起在 8002、端口释放、无孤儿；③ 模拟器 Medium_Phone_API_37.0：adb reverse tcp:8000 占住设备 8000（/proc/net/tcp 0A 1F40），装机启动后 files/server-port.txt=8002、host 经 adb forward 探 /api/health 200、截图确认 WebView 加载完整界面（证明未指向 8000）。模拟器已 adb emu kill 关闭并登记 android-local-runtime.md §4。
+- 测试：tests/test_start.py + test_verify_windows_portable.py + test_android_webview_policy.py + test_start_lifecycle.py + test_desktop_shell.py 共 129 passed；5 条具名变异（_android_ready 固定 8000 / write_port_file 提前 return / read_runtime_port 恒 8000 / wait_until_ready 猜 8000 / Java serverBaseUrl 固定 8000）全部被捕获后还原。未跑全量。
+- 未覆盖：arm64 真机（本机无设备）；Android 侧 WebView 未做 8000 之外的连续顺延实测（只验 8002）；桌面 Go supervisor 默认 8002 与 Python 顺延到 8002 的潜在撞端口为既有行为，未改。
+
+### 2026-11-07 18:00 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+PR #279 首轮 CI 红：真失败仅 unit-2 的「Mypy type gate (tests, config baseline)」，2 条 func-returns-value —— 新测试里的 lambda 写成 probed.append(port) or ...，把返回 None 的 append 当值用；其余 unit-1/3/4、integration-heavy、cost-guards、cost-cold-start 为 fail-fast 连带 cancelled，不算红。
+- 修法：只改测试写法（lambda → 带注解局部函数，记录与返回值分两行），断言口径一字未动，未放松任何门禁。
+- 本地复现/复验：mypy --follow-imports=skip tests 187 files 零错误；相关 3 个测试文件 93 passed；ruff 通过。
+- 推送后新跑 42361432194 全绿（含 Windows Portable Smoke 3m33s；Master Direct-Push Scope Gate 为 PR 语境设计内 skipping），head f6b6466，未合并。
+
+### 2026-11-07 21:40 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+Go supervisor 与 Python 顺延撞端口的静默降级已收口（worktree D:\Code\DeLector-agent-port / fix/go-agent-port-exclusion，PR #280 待审不合并，head 2ffc7f5）。
+- 取证（8000 被占 → Python 取 8002）：Windows 允许 Go `127.0.0.1:8002` 与 Python `0.0.0.0:8002` 同时监听；127.0.0.1 连接落到 Go，`/`、`/api/health`、`/api/companion/context` 全 404，启动日志仍写「Go Agent 已自动托管启动」。旧 supervisor 把子进程 stderr 丢 DEVNULL，端口冲突零原因。
+- 修法：`pick_agent_port()` 与 Python 实际端口互斥（8002 → 8011–8015，顺延区间与 PORT_CANDIDATES 不重叠）；`is_healthy` 增 `service=delector-go-companion-agent` 身份校验；子进程输出落临时文件、失败时回读真实报错；启动日志明确「Go 内核不可用，已降级 Python 内核，桌宠 agent 桥不可用」；start.py 按真实端口设 `DELECTOR_GO_AGENT_URL`，失败置空；dispatch 增加自反代保护；/api/health 增 `agent_bridge {mode,url}`。
+- 验证：修复后 Python 8002 + Go 8011 无冲突，8002 /api/health 200/agent_bridge=go(8011)，8011 /api/companion/health 200；降级路径（隐藏 Go 二进制 + 受限 PATH）日志响亮且 agent_bridge=python。4 个测试文件全绿；ruff、mypy --strict delector、mypy start.py、mypy tests 通过。未改 static/ 与 style.css。
+
+### 2026-11-07 19:05 | deepseek-v4.1-flash__trae | NOTE
+设置页思考强度换皮（worktree D:\Code\DeLector-settings / feat/settings-reasoning-segmented，基于 origin/master d195db8）。
+- 设置页四档 <select> 换成三档 segmented（关闭/标准/深读，存量值 none/medium/high），点选即 POST 保存并 GET 回读；折叠组标题常显「思考：X」。
+- 上游映射仍只走 llm_client.map_reasoning_effort（none→none, medium→high, high→max），UI 层不复制映射。
+- 后端 get_effective_reasoning_effort 归一：low/未知值→medium，保证 UI 展示=生效值=请求值；抽屉胶囊同步改为三档。
+- 验证链：浏览器点击深读 → POST /api/settings 200 → GET 回读 reasoning_effort=high → reasoning_payload={"reasoning_effort":"max"}。
+- build_index_html + check_index_html_sync PASS；相关 pytest 100 passed/1 skipped；ruff 通过。
+
+### 2026-11-07 22:05 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+前端一致性与焦点环收口（worktree D:\Code\DeLector-focus / fix/frontend-focus-consistency，PR #285 已开不合并）。
+- 焦点环：.cards-seg-btn/.sm2-btn/.player-btn/.drawer-tab-btn 补 2px --ink；真实 Tab 取证（body 起 18 次到 seg-due；其余从前一可聚焦元素按 1 次 Tab），reflect true、offset 2px。
+- PITFALL：滚动容器内 +2px 外扩环不可见——.drawer-tabs overflow:auto 裁掉上下，且后绘制的相邻 tab 背景盖住左右；改 outline-offset:-2px 内缩后截图确认可见。窄屏 .cards-seg-bar 同理（≤1024px 也 overflow-x:auto）。
+- 按压：workbench .btn 统一 scale(.98)+var(--motion-press,100ms)+focus-visible；reduce 下 transform:none。卡盒按压落在 .deck-card-face 独立 scale(0.99)，不覆盖手势/翻面的 transform 与行内 transform。主应用 .btn 仍 .98/100ms。
+- reduce 取证：四个控件 transitionDuration 均 1e-05s（聚焦后 50ms 读取无中间态）；卡面 scale:none。
+- 颜色：8 处 #15803d 只改 .a1-leitpunkt-item.is-covered → var(--moss)（computed rgb(59,110,63)）；其余 7 处为操作/正确性/评分/已收录结果态，且与 #16a34a/#22c55e/rgba 绿底成对，保留并逐条说明。
+- 验证：build_index_html.py 成功、check_index_html_sync.py PASS；相关 11 个 pytest 文件 233 passed；Edge headless+CDP 实测（本机无 Chrome）。style.css 仅末尾追加；android/ 未动。
+
+### 2026-11-07 23:18 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, android-build, emulator-run
+P2 桌宠禁停区/让位 PR #286（fix/companion-p2-no-parking，head d3a6280，不合并）。
+- 复审缺陷：模态挂起气泡后关闭时无条件 remove('hidden')，sheet 开 >6.5s 会让过期气泡复活。修法：say() 记 bubbleExpiresAt = Date.now()+6500，恢复前复核并丢弃过期气泡（同时清 timer/时间戳）。
+- 回归钉：tests/test_companion_bubble_resume_probe.mjs（node:vm 直跑真 companion.js + 假时钟，7 checks，含「模态开 7s 再关保持 hidden」）+ .py 接线含变异验证（过期判断改恒真 → 关键场景红）。补齐 tests/test_companion_context_probe.mjs 的 ./companion-obstacles.js 依赖桩。
+- 验证：浏览器 verify_p2.mjs 新增 mobileSheetLongClose 通过；pytest 5 passed；build_index / check_index_html_sync / check_companion_contract / check_frontend_layers / probe_wiring 全 PASS。
+- Android 模拟器 API37：强制解包后设备内 companion.js 命中 bubbleExpiresAt 5 处、运行时 guard 存在；四角命中 0、键盘态在视口内、sheet 开 7.2s 关后 hidden=true。versionCode 52101。
+- cp-state.js 的 streamStage 全仓仅声明 + reset 置 null，P2 不依赖；既存死代码，PR 中注明不在范围。
+
+### 2026-11-07 23:56 | deepseek-v4.1-flash__trae | NOTE
+P3 桌宠生机状态机 MVP 落地并 rebase 到 P2（PR #287，未合并）。
+- 分支 feat/companion-p3-state-machine，从 0988280 起，已 rebase 到 bf0110a（P2 禁停区合入后）；冲突仅在 companion.js（import 区 + say()），按区块合并保留 P2 的禁停区/`bubbleExpiresAt`/模态过期守卫。
+- 唯一真相：`companion-lifecycle.js` 纯函数 `resolveLifecycleState(conditions)`（L1，无 DOM/定时器）；优先级 dragging>error>waiting>acting>thinking>speaking>idle>sleeping；error 不清 proposalPending，clearError 后回 waiting。
+- 时序补口：P3 原用平行的 `_bubbleExpiresAt`，会绕过 P2 `repositionBubble()` 的过期守卫 ⇒ 统一到模块级 `bubbleExpiresAt`/`BUBBLE_TTL_MS`。松手后 dragging 持续到 P2 `is-settling` 结束（capsule 摘类时派发 `companion:settle-end`），期间 `repositionBubble` 挂起，settle-end 后一次求解。
+- 死变量：删除 `cp-state.js` 的 `streamStage`（全仓无赋值无引用），未做假接线。
+- 门禁：lifecycle 20 断言 PASS；build_index_html + check_index_html_sync PASS；check_companion_contract PASS（7 事件）；check_frontend_layers PASS；style.css 仅末尾 +135 行（0 删除），infinite 声明 master=6 / 分支=6。
+- CDP 实测：真实拖拽抢占 thinking；settle 中 40ms 仍 dragging，settle-end 后回 thinking 且气泡与胶囊相邻 gapY=12；error 覆盖 waiting 且 proposalPending=true，clearError 回 waiting；speaking 聚焦 #d-def 转 idle 并隐藏气泡；reduce 静态姿势；hidden 暂停。
+- 遗留：自动让位仍沿用 P2 在滑动起点 notifyBubble 的时序（非拖拽路径未改）；acting 视觉、waiting UI 入口、sleeping 未做。
+
