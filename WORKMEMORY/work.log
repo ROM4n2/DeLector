@@ -635,4 +635,10 @@ Caps: filesystem-read, filesystem-write, shell-exec
 ### 2026-11-10 00:40 | deepseek-v4.1-flash__trae | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 PR #329 CI（run 42656258966）unit-1 红：tests/test_server_android_fallback.py::test_frontend_ai_error_paths_reuse_api_and_show_alert 的字符串哨兵要求 core.js 含字面量 "throw new Error"，本轮 HTTP 错误改为抛带 status 的 httpErr 后失配。修法：哨兵改为同时校验 "throw httpErr" 与 "httpErr.status = res.status"（判别力只升不降，锁住「抛异常且带 status」契约），本地单测 + ruff 绿，提交后重跑 CI。其余 job：Go↔Python integration / Go Gates / Secret Scan / Static Invariants / cost-cold-start / integration-heavy / Windows Portable Smoke 均 success；unit-2/3/4 与 cost-guards 因 fail-fast cancelled，Master Direct-Push Scope Gate skipped。
+### 2026-11-10 00:47 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+口径核算：早前 721ms 的零点是 Edge 进程启动（plan 原文），85ms 是 performance.mark 的导航起点零点，且 3 次导航复用同一 Edge 进程（81/85 为暖渲染，首轮 347）。两者不可比，85ms 已作废。
+同口径复测（每轮新 Edge 进程 + 新 profile，5 次，快速 503 路径）：进程零点首帧 615ms（610–709）、接管 4161ms（3738–4310）；导航零点首帧 223ms（215–328）、接管 3767ms（3346–3930）。旧挂起路径同为零点：721（626–738）/ 3320（3306–3460）；导航零点 353/2959。快速拒绝比挂起放行晚约 0.8s 接管（等退避窗口），收益是不用刷新/切页而非更早接管。持续失败冷进程：6898ms 进「未连接」+ 按钮，重试后 6ms 接管。
+已写回 plan 与 ADR-0032 §5/§9，并在 PR #329 留评论；未合并，等指令。
+
 
