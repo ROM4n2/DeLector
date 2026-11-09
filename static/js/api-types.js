@@ -32,6 +32,19 @@
  */
 
 /**
+ * 前端文章列表 store 状态（static/js/article-store.js）。
+ * 本地快照与内置快照都复用 ArticleListItem 的同一组 5 键，不增删字段。
+ * @typedef {Object} ArticleListStoreState
+ * @property {ArticleListItem[]} items
+ * @property {'idle'|'stale'|'ready'|'error'} status  stale = 屏上是旧数据
+ * @property {boolean} fromCache  当前 items 是否来自缓存/内置快照
+ * @property {boolean} builtin    当前 items 是否来自首装内置快照
+ * @property {string|null} error
+ * @property {boolean} empty      真实数据就绪且确实为空
+ * @property {number} updatedAt   最近一次真实数据写回时间
+ */
+
+/**
  * `GET /api/articles/{article_id}` 详情（articles 行 + processed_json 展开）。
  * @typedef {Object} ArticleDetail
  * @property {number} id

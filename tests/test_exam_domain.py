@@ -26,6 +26,7 @@ _ROOT = Path(__file__).parent.parent
 _INDEX = (_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 _CSS = (_ROOT / "static" / "style.css").read_text(encoding="utf-8")
 _MAIN_JS = (_ROOT / "static" / "js" / "main.js").read_text(encoding="utf-8")
+_DATA_CLIENT = (_ROOT / "static" / "js" / "data-client.js").read_text(encoding="utf-8")
 
 EXAM_MODULE_IDS = (
     "exam-card-writing",
@@ -351,7 +352,8 @@ def test_exam_catalog_fetch_wired_in_main_js():
     m = re.search(r"(?:async\s+)?function\s+initExamCatalog\s*\(", _MAIN_JS)
     assert m, "main.js 缺少 initExamCatalog()（Task 3 catalog 数据补强入口）"
     body = _MAIN_JS[m.end() : _MAIN_JS.index("\nfunction ", m.end())]
-    assert '"/api/exams/catalog"' in body, "initExamCatalog 必须调用 api('/api/exams/catalog')"
+    assert "fetchExamCatalog()" in body, "initExamCatalog 必须经 data-client 调 catalog"
+    assert "'/api/exams/catalog'" in _DATA_CLIENT, "data-client.js 必须保留 /api/exams/catalog 端点"
     assert "catch" in body and "console.debug" in body, (
         "initExamCatalog 必须有失败回退分支（静默 console.debug，不弹错）"
     )

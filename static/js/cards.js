@@ -1,7 +1,13 @@
 /* DeLector - Cards Management, 3D Poker Deck & Quiz Engine */
 "use strict";
 
-import { state, esc, jsAttr, api, notify } from "./core.js";
+import { state, esc, jsAttr, notify } from "./core.js";
+import {
+  fetchCards, fetchDueCards, reviewCard, removeCard, masterCard, recordQuiz,
+  fetchAudioCache, purgeAudioCache, prepareBackup, restoreBackup,
+  fetchPrepMatrix, fetchPrepSaved, savePrepSaved,
+} from "./data-client.js";
+import { saveVocabCard } from "./rd-api.js";
 import { playGermanAudio } from "./player.js";
 import { Companion } from "./companion.js";
 import { refreshCardCounters } from "./reader.js";
@@ -71,8 +77,8 @@ export async function loadCards(animateCounts = false) {
   updateAudioCacheInfo();
   try {
     const [allCards, dueCards] = await Promise.all([
-      api("/api/cards"),
-      api("/api/cards/due"),
+      fetchCards(),
+      fetchDueCards(),
     ]);
     cardState.catalog.cards = allCards;
     cardState.catalog.dueCards = dueCards;
@@ -108,7 +114,7 @@ export async function loadCards(animateCounts = false) {
 
 export async function refreshDueCount() {
   try {
-    cardState.catalog.dueCards = await api("/api/cards/due");
+    cardState.catalog.dueCards = await fetchDueCards();
     const sd = document.getElementById("seg-due-count");
     if (sd) sd.textContent = cardState.catalog.dueCards.due_count || 0;
   } catch (e) {}
@@ -438,11 +444,7 @@ export async function submitCardReview(type, id, grade) {
     if (navigator.vibrate) {
       navigator.vibrate(grade >= 3 ? [15, 30, 20] : 30);
     }
-    await api(`/api/cards/${type}/${id}/review`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ grade, card_type: type }),
-    });
+    await reviewCard(type, id, { grade, card_type: type });
     showUndoToast(`已记录记忆评分 (FSRS 排程已更新)`);
     stepDeck(1);
     refreshDueCount();
@@ -695,7 +697,7 @@ export function renderCatalogGrid(vList, gList) {
 
 export async function deleteCard(type, id, name) {
   try {
-    await api(`/api/cards/${type}/${id}`, { method: "DELETE" });
+    await removeCard(type, id);
     showUndoToast(`已删除卡片「${name}」`);
     loadCards();
   } catch (e) {
@@ -741,11 +743,7 @@ export async function toggleMaster(type, id, currentMastered) {
   const nextMastered = !currentMastered;
   const started = performance.now();
   try {
-    await api(`/api/cards/${type}/${id}/master`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mastered: nextMastered }),
-    });
+    await masterCard(type, id, { mastered: nextMastered });
 
     showUndoToast(nextMastered ? "已掌握 · 从待复习移除" : "已移回待复习");
 
@@ -802,7 +800,7 @@ export async function startQuiz(mode) {
   cardState.quiz.index = 0;
   cardState.quiz.isFlipped = false;
 
-  const data = await api("/api/cards");
+  const data = await fetchCards();
   const vocab = data.vocab_cards || [];
   cardState.quiz.allVocab = vocab;
 
@@ -974,15 +972,11 @@ export async function submitFlashcard(isCorrect) {
   if (isCorrect) cardState.quiz.correct++;
   else cardState.quiz.wrong++;
 
-  api("/api/quiz/record", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      card_id: card.id,
-      card_type: "vocab",
-      mode: "flashcard",
-      correct: isCorrect,
-    }),
+  recordQuiz({
+    card_id: card.id,
+    card_type: "vocab",
+    mode: "flashcard",
+    correct: isCorrect,
   }).catch(() => {});
 
   cardState.quiz.index++;
@@ -1015,15 +1009,11 @@ export function checkDictation() {
   fbEl.classList.remove("hidden");
   if (nextBtn) nextBtn.classList.remove("hidden");
 
-  api("/api/quiz/record", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      card_id: card.id,
-      card_type: "vocab",
-      mode: "dictation",
-      correct: isMatch,
-    }),
+  recordQuiz({
+    card_id: card.id,
+    card_type: "vocab",
+    mode: "dictation",
+    correct: isMatch,
   }).catch(() => {});
 }
 
@@ -1045,15 +1035,11 @@ export function submitChoice(chosenIdx, correctIdx) {
   if (isCorrect) cardState.quiz.correct++;
   else cardState.quiz.wrong++;
 
-  api("/api/quiz/record", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      card_id: card.id,
-      card_type: "vocab",
-      mode: "choice",
-      correct: isCorrect,
-    }),
+  recordQuiz({
+    card_id: card.id,
+    card_type: "vocab",
+    mode: "choice",
+    correct: isCorrect,
   }).catch(() => {});
 
   setTimeout(() => {
@@ -1092,7 +1078,7 @@ export function finishQuiz() {
 
 export async function updateAudioCacheInfo() {
   try {
-    const info = await api("/api/audio/cache");
+    const info = await fetchAudioCache();
     const span = document.getElementById("cache-size-span");
     if (span) span.textContent = `${info.total_size_mb || 0} MB`;
   } catch {}
@@ -1100,7 +1086,7 @@ export async function updateAudioCacheInfo() {
 
 export async function clearAudioCache() {
   try {
-    const info = await api("/api/audio/cache");
+    const info = await fetchAudioCache();
     if (!info.file_count) {
       notify("当前本地语音缓存已是空的（0 MB）。", { kind: 'info' });
       return;
@@ -1112,7 +1098,7 @@ export async function clearAudioCache() {
     ) {
       return;
     }
-    const res = await api("/api/audio/cache/clear", { method: "POST" });
+    const res = await purgeAudioCache();
     notify(
       `已清理 ${res.cleared_count || 0} 个缓存音频，释放 ${res.freed_mb || 0} MB 磁盘空间！`,
       { kind: 'success' },
@@ -1160,11 +1146,7 @@ export async function downloadBackupJson() {
     backupLocalStorageKeys().forEach((k) => {
       local_storage[k] = localStorage.getItem(k);
     });
-    const { token } = await api("/api/backup/prepare", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ local_storage }),
-    });
+    const { token } = await prepareBackup({ local_storage });
     if (!token) throw new Error("备份服务未返回下载凭证");
     window.location.href = `/api/backup/download/${token}`;
   } catch (e) {
@@ -1186,11 +1168,7 @@ export function uploadBackupJson(e) {
   reader.onload = async function (evt) {
     try {
       const payload = JSON.parse(evt.target.result);
-      await api("/api/backup/restore", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      await restoreBackup(payload);
       // localStorage 也用真覆盖语义，和数据库侧保持一致：先清掉现有 delector_*
       // 再按备份重写。混用两套语义会造出「数据库回到备份时刻、界面偏好却是
       // 两个时刻的混合」这种没人能复现的状态。
@@ -1242,11 +1220,11 @@ export async function loadPrepMatrix() {
   if (cardState.prep.loading) return cardState.prep.loading; // 并发进入只发一次
   cardState.prep.loading = (async () => {
     try {
-      const data = await api("/api/prep/matrix");
+      const data = await fetchPrepMatrix();
       cardState.prep.cache = data;
       // 从服务端加载已入卡状态，替代空 Set
       try {
-        const savedData = await api("/api/prep/saved");
+        const savedData = await fetchPrepSaved();
         if (savedData && Array.isArray(savedData.keys)) {
           _prepSavedKeys.clear();
           savedData.keys.forEach((k) => _prepSavedKeys.add(k));
@@ -1422,31 +1400,23 @@ export async function savePrepCardFromMatrix(btn) {
   const def = `${zh} (+${kasus})`;
   btn.disabled = true;
   try {
-    await api("/api/cards/vocab", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        // article_id 为空：矩阵是脱离文章的词库视图，没有来源文章可挂。
-        // pos 只能留空：prep_dict.py 没有词性列，所以同一条搭配从抽屉入卡
-        // 显示 "freuen · VERB"、从矩阵入卡显示 "freuen · WORT"（cards.js:189
-        // 的 `card.pos || 'WORT'` 兜底）。已知的外观差异，不值得为它现造词性。
-        article_id: null,
-        word: head,
-        lemma: lemma,
-        pos: "",
-        gender: "",
-        cefr_level: cefr || "B1",
-        definition_zh: def,
-        sentence_context: beispiel || "",
-      }),
+    await saveVocabCard({
+      // article_id 为空：矩阵是脱离文章的词库视图，没有来源文章可挂。
+      // pos 只能留空：prep_dict.py 没有词性列，所以同一条搭配从抽屉入卡
+      // 显示 "freuen · VERB"、从矩阵入卡显示 "freuen · WORT"（cards.js:189
+      // 的 `card.pos || 'WORT'` 兜底）。已知的外观差异，不值得为它现造词性。
+      article_id: null,
+      word: head,
+      lemma: lemma,
+      pos: "",
+      gender: "",
+      cefr_level: cefr || "B1",
+      definition_zh: def,
+      sentence_context: beispiel || "",
     });
     _prepSavedKeys.add(_prepKey(lemma, praep, kasus));
     // 异步写入服务端，不阻塞 UI
-    api("/api/prep/saved", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lemma, praep, kasus }),
-    }).catch(() => {});
+    savePrepSaved({ lemma, praep, kasus }).catch(() => {});
     btn.textContent = "已存";
     btn.classList.add("saved");
     refreshCardCounters();

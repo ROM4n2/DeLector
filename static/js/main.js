@@ -1,7 +1,12 @@
 /* DeLector - Application Main Entry & Router */
 "use strict";
 
-import { state, api, esc, jsAttr, notify } from "./core.js";
+import { state, esc, jsAttr, notify } from "./core.js";
+import {
+  fetchExamCatalog, fetchFeedSources, fetchFeedItems,
+  ingestArticleUrl, ingestArticle,
+  fetchSettings, saveSettings, testApiKey,
+} from "./data-client.js";
 import { resetCompanionContextForView, resetCompanionSessionScope } from "./cp-state.js";
 import { ShadowPlayer, playGermanAudio } from "./player.js";
 import { Companion } from "./companion.js";
@@ -478,7 +483,7 @@ async function initExamCatalog() {
   _examCatalogDone = true;
   let catalog;
   try {
-    catalog = await api("/api/exams/catalog");
+    catalog = await fetchExamCatalog();
   } catch (e) {
     console.debug("[ExamCatalog] catalog 不可用，保留静态占位:", e);
     _examCatalogDone = false; // 下次进备考域重试一次
@@ -593,7 +598,7 @@ export async function loadFeedSources() {
     document.getElementById("feed-sources-list");
   if (!bar) return;
   try {
-    const res = await api("/api/feed/sources");
+    const res = await fetchFeedSources();
     cachedFeedSources = res.sources || [];
     if (!cachedFeedSources.length) {
       bar.innerHTML =
@@ -648,7 +653,7 @@ export async function loadFeedItems(url) {
     '<div style="text-align:center;padding:2.5rem;color:var(--pencil);font-family:var(--mono);font-size:0.8125rem;">⏳ 正在抓取最新外刊列表…</div>';
 
   try {
-    const res = await api(`/api/feed/items?url=${encodeURIComponent(url)}`);
+    const res = await fetchFeedItems(url);
     const items = res.items || [];
     if (!items.length) {
       container.innerHTML =
@@ -693,11 +698,7 @@ export async function ingestFeedItem(encodedUrl, encodedTitle, btn) {
   }
 
   try {
-    const data = await api("/api/articles/ingest-url", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, title }),
-    });
+    const data = await ingestArticleUrl({ url, title });
     closeModal();
     openReader(data.article_id);
   } catch (e) {
@@ -766,7 +767,7 @@ export async function openSettingsModal() {
   if (feedbackEl) feedbackEl.textContent = "";
 
   try {
-    const s = await api("/api/settings");
+    const s = await fetchSettings();
     document.getElementById("set-base-url").value =
       s.api_base_url || "https://api.deepseek.com";
     document.getElementById("set-model-name").value =
@@ -835,14 +836,10 @@ export async function testApiKeyConnection() {
   delete feedback.dataset.state;
 
   try {
-    const res = await api("/api/settings/test-key", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        api_key: key,
-        api_base_url: baseUrl,
-        api_model: model,
-      }),
+    const res = await testApiKey({
+      api_key: key,
+      api_base_url: baseUrl,
+      api_model: model,
     });
     if (res.success) {
       feedback.textContent = `${res.message}`;
@@ -880,15 +877,11 @@ export async function saveAppSettings() {
     };
     if (key) body.api_key = key;
 
-    await api("/api/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    await saveSettings(body);
 
     // 保存后以服务端生效值回显，避免把输入框里的草稿值当成「当前生效」。
     try {
-      const latest = await api("/api/settings");
+      const latest = await fetchSettings();
       renderEffectiveModel(latest.api_model);
     } catch (err) {
       console.warn("[Settings] 保存后回读生效模型失败:", err);
@@ -936,14 +929,14 @@ export async function selectReasoningEffort(effort) {
   try {
     await persistReasoningEffort(effort);
     // 回读服务端值：折叠态摘要与 segmented 都只认后端真实保存的值。
-    const latest = await api("/api/settings");
+    const latest = await fetchSettings();
     const saved = syncReasoningEffortUI(latest.reasoning_effort);
     setStatus(`已保存：${REASONING_EFFORT_OPTIONS[saved]?.label || saved}`, "ok");
   } catch (err) {
     console.error("[Settings] 思考强度保存失败:", err);
     setStatus("保存失败，已回退到后端值", "error");
     try {
-      const latest = await api("/api/settings");
+      const latest = await fetchSettings();
       syncReasoningEffortUI(latest.reasoning_effort);
     } catch (reloadErr) {
       console.warn("[Settings] 保存失败后回读档位失败:", reloadErr);
@@ -1003,11 +996,7 @@ export async function submitActiveImport() {
     btn.textContent = "抓取解析中…";
     btn.disabled = true;
     try {
-      const data = await api("/api/articles/ingest-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, title }),
-      });
+      const data = await ingestArticleUrl({ url, title });
       closeModal();
       if (urlInput) urlInput.value = "";
       if (titleInput) titleInput.value = "";
@@ -1093,11 +1082,7 @@ export async function submitImport() {
   btn.textContent = "处理中…";
   btn.disabled = true;
   try {
-    const data = await api("/api/articles/ingest", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, raw_text: text }),
-    });
+    const data = await ingestArticle({ title, raw_text: text });
     closeModal();
     document.getElementById("imp-text").value = "";
     document.getElementById("imp-title").value = "";

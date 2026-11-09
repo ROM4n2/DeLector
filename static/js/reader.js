@@ -5,12 +5,13 @@ import { state, esc, jsAttr, normalizeCefrPct, notify } from "./core.js";
 import { ShadowPlayer, playGermanAudio } from "./player.js";
 import { Companion, getActiveView } from "./companion.js";
 import {
-  removeArticle, fetchArticles, fetchArticle,
+  fetchArticle,
   lookupVocab, lookupGrammar,
   saveVocabCard, saveGrammarCard, fetchCardCounts, fetchVocabLedger,
   fetchArticleNotes, saveArticleNote, removeNote, fetchNoteAssist,
   saveSyntaxStats, fetchSyntaxStats
 } from './rd-api.js';
+import { articleStore } from './article-store.js';
 import {
   CEFR_LEVELS, safeCefr, safeTokens,
   renderMiniBar, renderFelderSpectrum, renderDetailedFelderGrid,
@@ -167,29 +168,66 @@ export async function deleteArticle(id, title) {
     return;
   }
   try {
-    await removeArticle(id);
-    await loadArticles();
+    await articleStore.deleteArticle(id);
   } catch (err) {
     notify("删除文章失败: " + (err.message || err), { kind: 'error' });
   }
 }
 
-export async function loadArticles() {
+let _articleUnsub = null;
+
+export function loadArticles() {
+  if (!_articleUnsub) _articleUnsub = articleStore.subscribe(renderArticleState);
+  renderArticleState(articleStore.getState());
+  return articleStore.loadArticles();
+}
+
+// 统一出口：加载态 / 错误态 / 空态 / 列表只在这里判一次。
+// status=stale 表示屏上是旧数据（缓存或内置快照），必须带形状/图标痕迹（I1）。
+function renderArticleState(snapshot) {
   const el = document.getElementById("article-list");
   if (!el) return;
-  el.innerHTML = '<div class="empty-state">加载中…</div>';
-  try {
-    const data = await fetchArticles();
-    if (!data.length) {
+
+  if (!snapshot.items.length) {
+    if (snapshot.status === "error") {
+      el.innerHTML = '<div class="empty-state">文章列表加载失败</div>';
+    } else if (snapshot.empty) {
       el.innerHTML =
         '<div class="empty-state">暂无文稿，点击上方按钮导入德语文章' +
         '<div class="empty-state-extra"><button class="btn btn-ghost" onclick="openSatzLab()">还没有文章？先用示例句拆一句 →</button></div>' +
         "</div>";
-      return;
+    } else {
+      el.innerHTML = '<div class="empty-state">加载中…</div>';
     }
-    el.innerHTML = data
-      .map(
-        (a) => `
+    return;
+  }
+
+  const syncChip =
+    snapshot.status === "stale"
+      ? `<div class="article-sync-chip" role="status">
+        <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-refresh-cw"></use></svg>
+        <span>${snapshot.error ? "同步失败，显示本地快照" : "同步中"}</span>
+      </div>`
+      : "";
+
+  el.innerHTML =
+    syncChip +
+    snapshot.items
+      .map((a) => {
+        if (snapshot.builtin) {
+          return `
+      <div class="article-row article-row--seed" aria-disabled="true">
+        <div>
+          <div class="article-row-title">${esc(a.title)}</div>
+          <div class="article-row-meta">${esc(a.created_at)} · ${a.char_count} 字符</div>
+          ${renderMiniBar(a.stats)}
+        </div>
+        <div style="display:flex;align-items:center;gap:0.5rem;flex-shrink:0;">
+          <span class="article-row-arrow">→</span>
+        </div>
+      </div>`;
+        }
+        return `
       <div class="article-row" onclick="openReader(${Number(a.id)})">
         <div>
           <div class="article-row-title">${esc(a.title)}</div>
@@ -200,13 +238,32 @@ export async function loadArticles() {
           <button class="article-row-del" onclick="event.stopPropagation(); deleteArticle(${Number(a.id)}, ${jsAttr(a.title)})" title="删除文章" aria-label="删除文章"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-trash-2"></use></svg></button>
           <span class="article-row-arrow">→</span>
         </div>
-      </div>`,
-      )
+      </div>`;
+      })
       .join("");
-    reportFirstArticleVisible(el);
-  } catch (err) {
-    el.innerHTML = '<div class="empty-state">文章列表加载失败</div>';
-  }
+  reportFirstArticleVisible(el);
+  markArticleMilestone(snapshot);
+}
+
+// 双账度量：缓存首帧与真实数据就绪分开打点，禁止互相替代（ADR-0032 §5）。
+const _articleMarks = new Set();
+function markArticleMilestone(snapshot) {
+  if (typeof performance === "undefined" || typeof performance.mark !== "function") return;
+  const name =
+    snapshot.status === "ready"
+      ? "articles-data-ready"
+      : snapshot.fromCache
+        ? "articles-cache-first-paint"
+        : "";
+  if (!name || _articleMarks.has(name)) return;
+  _articleMarks.add(name);
+  performance.mark(name, {
+    detail: {
+      builtin: !!snapshot.builtin,
+      fromCache: !!snapshot.fromCache,
+      rows: snapshot.items.length,
+    },
+  });
 }
 
 // ── 冷启动 TTFD 探针 ─────────────────────────────────────────────────────

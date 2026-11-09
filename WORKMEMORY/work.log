@@ -582,3 +582,36 @@ v5.22.1 已发布（含 #325 词卡写入幂等，二次发版取代 #326 初版
 - 发布说明已补已知限制：重复卡存量未合并（只堵新增）；回滚锚点 v5.22.0，Android versionCode 不可回滚只能卸载重装并先备份。
 - 注：本轮 rebase 时 work.log 与并发线冲突，两方事件（README 重拍 22:15/22:40、ADR-0031 判负 22:44）均保留。
 
+
+### 2026-11-09 23:52 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
+任务：ADR-0032 + 阶段一/二（先 store 后缓存）最小切片，分支 feat/first-screen-store-and-cache（基于 origin/master b55b7c7）。未推送、未开 PR。
+不做范围：阶段三、后端 API 形状、start.py/server.py、框架/bundler、其余视图域 api() 收敛、#319 撤场逻辑。
+决策：方向「不动后端语言，把 Python 撤出首屏关键路径」（用户已拍板）。阶段二提前与阶段一并行——缓存落点即 store，分开做会返工；扩展性真正来源是契约不是语言。ADR-0031 改 Deprecated（方案 A 双指标判负）。
+产出：
+- ADR docs/adr/2026-11-09-adr-0032-python-off-first-screen-path.md（Accepted）；ADR-0031 状态 Deprecated；INDEX 两行同步。
+- Plan docs/plans/2026-11-09-first-screen-store-and-cache.md（Task1 store / Task2 adapter / Task3 缓存首屏 / Task4 证据；adapter 层 = data-client.js + rd-api.js）。
+- 新增 static/js/article-store.js（薄 store + 唯一缓存读写，CACHE_KEY=delector.articles.snapshot.v1，idle/stale/ready/error，loadSeq 防旧响应覆盖，删除先失效缓存）、article-seed.js（4 篇内置快照）、data-client.js（主站域 34 端点：main.js 13 + cards.js 21，L2）。
+- 改 reader.js（订阅 store；renderArticleState 统一加载/错误/空态/列表；stale 时 .article-sync-chip 含 svg #ui-ico-refresh-cw + role=status；seed 行 aria-disabled；两条 performance.mark）、main.js/cards.js（api() 清零）、api-types.js（ArticleListStoreState）、src/css/02-home-views.css + 重建 static/style.css。
+- 门禁：check_frontend_layers.py 的 LAYER_SPEC/MUTABLE_STATE_MODULES 增 data-client.js、_norm_path 去 query/hash；test_frontend_layers.py 增「三视图不直接触网」断言；新增 tools/article_store_probe.mjs + tests/test_article_store_probe.py（≥10 场景）并登记 ci_shards unit-1。
+验证：node --check 6 文件通过；build_css / check_css_sync / check_index_html_sync / check_frontend_api_contract（125 call sites）PASS；ruff 绿；定向 pytest 192 passed（store probe、frontend_layers、reader_api_split、frontend_security、articles_list_contract、docs_layout、ci_hardening、probe contracts、index/css sync）；变异自证：seedFirstFrame 异步化 → 探针 3 失败，删 invalidateCache → 探针红，恢复后全绿。
+实测（Edge headless + CDP，8099 独立 server/临时数据目录，5 次中位数）：首装/清空存储 缓存首帧 100.3ms / 真实数据就绪 120.1ms；缓存命中 96.9ms / 114.7ms；JS 错误 0；chip 捕获到 svg #ui-ico-refresh-cw + role=status。
+清理：8099 server 已停，%TEMP% 的 cdp_measure*/article-store.backup.js/delector-measure 已删；仓库工作树仅本分支改动；未触碰 perf/adr-0031-plan-b worktree（D:/Code/DeLector-adr0031）与模拟器。
+待办：全量 pytest 后台运行中（尚未出总结）；推送/PR 待用户确认；Android 真机双账由另一条线测量。
+
+### 2026-11-10 00:01 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+ADR-0031 方案 B（只重排启动顺序）实测完成：**判负，不合入**。分支 perf/adr-0031-plan-b（commit 2ebaefb，基于 b55b7c7，worktree D:/Code/DeLector-adr0031）保留、git status 干净、未推送未开 PR。
+实现：create_app() 在 DELECTOR_DEFER_ENCOUNTER_SEED=1 时跳过 seed_preset_encounter_texts()；start.py 在 import server 前置 env、在 serve_in_thread() 之后调 run_deferred_encounter_seed()；新增 tests/test_encounter_seed_deferral.py（5 例）并入 ci_shards unit-2。不改 #319 撤场/端口文件/marker/失败可见路径，不新增依赖，不动 android/ 构建面。
+seed 单项实测：桌面 110ms（30 次，109–188）；x86_64 模拟器 72ms（21 次，62–157）。
+Android TTFD（同会话、pm clear 冷启、弃跑 2）：分块 R1 4198→4412（+214）、R2 4216→4299（+83）；逐 pair 交错重装 A/B 4360→4299（−61）；合并 21/臂 4253→4305（+52）。桌面首次分析（/api/syntax/analyze，ready 后立即）：1156 vs 1156（0ms）；1s 453 vs 437；2–5s 差 ≤32ms。桌面 import 期 base 2250–2375 → branch 2140–2219（seed 搬出，未转化为 TTFD）。
+判定：只按三条判负条件。①TTFD 改善 <100ms ⇒ 成立（最好 −61ms，合并 +52ms）⇒ 判负；②首次分析退化 >200ms ⇒ 不成立（0ms）；③任一轮 TTFD >基线+500ms ⇒ 不成立。seed 仅 72ms 可搬，方案 B 理论天花板低于门槛；重排后播种与首屏请求争 GIL。
+口径说明：本会话 base TTFD ≈4.2–4.4s，与历史 3330ms 不同会话，按 architecture.md 只用同会话 base 作锚；桌面 820.2ms 基线复测为 1156ms（偏差 336ms >50ms），已按指令以复测值为基线并明示。
+验证：ruff 通过、mypy --strict 通过、定向 pytest 86 passed。
+落盘：ADR-0032 §3.2 写入完整数字与判负结论；ADR-0031 §6 加一行指向；未改 INDEX（状态未变）。
+清理：模拟器已 kill、adb server 已退出；%TEMP% 的 ttfd_run.ps1/ttfd_ab.ps1/desk_ab.py/desk_ab.csv/desk_ab.log/dl_pb_probe.py/commit_msg_pb.txt/emu*.log/build_branch.log 已删。两个 worktree 的 android/app/build 产物（gitignored，各 ~97MB APK）保留未删。
+### 2026-11-10 00:02 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+全量 pytest 收尾（补上一条 WORK_END 的待办）：3006 passed / 2 skipped / 1 xfailed / 4 failed（634s）。
+4 条失败中 3 条是本次 adapter 收敛触发的「源码字符串哨兵」过期，已按同一判据改指向 adapter，不做删除：test_exam_domain（initExamCatalog 断言 fetchExamCatalog + data-client 保留 '/api/exams/catalog'）、test_prep_matrix（'/api/prep/matrix' 查 data-client、'/api/cards/vocab' 查 rd-api）、test_server_backup_restore（downloadBackupJson 断言 prepareBackup() + data-client 保留 '/api/backup/prepare'，download 路径仍查 cards.js）。复跑受影响 6 个模块：194 passed。
+剩余 1 条 tests/test_nlp_prewarm.py::test_import_does_not_load_or_prewarm 为环境既有失败：仓库根存在 gitignore 的 delector.db（2026-11-07 14:56，非本轮产物），探针把 DELECTOR_DATA_DIR 指向 tmp 时数据迁移守卫拒绝启动；与本 diff（纯前端 + 测试）无因果关系，未改后端、未删用户库。
