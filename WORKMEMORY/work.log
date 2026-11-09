@@ -525,3 +525,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 门禁：本地 python tools/check_docs_layout.py = OK：236 文件 / 6 白名单豁免，exit 0。
 CI：#322 与 #323 均 12 success + 2 skipped（Master Direct-Push Scope Gate、Windows Portable Smoke，PR 场景按设计 skip），无 failure/cancelled。
 清理：worktree wt-docs3 移除 + prune、%TEMP%\dl-pr1.md / dl-pr2.md 删除、无 emulator/adb 进程残留。
+
+### 2026-11-09 20:59 | deepseek-v4.1-flash__trae | DECISION
+词卡重复缺陷方案稿（docs-only，不实施 DDL/不改写入路径）：`docs/plans/2026-11-09-vocab-card-duplicate-merge.md`。
+核实现状（master af509dc）：`POST /api/cards/vocab` 裸 INSERT（`cards.py:176-202`）；`vocab_cards` 无 UNIQUE，索引仅 idx_vocab_srs / idx_vocab_queue / idx_vocab_article（真实库 PRAGMA 复核一致）。生产写入点 4 处：cards.py、`vocab_pool._insert_row`（已按 lemma_key 内存去重，撞行规则 raw==key 优先再 min id）、`companion_proposal.py:252`、前端仅会话内 `_prepSavedKeys`。
+合法多卡证据：介词搭配 `bestehen auf/aus/in` 同 lemma 不同 word（reader.js:989 / cards.js:1409）；听力 `die Wohnung` vs 正文 `Wohnung` ⇒ `UNIQUE(lemma)` 会误伤，唯一键至少 (lemma, word)，候选 (lemma_key, word_key)。两套口径并存：台账 raw lemma（cards.py:322）vs 工作台 lemma_key（vocab_pool.py:251）。
+本机只读统计（`mode=ro`，未写任何数据）：delector.db `vocab_cards` = 0 行、`wb_state` 空、progress.db 无该表 ⇒ 真实重复规模**未统计**，文档已写明原因（本机是开发检出，用户学习库不在本机）。文档给出 6 个口径 SQL（lemma / lemma+word / word / lemma+source / lemma+article_id / lemma_key）、真实库运行会遇到的 5 类问题（无 lemma 索引全表扫、WAL 快照、归一化只能回 Python 分组、数据目录不确定、大小写）。
+策略 A（保留信号最新、物理删）/ B（合并历史，FSRS S/D 不可加、计数虚高）/ C（merged_into 逻辑合并、可逆但要改全部读路径 + partial unique index）三者代价并列，不替用户选。迁移 6 步（统计→快照→合并→唯一索引→upsert→验收）+ 逐步回滚 + 中断幂等（每批事务、快照表幂等键）。验收覆盖并发重复提交、迁移中断、旧备份还原新库（DELETE+INSERT 会撞唯一索引，必须选处置）。7 项待裁决。
+门禁：`python tools/check_docs_layout.py` OK（238 文件/6 豁免）；`pytest tests/test_docs_layout_gate.py` 12 passed。plans/ 无索引登记要求（闸门只校验命名与层级），未新增索引条目。
+注意：主工作树 `d:\Code\DeLector` 当时有另一条线（v5.22.1）的未提交改动，本工作用独立 worktree `D:\Code\DeLector-dupplan` 从 af509dc 起，未触碰其改动。
