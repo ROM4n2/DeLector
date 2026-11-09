@@ -23,8 +23,13 @@ from delector.core.database import (
     log_study_event,
 )
 from delector.core.db.stats import get_progress_stats
-from delector.core.lexicon import primary_source
+from delector.core.lexicon import lemma_key, primary_source
 from delector.core.utils import _attachment_headers
+from delector.core.vocab_identity import (
+    fill_empty_columns,
+    find_card_id,
+    register_identity_functions,
+)
 
 router = APIRouter()
 __all__ = ["get_progress_stats", "router"]
@@ -180,25 +185,52 @@ def add_vocab_card(req: VocabCardReq) -> Dict[str, Any]:
     # （reader / a1_cards / a1_hoeren / search）都打本端点 ⇒ 一处覆盖。
     source = primary_source(req.lemma or req.word)
     with db_conn() as conn:
-        cur = conn.execute(
-            "INSERT INTO vocab_cards "
-            "(article_id, word, lemma, pos, gender, plural, cefr_level, definition_zh, sentence_context, source) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                req.article_id,
-                req.word,
-                req.lemma,
-                req.pos,
-                req.gender,
-                req.plural or "",
-                req.cefr_level,
-                req.definition_zh,
-                req.sentence_context,
-                source,
-            ),
-        )
-        card_id = cur.lastrowid
-    log_study_event("add_card", card_id, req.word)
+        # Step 1（只堵新增）：身份 = (lemma_key(lemma), word_key(word))，见
+        # delector/core/vocab_identity.py。存量重复未知，故**不建 UNIQUE**；
+        # 用 BEGIN IMMEDIATE 把「查重 → 插入」收成一个写事务，收窄并发窗口。
+        # 这不是唯一索引：绕过本函数的写入（旧客户端 / 直接 SQL / 备份还原）
+        # 仍可产生重复。
+        conn.execute("BEGIN IMMEDIATE")
+        card_id = find_card_id(conn, req.lemma, req.word)
+        if card_id is None:
+            created = True
+            cur = conn.execute(
+                "INSERT INTO vocab_cards "
+                "(article_id, word, lemma, pos, gender, plural, cefr_level, definition_zh, sentence_context, source) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    req.article_id,
+                    req.word,
+                    req.lemma,
+                    req.pos,
+                    req.gender,
+                    req.plural or "",
+                    req.cefr_level,
+                    req.definition_zh,
+                    req.sentence_context,
+                    source,
+                ),
+            )
+            card_id = cur.lastrowid
+        else:
+            created = False
+            # upsert 的「update」只补空，不覆盖用户已填内容（合法多卡靠 word 区分，
+            # 不会被这里合并，见方案 §5.3）。
+            fill_empty_columns(
+                conn,
+                card_id,
+                {
+                    "pos": req.pos,
+                    "gender": req.gender,
+                    "plural": req.plural,
+                    "cefr_level": req.cefr_level,
+                    "definition_zh": req.definition_zh,
+                    "sentence_context": req.sentence_context,
+                },
+            )
+    if created:
+        # 只有真正新增才记事件，避免重复提交把学习日志刷爆。
+        log_study_event("add_card", card_id, req.word)
     return {"status": "ok", "id": card_id, "word": req.word, "plural": req.plural or ""}
 
 
@@ -319,7 +351,7 @@ WITH ranked AS (
             ELSE NULL
         END AS last_signal_day
     FROM vocab_cards
-    WHERE lemma = ?
+    WHERE lemma_key(lemma) = ?
 )
 SELECT *, COUNT(*) OVER () AS card_count
 FROM ranked
@@ -345,7 +377,10 @@ def get_vocab_card_ledger(lemma: str) -> Dict[str, Any]:
     if not lemma_norm:
         return {"lemma": "", "card_count": 0, "card": None}
     with db_conn() as conn:
-        row = conn.execute(_LEDGER_SQL, (lemma_norm,)).fetchone()
+        # 读侧与写入侧共用同一归一实现（零 DDL：函数注册在连接上，不建列/索引）。
+        # 这样 `Haus` / `haus` / `die Wohnung` / `Wohnung` 不会因原始串不同被认成两批。
+        register_identity_functions(conn)
+        row = conn.execute(_LEDGER_SQL, (lemma_key(lemma_norm),)).fetchone()
     if row is None:
         return {"lemma": lemma_norm, "card_count": 0, "card": None}
     return {

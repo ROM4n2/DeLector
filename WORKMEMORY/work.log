@@ -534,3 +534,15 @@ CI：#322 与 #323 均 12 success + 2 skipped（Master Direct-Push Scope Gate、
 策略 A（保留信号最新、物理删）/ B（合并历史，FSRS S/D 不可加、计数虚高）/ C（merged_into 逻辑合并、可逆但要改全部读路径 + partial unique index）三者代价并列，不替用户选。迁移 6 步（统计→快照→合并→唯一索引→upsert→验收）+ 逐步回滚 + 中断幂等（每批事务、快照表幂等键）。验收覆盖并发重复提交、迁移中断、旧备份还原新库（DELETE+INSERT 会撞唯一索引，必须选处置）。7 项待裁决。
 门禁：`python tools/check_docs_layout.py` OK（238 文件/6 豁免）；`pytest tests/test_docs_layout_gate.py` 12 passed。plans/ 无索引登记要求（闸门只校验命名与层级），未新增索引条目。
 注意：主工作树 `d:\Code\DeLector` 当时有另一条线（v5.22.1）的未提交改动，本工作用独立 worktree `D:\Code\DeLector-dupplan` 从 af509dc 起，未触碰其改动。
+### 2026-11-09 23:05 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+词卡重复卡 Step 1（只堵新增）实现分支 feat/vocab-identity-upsert（worktree D:\Code\DeLector-ident，基线 master af509dc；未触碰主工作树 v5.22.1 未提交改动）。零 DDL、零删数据、无迁移脚本。
+- 同一性唯一入口 delector/core/vocab_identity.py：身份 =(lemma_key(lemma), word_key(word))；word_key 新增于 lexicon_merge.py（只 trim/折叠空白/小写，**不去冠词**，保 die Wohnung ≠ Wohnung），lexicon.py re-export。
+- 读侧零 DDL：cards.py 台账 SQL 改 WHERE lemma_key(lemma)=?，连接上 create_function 注册归一函数；vocab_pool._pool_index 键改 (lemma_key, word_key) 并 SELECT lemma, word（行元组 row[2:]）。
+- 写侧幂等：POST /api/cards/vocab 与 companion_proposal 均 BEGIN IMMEDIATE + find_card_id 先查后写 + fill_empty_columns 只补空；只真正新增才 log_study_event/create_count。wb 投影靠内存 map 同键去重。前端 cards.js 仅更新 _prepSavedKeys 过期注释（prep_saved PK 不含反身性，逻辑不动）。
+- 并发实测（8 线程同身份，TestClient 实测请求真并发 0.54s/8×0.5s）：全 200 且落 1 行；临时去掉 BEGIN IMMEDIATE 后 8 请求全 200 却落 5 行 ⇒ 该用例是有效护栏。边界：绕过 helper 的直接 INSERT 仍写 2 行（无 UNIQUE，用例已写死），不等价唯一索引。
+- 测试：tests/test_vocab_identity_upsert.py 10 例（幂等/变体归一/介词三卡/冠词两卡/台账与池同行/伴学确认/并发/绕过直插），已登记 unit-4 分片 + weights。回归 220+ passed（pool 投影、cards、ledger、unified-pool-e2e、wb-rtc、companion、audit、ci 治理、frontend 契约）。ruff check . 绿；mypy --strict delector tools 与 tests 均绿；4 条前端静态闸全 PASS。
+- 待办：开 PR（不自动合并）→ CI 逐 job → 视情况更新 #324 方案文档与合并顺序。
+### 2026-11-09 23:40 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+闭环：PR #325 feat/vocab-identity-upsert 已开（基线 af509dc，12 文件），CI run 42625748172 全绿：13 pass（含 unit-1..4 / cost / integration / Go / 静态闸 / Windows Smoke），仅 Master Direct-Push Scope Gate 按 PR 场景 skipping，无 failure/cancelled。方案文档 #324 仍 OPEN/MERGEABLE（含策略 D + §7 分阶段结论），两 PR 独立、可先合 #324 再合 #325。Step 2（存量处置）未启动，等真实重复统计。

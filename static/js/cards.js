@@ -1226,8 +1226,11 @@ export function uploadBackupJson(e) {
 
 // 本次会话已入卡的 lemma|praep|kasus。按钮的 disabled 状态活不过一次重渲染
 // （过滤、搜索、切回本段都会整块重建 innerHTML），只靠它就等于「敲一下键
-// 就能把已存的行变回可点」，于是同一条搭配能无声地重复入卡 ——
-// /api/cards/vocab 是裸 INSERT，word 上也没有 UNIQUE，重复不会被拦。
+// 就能把已存的行变回可点」。
+// 后端 POST /api/cards/vocab 现按 (lemma_key(lemma), word_key(word)) 先查后写，
+// 重复提交不会再长出新行；但这里仍保留会话内 Set：一是给按钮即时反馈，二是
+// prep_saved 的 PK 是 (lemma, praep, kasus)（不含反身性，如 ausgeben für 与
+// sich ausgeben für），服务端已存状态与词卡身份口径不同，不能互相替代。
 const _prepSavedKeys = new Set();
 
 function _prepKey(lemma, praep, kasus) {

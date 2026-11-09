@@ -109,6 +109,20 @@ def lemma_key(raw: str) -> str:
     return s
 
 
+_RE_WORD_WS = re.compile(r"\s+")
+
+
+def word_key(raw: str) -> str:
+    """把卡面 ``word`` 收成稳定查找键（仅去首尾空白、折叠空白、小写）。
+
+    刻意**不**复用 :func:`lemma_key`：``word`` 是用户看到的卡面，
+    去冠词/去 ``(sich)`` 会让「听力 ``die Wohnung``」与「正文 ``Wohnung``」
+    被误判成同一张卡。词卡身份 = ``(lemma_key(lemma), word_key(word))``，
+    见 ``delector.core.vocab_identity``。
+    """
+    return _RE_WORD_WS.sub(" ", (raw or "").strip()).lower()
+
+
 def _iter_lemmas(fragments: Mapping[str, Mapping[str, Tuple[Any, ...]]]) -> Iterator[str]:
     """按分片注册顺序产出全部 lemma（首次出现即产出，去重、保序）。
 

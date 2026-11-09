@@ -62,6 +62,9 @@ from delector.data.lexicon_merge import (
 from delector.data.lexicon_merge import (
     lemma_key as lemma_key,
 )
+from delector.data.lexicon_merge import (
+    word_key as word_key,
+)
 from delector.data.official_vocab import (
     OFFICIAL_A1_AUGMENT,
     OFFICIAL_A1_VOCAB,
