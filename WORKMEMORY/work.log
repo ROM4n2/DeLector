@@ -516,3 +516,12 @@ Task 2（startUpWebView）实测负结果，未合并：
   - 基线两轮合并 ≈4016，与预期 ~4020 对齐。task2 两轮中位数 4067/4005，均 > 计划通过线 3966（Task 2 未达标），均 ≤ 放弃线 4166。
 - 结论：后台预初始化确已生效（logcat 有 onResult；该 provider 的 getTotalTimeInUiThreadMillis() 返回 null，且无「首帧前 UI 线程启动任务」告警），Displayed 600 vs 800 只作旁证；TTFD 与基线持平/略回退，收益未被证明 ⇒ Task 2 既不修根因、也无用户可见收益，按计划 R1 不合、master 保持 #319 现状。附带结论：#320 的 +19%（4704）在 task2 下被吸收（≈4005）；但既然 TTFD 无收益，WebView 创建位置无需挪后，#320 仍无合并理由（状态未动）。
 - 清理：emulator kill、adb kill-server、worktree wt-startup/wt-base 移除并 prune、%TEMP%\dl-ab / dl-dex / dl-webkit-api / dl-emu-*.log 全删，无监听端口残留。分支 feat/androidx-webview-startup 保留本地供复核。
+### 2026-11-09 21:20 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+两项 docs-only 工作落 PR（均未触碰 delector/、static/、android/ 生产代码）：
+1. PR #322 负结果存档：docs/research/2026-11-09-android-webview-prestartup-negative-result.md 新增，docs/research/README.md §六补索引条目（文件名精确登记，过 docs 闸）。内容含假设来源（并行 WebView 抵消 ~738ms 的机制推断）、两轮各 7 次 TTFD（基线 4095/3938、Task 2 4067/4005，通过线 3966、放弃线 4166 的来历）、代价（APK +82,176 B / +0.08%、dex +192,924 B、方法数 +1,292 / +2.18%）、假设错因（Python 启动与 Chromium 初始化抢同一份 CPU）、#320 被吸收的正面证据（同构建首帧后创建 ≈4005 vs #320 的 4704 ⇒ 挪创建位置本身无价值）、复现要点、x86_64 模拟器边界。
+2. 证据保全：8fe7e08 推到远程 archive/negative-webview-prestartup（不开 PR），文档写明分支名与 SHA；本地 feat/androidx-webview-startup 已删。
+3. PR #323 ADR-0031（Proposed，不实施）：docs/adr/2026-11-09-adr-0031-python-import-migration.md + INDEX 登记。含 1.2s import 组成、processor.py:61-70 的导入期判定点、四态状态机（UNKNOWN/LOADING/AVAILABLE/MISSING，禁止 find_spec 冒充 AVAILABLE、UNKNOWN/LOADING 必须同步到终态）、候选 A/B/C 对红线 1 的影响、双指标验收（TTFD ≤3816ms 且首次分析 ≤基线+100ms）、放弃阈值、ADR-0028 反面教训 2837→3977ms。
+门禁：本地 python tools/check_docs_layout.py = OK：236 文件 / 6 白名单豁免，exit 0。
+CI：#322 与 #323 均 12 success + 2 skipped（Master Direct-Push Scope Gate、Windows Portable Smoke，PR 场景按设计 skip），无 failure/cancelled。
+清理：worktree wt-docs3 移除 + prune、%TEMP%\dl-pr1.md / dl-pr2.md 删除、无 emulator/adb 进程残留。
