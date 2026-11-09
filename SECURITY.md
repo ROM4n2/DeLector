@@ -4,18 +4,18 @@ DeLector 项目高度重视系统的安全性、个人数据隐私与离线优�
 
 ---
 
-## 🛡️ 支持的版本 (Supported Versions)
+## 支持的版本 (Supported Versions)
 
 我们仅针对最新发布的版本提供安全补丁与漏洞修复支持：
 
 | 版本 | 是否支持安全更新 |
 | :--- | :--- |
-| **v5.22.x** | :white_check_mark: 支持中 |
-| < v5.22.0 | :x: 不再维护（请升级至最新版本） |
+| **v5.22.x** | 支持中 |
+| < v5.22.0 | 不再维护（请升级至最新版本） |
 
 ---
 
-## 🔒 安全设计不变量 (Security Invariants)
+## 安全设计不变量 (Security Invariants)
 
 1. **本地优先与数据自持**：
    - 用户的所有背词进度、阅读笔记、错词记录与文库均仅保存在本机（桌面端为 `%LOCALAPPDATA%\DeLector` 或指定的数据目录；Android 端为沙盒私有存储）。
@@ -29,7 +29,7 @@ DeLector 项目高度重视系统的安全性、个人数据隐私与离线优�
 
 ---
 
-## 🚨 报告安全漏洞 (Reporting a Vulnerability)
+## 报告安全漏洞 (Reporting a Vulnerability)
 
 如果你在 DeLector 中发现了任何安全漏洞、越权风险或 XSS 注入点，请**不要**直接公开发布 GitHub Issue。
 
