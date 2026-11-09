@@ -632,3 +632,7 @@ Caps: filesystem-read, filesystem-write, shell-exec
 验证：探针 22/22（新增 R1–R10：拒绝→自动接管、预算耗尽保留首帧+可重试、4xx 不重试、假时钟断言 200/400/800/1600/3200、retryNow 恢复、分类器、常量）；pytest test_article_store_probe 2 passed；check_frontend_layers PASS；CSS 同步/资产 16 passed；node --check 4 文件通过。
 真机冷启（Edge headless + CDP，8120 静态壳 + /api 反代，后端未起时立即 503，后端随后冷启 uvicorn，每次新 DELECTOR_DATA_DIR）：3 轮快照首帧 85ms（81–347）、自动接管 3216ms（3204–3472），navCount 均 1（无刷新/切页），未捕获未处理异常；持续失败场景 6438ms 进「未连接，显示本地快照」+ 重试按钮，首帧 4 行仍在，点重试后 6ms 接管。安卓未测。
 文档：plan 冷启动限制段更新为「补重试后复测」并写入上述数字。
+### 2026-11-10 00:40 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+PR #329 CI（run 42656258966）unit-1 红：tests/test_server_android_fallback.py::test_frontend_ai_error_paths_reuse_api_and_show_alert 的字符串哨兵要求 core.js 含字面量 "throw new Error"，本轮 HTTP 错误改为抛带 status 的 httpErr 后失配。修法：哨兵改为同时校验 "throw httpErr" 与 "httpErr.status = res.status"（判别力只升不降，锁住「抛异常且带 status」契约），本地单测 + ruff 绿，提交后重跑 CI。其余 job：Go↔Python integration / Go Gates / Secret Scan / Static Invariants / cost-cold-start / integration-heavy / Windows Portable Smoke 均 success；unit-2/3/4 与 cost-guards 因 fail-fast cancelled，Master Direct-Push Scope Gate skipped。
+
