@@ -65,6 +65,8 @@ public class MainActivity extends AppCompatActivity {
     private static final String PORT_FILE_NAME = "server-port.txt";
     /** 与 start.py 的 PORT_FILE_ENV 保持同一字符串，缺一不可（由 pytest 静态守卫钉住）。 */
     private static final String PORT_FILE_ENV = "DELECTOR_PORT_FILE";
+    /** 启动期本地静态壳：服务就绪前预热 WebView 渲染进程与网络栈（不承载业务逻辑）。 */
+    private static final String STARTUP_SHELL_URL = "file:///android_asset/shell/startup.html";
 
     /**
      * 导出结果的出口。回调发生在 ExportSaver 的单线程池上，所以一律 post 回主线程。
@@ -273,7 +275,10 @@ public class MainActivity extends AppCompatActivity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
-                if (isServerReady) {
+                // 只认服务页面的完成事件：启动壳是 file:// 页面，它自己的 onPageFinished
+                // 不能提前撤掉 splash（否则会露出还未加载内容的 WebView）。
+                if (isServerReady && serverPort > 0 && url != null
+                        && url.startsWith(serverBaseUrl(serverPort))) {
                     splashLayout.setVisibility(View.GONE);
                     webView.setVisibility(View.VISIBLE);
                 }
@@ -354,6 +359,10 @@ public class MainActivity extends AppCompatActivity {
         setContentView(root);
 
         // 4. Background Initialization (Assets Extraction + Python Server Launch)
+        // 先加载本地静态壳：WebView 的渲染进程/网络栈在 Python 启动期间完成冷启动，
+        // 服务就绪后的真实导航不必再付这笔固定成本。壳与原生 splash 同色同文案，
+        // 且被 splash 覆盖，不会出现额外的可见帧。
+        webView.loadUrl(STARTUP_SHELL_URL);
         new Thread(this::initAndStartServer).start();
     }
 

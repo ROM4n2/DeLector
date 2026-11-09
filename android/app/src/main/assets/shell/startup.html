@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeLector</title>
+<!--
+  启动静态壳：在 Python 服务就绪前把 WebView 的渲染进程与网络栈预热起来。
+  自包含（无外链、无脚本），视觉与原生 splash 同源，避免切换时闪色。
+  它不承载业务逻辑，也不在服务就绪前发起任何 API 请求。
+-->
+<style>
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: #FAF8F5; color: #1B1E28;
+    padding: 48px; box-sizing: border-box; text-align: center;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-user-select: none; user-select: none;
+  }
+  h1 { margin: 0; font-size: 36px; font-weight: 700; letter-spacing: .5px; }
+  p.sub { margin: 6px 0 36px; font-size: 14px; color: #7A6854; }
+  .spinner {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 3px solid #D8CDBE; border-top-color: #8E8271;
+    animation: spin .9s linear infinite;
+  }
+  p.status { margin: 24px 0 0; font-size: 13px; color: #8E8271; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+</style>
+</head>
+<body>
+  <h1>DeLector</h1>
+  <p class="sub">德语欧标精读与备考工作台</p>
+  <div class="spinner" role="progressbar" aria-label="正在启动"></div>
+  <p class="status">正在启动德语语言学引擎与本地词库...</p>
+</body>
+</html>
