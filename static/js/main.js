@@ -36,6 +36,7 @@ import {
 } from "./cp-drawer.js";
 import {
   loadArticles,
+  retryArticles,
   deleteArticle,
   openReader,
   inspect,
@@ -1207,6 +1208,7 @@ Object.assign(window, {
 
   // Reader & Token Inspector
   openReader,
+  retryArticles,
   deleteArticle,
   inspect,
   toggleCefrFocus,
