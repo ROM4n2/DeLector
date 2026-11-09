@@ -111,8 +111,7 @@ def _kill_process_tree(proc: subprocess.Popen[bytes]) -> None:
                 _emit(f"::warning::ci_heartbeat killpg 失败：{type(exc).__name__}: {exc}")
     try:
         proc.kill()
-    except OSError:
-        # 进程树已被 taskkill/killpg 收掉时 kill 可能报错；此处只做兜底。
+    except OSError:  # silent-ok: 进程树已被 taskkill/killpg 收掉时 kill 可能报错，属确定性兜底，不改变 124 结论
         pass
 
 
