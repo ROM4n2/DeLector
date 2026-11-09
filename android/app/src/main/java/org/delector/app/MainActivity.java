@@ -18,6 +18,7 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
@@ -52,6 +53,7 @@ import android.speech.tts.Voice;
 
 public class MainActivity extends AppCompatActivity {
     private WebView webView;
+    private FrameLayout rootLayout;
     private LinearLayout splashLayout;
     private TextView statusTextView;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -233,7 +235,68 @@ public class MainActivity extends AppCompatActivity {
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.parseColor("#FAF8F5"));
 
-        // 2. Setup WebView & Native TTS
+        // 2. WebView 延后创建（见 ensureWebView）：不与 splash 首帧争抢 UI 线程。
+        rootLayout = root;
+
+        // 3. Setup Splash / Loading View
+        splashLayout = new LinearLayout(this);
+        splashLayout.setOrientation(LinearLayout.VERTICAL);
+        splashLayout.setGravity(Gravity.CENTER);
+        splashLayout.setBackgroundColor(Color.parseColor("#FAF8F5"));
+        splashLayout.setPadding(48, 48, 48, 48);
+
+        TextView titleView = new TextView(this);
+        titleView.setText("DeLector");
+        titleView.setTextColor(Color.parseColor("#1B1E28"));
+        titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 36);
+        titleView.setTypeface(null, android.graphics.Typeface.BOLD);
+        titleView.setGravity(Gravity.CENTER);
+
+        TextView subtitleView = new TextView(this);
+        subtitleView.setText("德语欧标精读与备考工作台");
+        subtitleView.setTextColor(Color.parseColor("#7A6854"));
+        subtitleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        subtitleView.setPadding(0, 12, 0, 36);
+        subtitleView.setGravity(Gravity.CENTER);
+
+        ProgressBar progressBar = new ProgressBar(this);
+        progressBar.setIndeterminate(true);
+
+        statusTextView = new TextView(this);
+        statusTextView.setText("正在启动德语语言学引擎与本地词库...");
+        statusTextView.setTextColor(Color.parseColor("#8E8271"));
+        statusTextView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        statusTextView.setPadding(0, 24, 0, 0);
+        statusTextView.setGravity(Gravity.CENTER);
+
+        splashLayout.addView(titleView);
+        splashLayout.addView(subtitleView);
+        splashLayout.addView(progressBar);
+        splashLayout.addView(statusTextView);
+
+        root.addView(splashLayout, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+
+        setContentView(root);
+
+        // 4. Background Initialization (Assets Extraction + Python Server Launch)
+        new Thread(this::initAndStartServer).start();
+        // 5. 首帧提交后再建 WebView。
+        scheduleWebViewAfterFirstFrame();
+    }
+
+    /**
+     * 创建并挂载 WebView，幂等。
+     *
+     * 首次创建 WebView 会同步加载 Chromium 提供方与网络栈；放在 splash
+     * 首帧之前会和首帧争抢 UI 线程。故由 scheduleWebViewAfterFirstFrame()
+     * 在首帧提交后调用，readiness 回调再兜底调用一次，保证 loadUrl 前一定已就绪。
+     */
+    private void ensureWebView(FrameLayout root) {
+        if (webView != null) {
+            return;
+        }
         webView = new WebView(this);
         webView.setVisibility(View.GONE);
 
@@ -335,54 +398,30 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        root.addView(webView, new FrameLayout.LayoutParams(
+        // index 0：splash 在 index 1，永远压在 WebView 上面。
+        root.addView(webView, 0, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
+    }
 
-        // 3. Setup Splash / Loading View
-        splashLayout = new LinearLayout(this);
-        splashLayout.setOrientation(LinearLayout.VERTICAL);
-        splashLayout.setGravity(Gravity.CENTER);
-        splashLayout.setBackgroundColor(Color.parseColor("#FAF8F5"));
-        splashLayout.setPadding(48, 48, 48, 48);
-
-        TextView titleView = new TextView(this);
-        titleView.setText("DeLector");
-        titleView.setTextColor(Color.parseColor("#1B1E28"));
-        titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 36);
-        titleView.setTypeface(null, android.graphics.Typeface.BOLD);
-        titleView.setGravity(Gravity.CENTER);
-
-        TextView subtitleView = new TextView(this);
-        subtitleView.setText("德语欧标精读与备考工作台");
-        subtitleView.setTextColor(Color.parseColor("#7A6854"));
-        subtitleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        subtitleView.setPadding(0, 12, 0, 36);
-        subtitleView.setGravity(Gravity.CENTER);
-
-        ProgressBar progressBar = new ProgressBar(this);
-        progressBar.setIndeterminate(true);
-
-        statusTextView = new TextView(this);
-        statusTextView.setText("正在启动德语语言学引擎与本地词库...");
-        statusTextView.setTextColor(Color.parseColor("#8E8271"));
-        statusTextView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        statusTextView.setPadding(0, 24, 0, 0);
-        statusTextView.setGravity(Gravity.CENTER);
-
-        splashLayout.addView(titleView);
-        splashLayout.addView(subtitleView);
-        splashLayout.addView(progressBar);
-        splashLayout.addView(statusTextView);
-
-        root.addView(splashLayout, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT));
-
-        setContentView(root);
-
-        // 4. Background Initialization (Assets Extraction + Python Server Launch)
-        new Thread(this::initAndStartServer).start();
+    /**
+     * 等 splash 首帧真正画完再创建 WebView。
+     *
+     * OnDrawListener 在本次绘制之前回调，故在回调里 post：post 的消息排在当前
+     * 帧回调之后执行，此时首帧已提交。
+     */
+    private void scheduleWebViewAfterFirstFrame() {
+        final ViewTreeObserver observer = rootLayout.getViewTreeObserver();
+        observer.addOnDrawListener(new ViewTreeObserver.OnDrawListener() {
+            @Override
+            public void onDraw() {
+                if (!observer.isAlive()) {
+                    return;
+                }
+                observer.removeOnDrawListener(this);
+                rootLayout.post(() -> ensureWebView(rootLayout));
+            }
+        });
     }
 
     /**
@@ -509,6 +548,7 @@ public class MainActivity extends AppCompatActivity {
                         final int readyPort = serverPort;
                         mainHandler.post(() -> {
                             statusTextView.setText("服务已就绪，正在加载工作台...");
+                            ensureWebView(rootLayout);
                             webView.loadUrl(serverBaseUrl(readyPort));
                             splashLayout.postDelayed(() -> {
                                 splashLayout.setVisibility(View.GONE);
