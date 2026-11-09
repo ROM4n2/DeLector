@@ -193,6 +193,49 @@ assemble 双变体（`assembleDeviceDebug` / `assembleEmulatorDebug`）。
   失败时 `reportFatal()` 会把错误留在启动页且可选中复制；重载上限 10 次；
   catch 必须用 `Throwable`（`Python.start()` 抛的是 `UnsatisfiedLinkError`）。
 
+### 启动指标 TTFD（口径 + 测量方法 + 基线，2026-11-09）
+
+**口径**：TTFD = 首条 `.article-row` 完成首次绘制的时刻。Web 侧在列表 `innerHTML`
+写入后用**双 rAF**确认上一帧已提交，再检查首条行渲染出非零盒子，然后经
+`DeLectorStartup` 桥回调 Java；Java 用 `SystemClock.elapsedRealtime() -
+Process.getStartElapsedRealtime()` 算毫秒，写 logcat 并 `reportFullyDrawn()`。
+桌面浏览器没有该桥，探针是空操作。
+
+- 为什么不用「与视口相交」：当前首页布局的文章列表在首屏折叠线以下（实测
+  `top≈1169`、`innerHeight≈866`），视口判定会让 TTFD 永不触发。
+- **空库例外**：没有 `.article-row` 时 TTFD 不产生，`reportFullyDrawn()` 也不会调用；
+  这是口径边界，不是回归。
+- **收益一律用 TTFD 记账**。`am start -W` / `Displayed` 是 TTID（我们自己的 splash
+  首帧），只能当旁证，不能当「启动变快」的证据。
+
+**可复现测量**（x86_64 模拟器；冷启动控制 = `force-stop` + 清 WebView/SW 缓存）：
+
+```powershell
+$adb = 'D:\Android\Sdk\platform-tools\adb.exe'
+& $adb shell am force-stop org.delector.app.emulator
+& $adb shell 'run-as org.delector.app.emulator rm -rf cache/WebView'
+& $adb shell 'run-as org.delector.app.emulator rm -rf "app_webview/Default/Service Worker/CacheStorage"'
+& $adb logcat -c
+& $adb shell am start -W -n org.delector.app.emulator/org.delector.app.MainActivity
+& $adb logcat -d | Select-String 'TTFD_FIRST_ARTICLE_MS|TTFD_ROW_EPOCH|Fully drawn|Displayed'
+```
+
+- `TTFD_FIRST_ARTICLE_MS`：应用内埋点，权威值；
+- `TTFD_ROW_EPOCH`（页面 epoch）与 `Start proc` 行（`logcat -v epoch`）相减：独立交叉核对；
+- `Fully drawn ... +Xms`：`reportFullyDrawn()` 的系统口径，应与前者同量级。
+
+**基线（2026-11-09，x86_64 模拟器 API 37 / WebView 145；master `adab8f2`）**：
+
+- 5 次冷启动（较早环境）：TTFD 中位数 **4675 ms**（4626–4887），`Displayed` 941 ms。
+- 同会话 A/B（基线探针 → 正式埋点）：基线 4891 ms（4808–5008）、`Displayed` 1039 ms；
+  埋点后 4921 ms（4850–5352）、`Displayed` 1053 ms。`Displayed` 也一起漂了 ~100 ms，
+  说明**整机环境会漂移**：改前改后必须在同一会话里交替重装对比，不能拿不同时间的
+  绝对值相减。埋点本身无行为改动（同会话差 ≈1%，落在离散度内）。
+- `TTFD_FIRST_ARTICLE_MS`（进程内基准）比「`TTFD_ROW_EPOCH` − `Start proc`」小约
+  100 ms，因为 logcat 的 `Start proc` 是 fork 之后才打印的。跨 PR 比较用前者。
+
+**不可外推真机**；后续启动 PR 必须报同口径、同会话的改后 TTFD。
+
 ---
 
 ## 数据库 Schema（两个库）

@@ -203,9 +203,40 @@ export async function loadArticles() {
       </div>`,
       )
       .join("");
+    reportFirstArticleVisible(el);
   } catch (err) {
     el.innerHTML = '<div class="empty-state">文章列表加载失败</div>';
   }
+}
+
+// ── 冷启动 TTFD 探针 ─────────────────────────────────────────────────────
+// TTFD = 首条 .article-row 完成首次绘制的时刻。Android 壳经 DeLectorStartup 桥
+// 交给原生层（logcat + reportFullyDrawn）；桌面浏览器没有该桥，整个函数是空操作。
+// 双 rAF：第一次回调时列表刚插入、布局尚未提交；第二次回调时上一帧已提交。
+// 注意：当前首页布局的文章列表在首屏折叠线以下（实测 top≈1169 > innerHeight≈866），
+// 所以「可见」按「已渲染出非零盒子」判定，不能用与视口相交（否则永不触发）。
+let _ttfdReported = false;
+function reportFirstArticleVisible(listEl) {
+  if (_ttfdReported) return;
+  const bridge = window.DeLectorStartup;
+  if (!bridge || typeof bridge.onFirstArticleVisible !== "function") return;
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      if (_ttfdReported) return;
+      const row = listEl.querySelector(".article-row");
+      if (!row) return;
+      const rect = row.getBoundingClientRect();
+      if (!(rect.width > 0 && rect.height > 0)) return;
+      _ttfdReported = true;
+      try {
+        bridge.onFirstArticleVisible(
+          String(performance.timeOrigin + performance.now()),
+        );
+      } catch (_) {
+        // 探针失败不能影响列表渲染
+      }
+    }),
+  );
 }
 
 // 陈旧响应守卫：用户在文章间快速切换时，较早的慢响应不得覆盖后打开的文章。
