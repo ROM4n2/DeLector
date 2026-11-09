@@ -301,9 +301,23 @@ public class MainActivity extends AppCompatActivity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
+                // 兜底：正常路径由 onPageCommitVisible 先撤；这里只防「commit 回调缺失」。
                 if (isServerReady) {
-                    splashLayout.setVisibility(View.GONE);
-                    webView.setVisibility(View.VISIBLE);
+                    revealWebView();
+                }
+            }
+
+            /**
+             * 首帧内容已提交：撤 splash 的唯一正常信号。
+             *
+             * 旧实现是 loadUrl 之后固定 200ms 撤场，慢设备上会在首帧前露出白屏/半成品；
+             * 这里等 WebView 明确告知「新页面第一帧已可绘制」，再延迟到下一个动画帧撤，
+             * 保证撤场时内容帧已经提交。不用定时器猜。
+             */
+            @Override
+            public void onPageCommitVisible(WebView view, String url) {
+                if (isServerReady && isLocalServerUrl(url)) {
+                    view.postOnAnimation(MainActivity.this::revealWebView);
                 }
             }
 
@@ -485,6 +499,23 @@ public class MainActivity extends AppCompatActivity {
         return "http://127.0.0.1:" + port;
     }
 
+    /**
+     * 撤掉 splash、露出 WebView。只允许 UI 线程调用（WebViewClient 回调 / postOnAnimation）。
+     * 用「幂等 + 只改可见性」保证重复调用安全，不引入任何新的计时假设。
+     */
+    private void revealWebView() {
+        if (webView.getVisibility() == View.VISIBLE) {
+            return;
+        }
+        splashLayout.setVisibility(View.GONE);
+        webView.setVisibility(View.VISIBLE);
+    }
+
+    /** 只认端口文件给出的那个本地服务地址，避免把超时/外链页面的 commit 当成首屏。 */
+    private boolean isLocalServerUrl(String url) {
+        return serverPort > 0 && url != null && url.startsWith(serverBaseUrl(serverPort));
+    }
+
     private void pollServerReadiness(File dataDir) {
         for (int i = 0; i < StartupReadinessPolicy.maxAttempts(); i++) {
             if (fatalError != null) {
@@ -509,11 +540,8 @@ public class MainActivity extends AppCompatActivity {
                         final int readyPort = serverPort;
                         mainHandler.post(() -> {
                             statusTextView.setText("服务已就绪，正在加载工作台...");
+                            // splash 不在这里撤：等 onPageCommitVisible（首帧已提交）再撤。
                             webView.loadUrl(serverBaseUrl(readyPort));
-                            splashLayout.postDelayed(() -> {
-                                splashLayout.setVisibility(View.GONE);
-                                webView.setVisibility(View.VISIBLE);
-                            }, 200);
                         });
                         return;
                     }
