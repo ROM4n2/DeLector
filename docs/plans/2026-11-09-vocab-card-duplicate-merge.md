@@ -20,7 +20,9 @@
 | 重复是否真实存在 | **是**。`vocab_cards` 的 `word` / `lemma` 无 UNIQUE，`POST /api/cards/vocab` 是裸 INSERT（`delector/routes/cards.py:176-202`）；前端注释自己写明「重复不会被拦」（`static/js/cards.js:1227-1231`）。 |
 | 重复规模 | **未统计**。本机 `delector.db` 的 `vocab_cards` 为 **0 行**、`wb_state` 为空；`progress.db` 无 `vocab_cards`。本机是开发检出，不是用户真实学习库，无法据此推断。统计 SQL 与只读运行方式见 §2。 |
 | 唯一键能否只用 `lemma` | **不能**。介词搭配天然是「同 lemma 多卡」：`bestehen auf / aus / in` 的 `lemma` 都是 `bestehen`（`static/js/reader.js:989-1008`、`static/js/cards.js:1409-1438`）。`UNIQUE(lemma)` 会把合法用法判成冲突。 |
-| 是否需要备份 | **取决于策略**。策略 A/B 物理删除后无法从表内恢复，只能靠迁移前快照；策略 C（逻辑合并）可逆，备份非必需。见 §3/§4。 |
+| 是否需要备份 | **取决于策略**。策略 A/B 物理删除后无法从表内恢复，只能靠迁移前快照；策略 C（逻辑合并）与 D（物理归档）可逆，备份非必需（D 仍需决定归档表进不进备份格式）。见 §3/§4。 |
+| 策略 D 与 C 的区别 | C 把重复行留在主表、靠 `merged_into` 过滤，**每条读路径都要改**；D 把重复行移到 `vocab_cards_merged`，**读路径零改动**。见 §3.D。 |
+| 第一步做什么 | **不是**选存量处置，而是先做 Step 1：统一同一性口径 + 写入侧 upsert，零 DDL、零删数据。见 §7。 |
 | 最需要先拍板的两件事 | ①「同一词」的同一性口径：原始 `lemma` 还是 `lemma_key`（见 §5.1）；②唯一键列集合（见 §5.2）。 |
 
 ---
@@ -235,14 +237,40 @@ from delector.data.lexicon_merge import lemma_key
 | 与唯一索引的关系 | 若同时要加唯一索引，必须用 **partial index**（`WHERE merged_into IS NULL`）；SQLite 支持，但 upsert 的 `ON CONFLICT` 目标必须带同样的 `WHERE` 谓词，写法更绕、更易错。 |
 | 额外风险 | 表里长期留冗余行；`SELECT *` 的直接消费者（含备份/导出）都会多一列。旧版本程序读到新列会忽略（备份还原按白名单列写入），但语义丢失。 |
 
-### 三选一的判定依据（不替用户选）
+### D. 物理归档表：`vocab_cards_merged`
+
+**动作**：主表每组只留代表卡；其余行在**同一事务内** `INSERT INTO vocab_cards_merged SELECT ...` + `DELETE FROM vocab_cards WHERE id IN (...)`。归档表保留全部原始列（含 `fsrs_s/fsrs_d/fsrs_lapses`、`correct_count/wrong_count`、`repetition_count`、`ease_factor`、`due_date`、`mastered/mastered_at`、`created_at`），另加 3 个来源列：`archived_at`、`kept_id`、`strategy`（外加 `schema_ver`）。`kept_id` 是「这张卡曾经并入哪一张」的唯一凭据——**不加这个来源列就查不到归属关系**，所以建议加；不建议只存原始行 JSON。
+
+| 维度 | 后果 |
+|---|---|
+| 用户可见 | 与 A 相同（只出一张），但归档行不在主表 → 卡盒 / 计数 / 到期队列天然干净。 |
+| **读路径** | **零改动**。这是与 C 的关键差别：C 要在每条读路径上过滤/解析代表卡，漏一处就出现空壳重复；D 的读路径看到的永远是干净主表。 |
+| 历史 | 不丢：归档行真实存在于 `vocab_cards_merged`，可查询、可搬回。 |
+| 可逆性 | **可逆**：`INSERT INTO vocab_cards SELECT ... FROM vocab_cards_merged` + 删唯一索引即可。归档表是普通表，搬回时 `id` 可原样保留。 |
+| 唯一索引 | **可直接建**（主表已无重复），写入改 `ON CONFLICT` upsert，不需要 partial index。 |
+| 外部引用 | `quiz_log.card_id` / `study_log.ref_id` 有两种处置，必须选：①重映射到 `kept_id`（一张卡上会出现两段时间交错的历史，统计不需改）；②保持原 id（历史完整挂在归档行），但凡按主表 JOIN 的统计都会把这些记录当孤儿，必须把统计口径改成「主表 UNION 归档表」。**不选就是静默失真。** |
+| `wb_state` | **必须重映射**到 `kept_id`。归档表只存卡片行，不存工作台 JSON；被归档卡在 `wb_state.payload` 里的 `s/d/lapses` 如果不搬，用户复习进度直接丢失。 |
+| 代价 | 多一张只增不改的表 + 归档写入逻辑；主表删除行后 `AUTOINCREMENT` 不复用旧 id（`sqlite_sequence` 保留），搬回不会撞 id。 |
+| 备份 / 还原 | **必须显式决定**（详见下表）。现有备份是「白名单表清单 + `RestoreReq` 字段白名单」，还原时 payload 有键才覆盖。 |
+
+**归档表进不进备份格式（三种处理，选一个）**
+
+| 选项 | 做法 | 后果 |
+|---|---|---|
+| ① 纳入 v2（推荐） | `_BACKUP_TABLES` 加 `vocab_cards_merged`；`RestoreReq` 加同名字段；`BACKUP_FORMAT_VERSION` **保持 2** | 归档随导出走，换机/还原不丢历史。旧客户端收到未知键会忽略（其 spec 里没有 → 不覆盖），新客户端还原旧备份时归档表原样保留（payload 无键 → 不覆盖）。需补两条测试：旧备份→新库（归档保留）、新备份→旧客户端（主表正确、归档被忽略）。 |
+| ② 不纳入 | 只靠整库文件快照 | 导出的 JSON 里没有归档 → 换机后「这张卡曾经并入哪张」永久丢失；主表不受影响。必须在导出说明里写明。 |
+| ③ 升 v3 | 纳入并升版本 | 最严格，但要同步改所有还原入口与旧版本兼容测试；本轮不建议为了加一张表升版本。 |
+
+### 四选一的判定依据（不替用户选）
 
 | 若你在意 | 倾向 |
 |---|---|
 | 只要结果干净、可接受不可逆 | A（最简单，改动面最小）。 |
-| 绝不能丢用户复习劳动 | B（但产出近似值）或 C（可逆）。 |
-| 要能反悔 / 不想让用户数据物理消失 | C。 |
-| 想让写入侧尽快加唯一约束、少改读路径 | A/B + 唯一索引；C 需要 partial index。 |
+| 绝不能丢用户复习劳动 | B（但产出近似值）或 D（历史真实保留）。 |
+| 要能反悔 / 不想让用户数据物理消失 | C 或 D。 |
+| 不想改散落在各处的读路径 | **D**（C 的读路径风险最高）。 |
+| 想让写入侧尽快加唯一约束、少改读路径 | A/B/D + 普通唯一索引；C 需要 partial index。 |
+| 想保留「这张卡从哪来」的关系 | D（`kept_id`）；C 需要另加来源列才能反查。 |
 
 ---
 
@@ -337,6 +365,18 @@ RETURNING id, (created_at = ...)  -- 是否需要 created 标记见 §5.4
 | 4 upsert | 代码缺陷 | revert 代码 → `DROP INDEX`（顺序不可反）。 |
 | 5 验收 | 行数对不上 | 用 Step 1 快照还原（整库或按 `vocab_cards_merge_backup.row_json` 逐行重建）。 |
 
+### 策略 D 的专属步骤与回滚
+
+1. `CREATE TABLE vocab_cards_merged`（DDL，需授权）。
+2. 每批一个事务：`INSERT INTO vocab_cards_merged SELECT <全部原始列>, <kept_id>, <strategy>, <schema_ver>, CURRENT_TIMESTAMP FROM vocab_cards WHERE id IN (...)` → `DELETE FROM vocab_cards WHERE id IN (...)`。**先插后删、同事务**，任何一步失败整批回滚（不会出现「删了但没归档」）。
+3. 同一事务内重映射 `wb_state.payload` 的卡片键（`str_replace` 或解析 JSON 后重写）；`quiz_log` / `study_log` 按 §3.D 选定的口径处理。
+4. 建唯一索引（同 Step 3，普通索引即可）。
+5. 写入改 upsert（同 Step 4）。
+
+**回滚**：`INSERT INTO vocab_cards (<原始列>) SELECT <原始列> FROM vocab_cards_merged WHERE strategy = '<本次>'`；保留原 `id`；删唯一索引；重映射反向（`kept_id → 原 id`）。**若已有多张归档行指向同一 `kept_id`，反向重映射无法区分原 id** → `wb_state` 只能恢复到代表卡，这是 D 的不可完全逆转点，必须写明。
+
+**中断**：事务原子；重跑靠「归档表里已有该 `card_id` 即跳过」幂等。
+
 ---
 
 ## 5. 写入侧语义与唯一键
@@ -403,25 +443,52 @@ RETURNING id, (created_at = ...)  -- 是否需要 created 标记见 §5.4
 
 ---
 
-## 7. 明确不做 / 已知风险
+## 7. 分阶段结论：D 不是第一步
 
-- 本轮**不做**：DDL、`ALTER TABLE`、`CREATE UNIQUE INDEX`、改任何写入路径、改读侧台账 SQL。
-- 不新增 UNIQUE 约束、不改 `POST /api/cards/vocab` 的行为；台账「共 N 张」文字提示保持不变。
-- 不改 `GET /api/cards/vocab?scope=reader` 的 12 字段契约（`tests/test_vocab_contract_uniform.py` 钉死，不放松）。
-- 不改 `BACKUP_FORMAT_VERSION`（若采用表内快照，仍保持 2）。
-- 已知风险（不在本轮修）：原始 `lemma` 未归一导致读侧台账可能漏看另一形态；`quiz_log` / `study_log` 无外键，脏引用只能靠迁移重映射；`wb_state` 是整块 JSON，重写需整体解析-替换-写回，失败会丢全部工作台状态（迁移时必须先备份该行）。
+**Step 1（现在做）——只堵新增，零 DDL、零删数据**
+
+1. 统一同一性口径：`lemma` 侧用既有 `lemma_key`，`word` 侧新增 `word_key`（trim + 折叠空白 + 小写；**不**去冠词，保证 `die Wohnung` ≠ `Wohnung`），合并为单一入口 `vocab_identity(lemma, word)`，读（台账）写（三个写入点）共用。
+2. 写入侧「先查后写」幂等：按 `(lemma_key, word_key)` 查既有行，命中即返回该 `id`，未命中才 INSERT。用 `BEGIN IMMEDIATE` 串行化写入。
+3. **不**加 UNIQUE、**不**建索引、**不**改存量行。代价是：没有存储层不变量，绕过本函数的写入仍会重复；并发跨进程只能靠写锁窗口，不等于唯一索引。
+4. 收益：从现在起不再新增重复卡，且台账与工作池对「同一张卡」的判断一致。
+
+**Step 2（拿到真实数字后）——再决定存量怎么处置**
+
+- 先用 §2 的只读统计在真实库上得到三个数：重复组数 `G`、多余行数 `S`、最大组行数 `M`。
+- `S = 0`：无需合并，Step 1 之后直接建唯一索引即可。
+- `S > 0`：在 A / C / D 里选。判定建议见下表。
+
+| 条件 | 建议 | 依据 |
+|---|---|---|
+| `G ≤ 20` 且 `M ≤ 2` | **A**（保留信号最新、物理删除） | 该规模可以人工逐组复核（约 20 组、每组 ≤2 行，1 人 1 小时内可核对完），A 的改动面最小、无需为读路径/归档表付固定成本。 |
+| `G > 20` 或 `M ≥ 3` | **D**（物理归档） | 规模上无法逐组人工复核时，A 的不可逆风险与引用重映射错误无法用抽查兜住；D 的读路径零改动、可逆、`kept_id` 可追溯，固定成本被摊薄。 |
+| 用户明确「必须能反悔」 | **C 或 D** | 与 `G` 无关；C 少一张表但要改 ~7 处读路径，D 多一张表但读路径零改动。 |
+
+**为什么门槛是 20 组 / 每组 2 行**：这是**可复核性**门槛，不是性能门槛。依据是「单人单小时能逐组核对并签字」的经验边界（20 组 × 2 行 = 40 行）。如果接受不复核，A 在任意 `G` 下成本都最低；如果要求可审计，D 在任意 `G` 下都更稳。**该数值是建议，不是定论；且当前没有真实数据（§2 未统计），Step 2 前必须先用真实库跑出 `G/S/M`。**
 
 ---
 
-## 8. 待裁决（实施前必须回答）
+## 8. 明确不做 / 已知风险
 
-1. **策略 A / B / C 选哪个？**（决定是否物理删行、是否需要备份、是否改所有读路径）
-2. **同一性口径**：原始 `lemma` 还是新增 `lemma_key`？（决定是否加列 + 回填）
-3. **唯一键列集合**：`(lemma, word)` / `(lemma_key, word_key)` / 其他？（决定合法多卡的边界）
-4. **`word_key` 归一规则**：是否去冠词、是否小写、空格如何处理？（决定「die Wohnung」与「Wohnung」是否合并）
-5. **备份形态**：整库快照 / 表内快照表 / 不备份（仅策略 C 可接受）？
-6. **旧备份还原策略**：去重后灌入 / 临时删索引 / 备份格式升 v3？
-7. **`POST` 是否新增 `created` 字段**？（改前端契约与导出面清单，需单独报备）
+- 本文件只描述方案，**不实施**。Step 1 的实现放在独立 PR（统一口径 + 写入 upsert），也不包含 DDL。
+- Step 1 **不做**：`ALTER TABLE`、`CREATE UNIQUE INDEX`、删任何存量 `vocab_cards` 行、写迁移脚本。
+- 不新增 UNIQUE 约束；台账「共 N 张」文字提示保持不变。
+- 不改 `GET /api/cards/vocab?scope=reader` 的 12 字段契约（`tests/test_vocab_contract_uniform.py` 钉死，不放松）。
+- 不改 `BACKUP_FORMAT_VERSION`（若采用表内快照或归档表纳入 v2，仍保持 2）。
+- 已知风险：`quiz_log` / `study_log` 无外键，脏引用只能靠迁移重映射；`wb_state` 是整块 JSON，重写需整体解析-替换-写回，失败会丢全部工作台状态（迁移时必须先备份该行）；`prep_saved` 的主键是 `(lemma, praep, kasus)`，不含反身性，同一动词的 `ausgeben für` 与 `sich ausgeben für` 在介词矩阵 UI 上会被当成同一格——修它需要 DDL，不在 Step 1。
+
+---
+
+## 9. 待裁决（实施前必须回答）
+
+1. **存量策略 A / B / C / D 选哪个？**（决定是否物理删行、是否需要归档表、是否需要备份、是否改所有读路径）
+2. **归档表（D）是否进备份格式**：纳入 v2 / 不纳入 / 升 v3？（见 §3.D 的三选一）
+3. **同一性口径**：原始 `lemma` 还是 `lemma_key`？（决定是否加列 + 回填）
+4. **唯一键列集合**：`(lemma, word)` / `(lemma_key, word_key)` / 其他？（决定合法多卡的边界）
+5. **`word_key` 归一规则**：是否去冠词、是否小写、空格如何处理？（决定「die Wohnung」与「Wohnung」是否合并）
+6. **备份形态**：整库快照 / 表内快照表 / 不备份（仅 C/D 可接受）？
+7. **旧备份还原策略**：去重后灌入 / 临时删索引 / 备份格式升 v3？
+8. **`POST` 是否新增 `created` 字段**？（改前端契约与导出面清单，需单独报备）
 
 ---
 
