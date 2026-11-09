@@ -503,3 +503,16 @@ Caps: filesystem-read, filesystem-write, shell-exec, web-fetch, android-build, a
 调研更正（PR #321）：下载 webkit-1.16.0.aar 读元数据 = minCompileSdk 33 / minAGP 7.2.0 / minSdk 24，本项目 34/8.4.2/8.6/24 已满足，**升级只需一行依赖，不动构建链**；此前的「需 compileSdk 36 + AGP≥8.9 + Gradle 8.11」是把 compileSdk 36 自身要求误当成本路线前置（AGP 8.9 自述最大 API 35，AGP 8.13 才支持 36）。Chaquopy 15.0.1 官方支持 AGP 7.0–8.5；若另因升 AGP≥8.9 必换 16.1（7.0–8.13 / min API 24），16.x 插件迁移细节未证实。计划含风险矩阵 7 项、回滚点 R1/R2/R3、放弃条件（两轮 7 次 TTFD 中位数 >4166ms 即回滚）。
 CI：#317 全绿；#319 rebase 后 14/14 success（PR 场景 Master Direct-Push Scope Gate 按设计 skip）；#320 13 pass + 1 skipped（同因）；#321 docs-only，Windows Portable Smoke 因无打包面变更而 skipped，其余 pass。
 清理：emulator 已 kill、worktree 全部移除、%TEMP%\dl-ttfd 探针/录像/APK 删除，无残留监听端口。
+
+### 2026-11-09 20:35 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, android-build, android-emulator
+#321 已合并（merge commit，未 squash，合并前 mergeable CLEAN，master 未前进故未 rebase）：master a6a93d7。该 SHA push run 42610053998 逐 job 13 success + 1 skipped（Windows Portable Smoke，docs-only 无打包面变更），无 failure/cancelled。
+Task 2（startUpWebView）实测负结果，未合并：
+- 实现分支 feat/androidx-webview-startup 8fe7e08（仅本地，未推送）：webkit 1.10.0→1.16.0（只此一行依赖；compileSdk 34 / AGP 8.4.2 / Gradle 8.6 / Chaquopy 15.0.1 全未动）；MainActivity.onCreate 最前（splash inflate 前）调 WebViewCompat.startUpWebView（单线程 executor + setShouldRunUiThreadStartUpTasks(false)），onError 与 catch(Throwable) 都置 failed + Log.w 降级；WebView 创建仍受「splash 首帧 &&（后台完成 || 失败）」双门；readiness 兜底 ensureWebView；#319 撤场逻辑一行未改。守卫 tests/test_android_webkit_dependency.py + test_android_webview_startup_async.py（21 passed，ruff/mypy strict 绿）。
+- 依赖增量实测：APK 96,829,120→96,911,296 B（+82,176，+0.08%）；dex 10,107,960→10,300,884 B；方法数 59,235→60,527（+1,292，+2.18%）；checkAarMetadata 通过（minCompileSdk 33）。
+- TTFD（x86_64 模拟器 medium_phone API37 / WebView 145；force-stop + pm clear 清 WebView/SW；A/B 交替重装；每轮 7 次）：
+  - 第 1 轮 baseline 中位数 4095（3957–4183，首启 9926 为预热离群；完整范围 3957–9926）；task2 4067（3939–5079）。
+  - 第 2 轮（每个构建先弃跑 1 次）：baseline 3938（3884–4250）；task2 4005（3949–4857）。
+  - 基线两轮合并 ≈4016，与预期 ~4020 对齐。task2 两轮中位数 4067/4005，均 > 计划通过线 3966（Task 2 未达标），均 ≤ 放弃线 4166。
+- 结论：后台预初始化确已生效（logcat 有 onResult；该 provider 的 getTotalTimeInUiThreadMillis() 返回 null，且无「首帧前 UI 线程启动任务」告警），Displayed 600 vs 800 只作旁证；TTFD 与基线持平/略回退，收益未被证明 ⇒ Task 2 既不修根因、也无用户可见收益，按计划 R1 不合、master 保持 #319 现状。附带结论：#320 的 +19%（4704）在 task2 下被吸收（≈4005）；但既然 TTFD 无收益，WebView 创建位置无需挪后，#320 仍无合并理由（状态未动）。
+- 清理：emulator kill、adb kill-server、worktree wt-startup/wt-base 移除并 prune、%TEMP%\dl-ab / dl-dex / dl-webkit-api / dl-emu-*.log 全删，无监听端口残留。分支 feat/androidx-webview-startup 保留本地供复核。
