@@ -22,6 +22,7 @@ from delector.core.db.companion import (
 from delector.core.db.companion import (
     update_proposal_status,
 )
+from delector.core.vocab_identity import fill_empty_columns, find_card_id
 
 _SUPPORTED_ACTIONS = {
     "create_vocab_cards",
@@ -204,6 +205,11 @@ class CompanionProposalService:
             raise ValueError("提议 payload 缺少有效的 'cards' 列表")
 
         with get_db(self.db_path) as conn:
+            # Step 1（只堵新增）：身份 = (lemma_key(lemma), word_key(word))，见
+            # delector/core/vocab_identity.py。存量重复未知，故**不建 UNIQUE**；
+            # BEGIN IMMEDIATE 把「查重 → 插入」收成一个写事务，收窄并发窗口。
+            # 这不等于唯一索引：绕过本函数的写入（直接 SQL / 旧库还原）仍可重复。
+            conn.execute("BEGIN IMMEDIATE")
             # 检查提议既有状态，杜绝重放重复插卡
             try:
                 row = conn.execute(
@@ -243,11 +249,30 @@ class CompanionProposalService:
                 pos = str(c.get("pos") or "").strip()
                 gender = str(c.get("gender") or "").strip()
                 plural = str(c.get("plural") or "").strip()
-                cefr_level = str(c.get("cefr_level") or "B1").strip()
+                cefr_level = str(c.get("cefr_level") or "").strip()
                 # definition_zh 只接受真正的中文释义：reading 是读音/音标，缺省时留空，
                 # 由前端提案卡片与卡盒 UI 显式标记「待补充」，绝不用音标冒充释义。
                 definition_zh = str(c.get("definition_zh") or "").strip()
                 sentence = str(c.get("sentence_context") or c.get("context_sentence") or "").strip()
+
+                # 同一张卡已存在（含别的入口先建的）：只补空列，不新增行、
+                # 不重复计 created_count、不重复记 add_card 事件。合法多卡靠 word
+                # 区分（如 bestehen auf/aus/in），不会在这里被合并。
+                existing_id = find_card_id(conn, lemma, word)
+                if existing_id is not None:
+                    fill_empty_columns(
+                        conn,
+                        existing_id,
+                        {
+                            "pos": pos,
+                            "gender": gender,
+                            "plural": plural,
+                            "cefr_level": cefr_level,
+                            "definition_zh": definition_zh,
+                            "sentence_context": sentence,
+                        },
+                    )
+                    continue
 
                 cur = conn.execute(
                     """
@@ -256,7 +281,7 @@ class CompanionProposalService:
                     )
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'companion')
                     """,
-                    (word, lemma, pos, gender, plural, cefr_level, definition_zh, sentence),
+                    (word, lemma, pos, gender, plural, cefr_level or "B1", definition_zh, sentence),
                 )
                 created_count += 1
                 card_id = cur.lastrowid

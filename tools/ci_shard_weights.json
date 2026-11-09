@@ -176,6 +176,7 @@
   "tests/test_update_chip_ui.py": 0.1,
   "tests/test_verify_windows_portable.py": 0.0,
   "tests/test_vocab_contract_uniform.py": 0.0,
+  "tests/test_vocab_identity_upsert.py": 0.4,
   "tests/test_vocab_pool_projection.py": 10.8,
   "tests/test_vocab_sources.py": 0.0,
   "tests/test_vocab_stats.py": 0.1,

@@ -208,6 +208,7 @@ SHARDS: dict[str, tuple[str, ...]] = {
         "tests/test_verify_windows_portable.py",
         "tests/test_visual_gates.py",
         "tests/test_vocab_contract_uniform.py",
+        "tests/test_vocab_identity_upsert.py",
         "tests/test_vocab_pool_projection.py",
         "tests/test_vocab_sources.py",
         "tests/test_vocab_stats.py",
