@@ -458,7 +458,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void pollServerReadiness(File dataDir) {
-        for (int i = 0; i < 60; i++) {
+        for (int i = 0; i < StartupReadinessPolicy.maxAttempts(); i++) {
             if (fatalError != null) {
                 return; // 服务不可能再就绪，别用超时文案盖掉真实错误
             }
@@ -476,7 +476,7 @@ public class MainActivity extends AppCompatActivity {
                     int code = conn.getResponseCode();
                     conn.disconnect();
 
-                    if (code >= 200 && code < 400) {
+                    if (StartupReadinessPolicy.isReadyStatus(code)) {
                         isServerReady = true;
                         final int readyPort = serverPort;
                         mainHandler.post(() -> {
@@ -494,7 +494,9 @@ public class MainActivity extends AppCompatActivity {
             }
 
             try {
-                Thread.sleep(600);
+                // 前 50 次 120ms 快轮询（服务正常约 2.3s 就绪），之后退回 600ms；
+                // 总预算与改造前 60×600ms 一致，超时语义不变。
+                Thread.sleep(StartupReadinessPolicy.pollIntervalMs(i));
             } catch (InterruptedException ignored) {
             }
         }
