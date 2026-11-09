@@ -63,6 +63,7 @@
   "tests/test_desktop_tray_exit.py": 0.0,
   "tests/test_desktop_window_lifecycle.py": 0.2,
   "tests/test_dict_pipeline.py": 0.1,
+  "tests/test_docs_layout_gate.py": 0.3,
   "tests/test_edge_tts_mini.py": 0.1,
   "tests/test_enc_coverage_degraded_probe.py": 0.3,
   "tests/test_enc_degraded_concurrency_probe.py": 0.3,
