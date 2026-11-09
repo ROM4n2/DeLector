@@ -1,19 +1,19 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v5.22.0-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v5.22.1-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-2962%2F2967%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-2996%2F2999%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License" />
 </p>
 
-<!-- Tests 徽章口径（可复算，非推算）：v5.22.0 发布提交（2026-11-08 本地全量）。
-     分子 = `python -m pytest tests` 的 2962 passed；分母 = `python -m pytest tests --collect-only -q` 的 2967 collected；
-     差集 4 skipped + 1 xfailed。环境：Windows 11 / Python 3.11（.venv），仓库根 gitignored 的本地 DB 残留临时移开。
+<!-- Tests 徽章口径（可复算，非推算）：v5.22.1 发布提交（2026-11-09 本地全量）。
+     分子 = `python -m pytest tests` 的 2996 passed；分母 = `python -m pytest tests --collect-only -q` 的 2999 collected；
+     差集 2 skipped + 1 xfailed。环境：Windows 11 / Python 3.11（.venv），仓库根 gitignored 的本地 DB 残留临时移开。
      换提交后两条命令都需重跑，不得沿用旧数。 -->
 
 <p align="center">
@@ -53,21 +53,21 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 
 ## 多平台下载发布包
 
-> **v5.22.0 最新版本亮点（2026-11-08）**：
-> - **发布收口**：交付 v5.21.1 之后累积的用户可见修复——视觉材质与对比度收敛、桌宠 P1–P4 与状态机、写作区选区 agent 操作条、设置页分段式 IA、Python/Go 端口握手、备考计数单位、播放器托盘重构。
-> - **生词卡复习台账**：新增 `GET /api/cards/vocab/ledger/{lemma}` 与逐词复习记录；读侧对既有重复卡去重（写侧唯一约束仍未加）。
-> - **存量文章按需重算**：`PROCESSED_JSON_VERSION` 3.5.0 → 3.6.0，首次打开单篇时惰性重算并回写，失败保留旧结果并可回退。
-> - **NLP 与 Android**：spaCy 档位定案为 `de_core_news_sm`（ADR-0027）；Android WebView 外链与 debug 可调试性修复（均未真机点检）。
+> **v5.22.1 最新版本亮点（2026-11-09）**：
+> - **文章详情响应体去重**：`processed_json` 不再与展开字段重复回传，100 字与 10 万字样本响应体均缩小约 57%。
+> - **Android 启动系列**：建立 TTFD 口径并接入 `reportFullyDrawn()`，就绪轮询前 50 次收紧为 120ms，splash 改为首帧提交后撤场（不再用 200ms 定时器猜）。均未在真机点检。
+> - **制度闸**：docs 归置检查、CI 卡死可识别为 failure、PR 模板新增根因 / 遮盖必答项。
+> - **文档与跨平台说明**：macOS / Linux 运行说明按 tar 包实际结构改写，清理全仓 emoji 与无证据表述。
 
 > **Android 用户注意**：含 `static/` 改动的版本需**覆盖安装**才生效。
 > 完整版本变更细节见 [CHANGELOG.md](CHANGELOG.md)。
 
 | 平台               | 版本                   | 说明                                                                                                                                                                                                                                                       | 下载通道                                                                                    |
 | ------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| **Windows x64** | `v5.22.0` | 原生桌面窗口 + 系统托盘，免装 Python，解压双击 `DeLector.exe`；需 Win10+ 与 WebView2 运行时（Win11 自带；Win10 缺运行时的表现见[已知限制](#已知限制)）；首次启动把数据放到 `%LOCALAPPDATA%\DeLector`                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.22.0)     |
-| **macOS**       | `v5.22.0` | 解压后进入 `DeLector-v5.22.0-macOS/`，运行其中的裸可执行文件 `./DeLector`（不是 `.app` 包）。正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`。包未做代码签名与公证，若被 Gatekeeper 拦截请右键「打开」，或在终端执行 `xattr -d com.apple.quarantine DeLector`。 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.22.0)  |
-| **Linux x64**   | `v5.22.0` | 解压后进入 `DeLector-v5.22.0-Linux-x64/`，运行 `./DeLector`（正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`）。包在 CI 的 Ubuntu 环境构建，未在其他发行版验证。 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.22.0)  |
-| **Android**     | `v5.22.0` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；正式包只出 **arm64-v8a**，CI 用 `keytool` 校验 APK 与 keystore 的 SHA256 证书指纹一致。**arm64 真机未验证**（仅 x86_64 模拟器）。 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.22.0) |
+| **Windows x64** | `v5.22.1` | 原生桌面窗口 + 系统托盘，免装 Python，解压双击 `DeLector.exe`；需 Win10+ 与 WebView2 运行时（Win11 自带；Win10 缺运行时的表现见[已知限制](#已知限制)）；首次启动把数据放到 `%LOCALAPPDATA%\DeLector`                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.22.1)     |
+| **macOS**       | `v5.22.1` | 解压后进入 `DeLector-v5.22.1-macOS/`，运行其中的裸可执行文件 `./DeLector`（不是 `.app` 包）。正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`。包未做代码签名与公证，若被 Gatekeeper 拦截请右键「打开」，或在终端执行 `xattr -d com.apple.quarantine DeLector`。 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.22.1)  |
+| **Linux x64**   | `v5.22.1` | 解压后进入 `DeLector-v5.22.1-Linux-x64/`，运行 `./DeLector`（正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`）。包在 CI 的 Ubuntu 环境构建，未在其他发行版验证。 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.22.1)  |
+| **Android**     | `v5.22.1` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；正式包只出 **arm64-v8a**，CI 用 `keytool` 校验 APK 与 keystore 的 SHA256 证书指纹一致。**arm64 真机未验证**（仅 x86_64 模拟器）。 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.22.1) |
 
 ---
 
@@ -192,9 +192,9 @@ DeLector/
 
 | 版本 | 发布日期 | 里程碑概要 |
 | :--- | :--- | :--- |
+| **v5.22.1** | 2026-11-09 | 文章详情响应体去重（-57%）· Android TTFD 口径 / 就绪检测 / splash 根因修复 · 三条制度闸 · 跨平台说明与全仓去 emoji |
 | **v5.22.0** | 2026-11-08 | 发布收口：视觉材质与对比度收敛 · 桌宠 P1–P4 与状态机 · 写作区选区 agent 操作条 · 设置 IA · 端口握手 · 生词卡复习台账 · 存量文章按需重算（3.6.0）· NLP sm 定案 · Android WebView 修复 |
 | **v5.21.1** | 2026-11-03 | 伴学 SSE 跨 chunk 分帧修复 · Go RunLoop 与 submitPrompt 行为不变重构 · 274 checks / 34 场景 |
-| **v5.21.0** | 2026-11-03 | 伴学 Agent 页面级能力与 HITL 生词提议 · 跨页历史恢复 · 卡盒缺释义统一 · PWA 位图图标 · 桌宠眨眼原点修复 |
 
 > 更早的版本（v5.14.0–v5.20.2 等）已完整迁入 [CHANGELOG.md](CHANGELOG.md)，本页只保留最近三版。
 

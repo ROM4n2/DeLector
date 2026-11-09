@@ -4,7 +4,45 @@
 > 桌面 / Android 四平台发布资产见 [GitHub Releases](https://github.com/ROM4n2/DeLector/releases)；
 > 开发决策细节见 `docs/plans/archive/` 与 Obsidian Vault `08-Projects/DeLector/01-ADR/`。
 
-**最新版本：v5.22.0（2026-11-08）**
+**最新版本：v5.22.1（2026-11-09）**
+
+**v5.22.1（2026-11-09）**
+
+### 文章详情响应体去重（-57%）
+
+- **同一份数据曾写两遍**：详情接口 `SELECT *` 后 `data.update(pj)` 已把 `processed_json` 展开为 `sentences` / `version` / `sentence_count` / `stats`，但数据库的序列化列仍留在响应里，且字符串形态（JSON-in-JSON 转义）比展开形态更大。现在 `update` 前 `pop` 掉 `processed_json`，并删除 `static/js/api-types.js` 中从未被引用的属性声明；新增 B4 用例锁住「响应不含 `processed_json`，但 `sentences` / `stats` / `version` / `raw_text` 仍在」。
+- **实测（同机、同一篇）**：100 字响应 39,672 B → 17,030 B（-57.1%），GET 9ms → 9ms；10 万字响应 30,590,544 B → 13,064,821 B（-57.3%），GET 361/384ms → 262/244ms。真浏览器验证正文渲染、句法 / AST 面板与点词查卡均正常。
+
+### Android 启动系列（TTFD 口径与 splash 根因修复）
+
+- **TTFD 口径落地**：以首条 `.article-row` 完成首次绘制为准，Web 侧在列表落盘后用双 `rAF` 确认上一帧已提交，经 `DeLectorStartup` 桥回调；Java 以进程启动为基准记账并调用 `reportFullyDrawn()`。桌面浏览器无桥时为空操作，不改启动行为。
+- **就绪检测收紧**：就绪轮询前 50 次改为 120ms 快节奏，服务就绪后的等待更短。
+- **splash 撤场根因修复**：旧实现 `loadUrl` 后固定等 200ms 就撤 splash，服务慢或设备慢时首帧尚未提交，用户看到的是白屏 / 半成品。现以 `WebViewClient.onPageCommitVisible` 为准，`postOnAnimation` 延后一帧撤场；`onPageFinished` 仅作兜底，`revealWebView` 幂等，失败路径仍保留 splash 与可选中错误文本。
+- **调研与负结果归档**：首屏启动业界实践调研迁入 `docs/research/` 并登记索引；Android 启动耗时压缩计划入库；`androidx.webkit` 的 `startUpWebView` 预初始化 Chromium 实测为 **TTFD 负结果，未采用**，另有 ADR-0031 记录 Python import 迁移候选与红线 1 判定保全。**未验证**：androidx 升级仅为调研结论（现有 compileSdk / AGP 已满足 AAR 元数据要求），本版未改构建链、未实施；TTFD 新口径与 splash 修复未在 arm64 真机点检。
+
+### 制度闸（把约定变成机械检查）
+
+- **docs 归置闸**：新增 `tools/check_docs_layout.py` 与对应测试，按各目录 README 的命名和索引登记约定检查 `docs/**`，接入 `static-invariants` 分片（测试进 `unit-2`）。
+- **CI 超时语义**：查清 `Windows Portable Smoke` 的步骤级 10 分钟上限未生效实为**当时没写**（`05d5c3f` 的 Verify 步骤无 `timeout-minutes`，`5248611` 才补上），`ci_heartbeat.py` 增加 `--deadline-seconds 480` 并以退出码 124 收敛；卡死现在判为可识别的 `failure`，可与 `cancel-in-progress` 的 `cancelled` 区分。
+- **PR 模板必答项**：新增「本次是修根因还是遮盖症状；若遮盖，掩盖了哪类回归、如何保证它仍能被发现」。
+
+### 文档与跨平台说明
+
+- **跨平台运行说明**：README / FEATURES / 发布说明模板按 tar 包实际结构改写 macOS / Linux 说明（解压后进入对应目录运行 `./DeLector`；权限丢失先 `chmod +x`），删去「0ms」「全发行版通用」等无证据表述，P2P 同步明确标注真机双端尚未验证。
+- **全仓去 emoji**：FEATURES / SECURITY / CONTRIBUTING / CHANGELOG 与发布说明模板清理完毕，README 复查为 0 命中；CHANGELOG 版本头统一为 `**vX.Y.Z（YYYY-MM-DD）**`。
+
+**已知限制（Known Limitations）**
+- **arm64 真机未覆盖**：本版仅完成 x86_64 模拟器（API 37）覆盖安装与 `versionCode` 检查，未启动点检；arm64-v8a 真机未安装、未启动、未点检。真机不是本版的发版前置，但不得把模拟器结果当作真机结论。
+- **低端机 OOM 未覆盖**：无低端机设备，内存峰值未测量；Android 存量文章惰性重算在低内存设备上的 OOM 风险无证据、无结论。
+- **iOS 键盘态未覆盖**：无 iOS 设备与 Safari 环境；软键盘弹起后的 `visualViewport`、选区手柄与桌宠避让行为均未验证。
+- **生词卡重复卡缺陷仍在**：`vocab_cards` 表无 UNIQUE 约束，写路径仍是裸 `INSERT`；读侧已对重复卡去重，但数据库里仍可能继续累积重复行。本版未做写入侧修复。
+- **大文章首次打开的重算可能阻塞**：`PROCESSED_JSON_VERSION` 3.6.0 的惰性重算在单篇 GET 内同步执行（未下放线程池），10 万字符上限级文章约 4–5s，期间该篇请求等待；已评估为可接受，本版不改。
+- **Android 启动改动未真机验证**：TTFD 口径、就绪轮询节奏与 splash 撤场修复均未在设备上点检。
+
+**回滚（Rollback）**
+- **代码 / 产物**：桌面可回退至 `v5.22.0` 发布包；Android `versionCode` 由 `52200` 升至 `52201`，只能卸载重装旧 APK（会清应用私有数据，须先备份）。`versionCode` 不可回滚，不得复用或回拨。
+- **数据位置 / 格式**：本版未搬移数据目录、未改变数据文件格式与 Schema，回滚代码不影响既有学习资产。
+- **配置 / 发布通道**：无新增必需配置；git 可 revert 本版提交。
 
 **v5.22.0（2026-11-08）**
 
