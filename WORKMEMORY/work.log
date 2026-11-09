@@ -563,3 +563,22 @@ Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
 2) 阅读器图改为 B2 考点模式（考点 pill 激活 + B2 词元点线高亮），文件更名 readme-reader-b2.jpg，README src/alt 同步；旧 readme-reader-b1.jpg 删除。
 3) 版本号保持 V5.22.0，不做对齐。
 复现：端口 8799 + 原临时库；openReader(4) + setCefrVisionMode("exam")；视口/DPR/JPEG 参数同前。校验：test_readme_first_screen_images_exist = 1 passed。
+### 2026-11-09 22:44 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+ADR-0031（import 迁移）方案 A 实施后判负，未合并、未推送、未开 PR。基线已 rebase 到 origin/master 0889b7a（含 v5.22.1 #326）。
+实现（本地分支 perf/adr-0031-import-migration，commit dd26e87，worktree D:\Code\DeLector-adr0031）：spaCy 延迟导入 + 四态机（UNKNOWN/LOADING/AVAILABLE/MISSING，终态只由真实 import 产生）+ processor/syntax_tree/routes 消费点改造 + §3 三条回归测试（tests/test_import_migration_state_machine.py，unit-2 shard）。39 条相关测试通过，ruff/docs-layout 绿。
+测量：安卓 TTFD（x86_64 模拟器）R1 base 3378 / branch 2279；R2 base 3328 / branch 2310；合并 3330→2309（−1021ms）。桌面（Win11/R9 8945HX/Py3.11.8/spaCy 3.8.18）：import 1998.9→1153.5、ready 2197.6→1341.5，但 ready 后立即首次分析 820.2→1725.3（+905.1ms），1s +894、2s +561、3s +16；进程启动→首次分析 +53.8ms。按 ADR §2「双指标不可互相抵消」判负。
+落盘：ADR 状态 Deprecated，§2.1 与 §9 记录完整数字与下一步（方案 B）；INDEX 同步。分支/worktree 保留且 git status 干净；模拟器与 adb 已退出。
+
+### 2026-11-09 22:48 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+v5.22.1 已发布（含 #325 词卡写入幂等，二次发版取代 #326 初版）。
+- 版本面五处同提交：version.py 5.22.1 / sw.js CACHE_NAME v5.22.1 / build.gradle 5.22.1+52201 / header.html / 重建 index.html；一致性守卫全绿。
+- 本地全量（树与 334ef4b 一致）：3006 passed / 2 skipped / 1 xfailed（3009 collected）；ruff、mypy×3、gofmt、go vet、go test -race、九道机械闸均 exit 0。成本闸曾两次在 ~2ms 噪声区翻红（B 24.902 vs C 26.100；24.824 vs 26.966），按约束只重跑不改断言，重跑绿。
+- PR #327 → master 334ef4b。首次 run：cost-guards failure + 6 cancelled（fail-fast）；重跑 12 success + 2 skipped（Master Direct-Push Scope Gate、Windows Portable Smoke），无 failure/cancelled。
+- tag v5.22.1 指向 334ef4b；build-release run 42636853853 五 job 全 success（Windows/Linux/macOS/Android/Publish）。
+- 产物：Windows zip 90,713,677B(86.51MB)；macOS tar.gz 61,639,369B(58.78MB)；Linux tar.gz 128,313,052B(122.37MB)；Android APK 62,314,877B(59.43MB)。
+- Android 证据：日志「从 tag v5.22.1 推导版本 5.22.1 (code 52201)」；DELECTOR_VERSION_NAME=5.22.1、DELECTOR_VERSION_CODE=52201。
+- 发布说明已补已知限制：重复卡存量未合并（只堵新增）；回滚锚点 v5.22.0，Android versionCode 不可回滚只能卸载重装并先备份。
+- 注：本轮 rebase 时 work.log 与并发线冲突，两方事件（README 重拍 22:15/22:40、ADR-0031 判负 22:44）均保留。
+
