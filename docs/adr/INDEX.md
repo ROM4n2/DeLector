@@ -37,3 +37,4 @@
 | ADR-0028 | Android 主分析路径使用 spaCy 惰性加载 | Accepted | ACCEPTED | 2026-11-06 修订加载时机（正文内留痕） | 2026-11-06 | [2026-11-06-adr-0028-android-main-path-spacy-lazy-load.md](2026-11-06-adr-0028-android-main-path-spacy-lazy-load.md) |
 | ADR-0029 | 前端去 Emoji 与编辑节奏重构——分层替换、垂直切片先行 | Accepted | Accepted | 2026-11-07 追加 §16 落地与失效条款（T1–T9；3 条数值口径失效）；动效系统由 ADR-0030 补充 | 2026-11-06 | [2026-11-06-adr-0029-frontend-de-emoji-and-editorial-rhythm.md](2026-11-06-adr-0029-frontend-de-emoji-and-editorial-rhythm.md) |
 | ADR-0030 | 前端动效系统——5 个 token、三件套类与 reduce 降级 | Accepted | Accepted | 补充 ADR-0029 §3.5 决策 5，不取代 | 2026-11-07 | [2026-11-07-adr-0030-frontend-motion-system.md](2026-11-07-adr-0030-frontend-motion-system.md) |
+| ADR-0031 | Python import 迁移——削减启动期重依赖并保住红线 1 判定 | Proposed | Proposed | 承接 ADR-0018 的测量前提；§5 引用 ADR-0028 反面教训 | 2026-11-09 | [2026-11-09-adr-0031-python-import-migration.md](2026-11-09-adr-0031-python-import-migration.md) |
