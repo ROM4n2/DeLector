@@ -33,6 +33,7 @@ SHARDS: dict[str, tuple[str, ...]] = {
         "tests/test_ai_endpoints_localhost_gate.py",
         "tests/test_ai_polish_loop.py",
         "tests/test_android_packaging.py",
+        "tests/test_android_splash_commit.py",
         "tests/test_android_startup_readiness_policy.py",
         "tests/test_android_ttfd_instrumentation.py",
         "tests/test_android_webview_policy.py",
