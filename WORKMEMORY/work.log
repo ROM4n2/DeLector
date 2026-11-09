@@ -493,3 +493,13 @@ Caps: filesystem-read, filesystem-write, shell-exec, web-fetch
 3. #318 PR 模板自查清单增一条根因/遮盖必答，其余未动（无机械闸，如实说明）。
 合并后 master 4d3ce96；push run 42601952206 逐 job 14/14 success（含 Master Direct-Push Scope Gate 与 Windows Portable Smoke），无 failure/cancelled/skipped。
 边界：docs 闸不认识“reviews vs research”的语义，只钉命名+登记声明；仅未跟踪、从未提交的文件 CI 看不到（本地直接跑脚本会扫 rglob 含未跟踪）。runner/job worker 层停摆仍只能靠 job 级 30m 护栏。
+### 2026-11-09 19:06 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, web-fetch, android-build, android-emulator
+任务：按调研结论修首屏根因，三件独立 PR。不做：delector/ 任何文件（含监听前 import spacy）、不合并 #313、不自动合并 ②③。
+① 启动口径（PR #317，已合并 1c9926d）：TTFD = 首条 .article-row 完成渲染并提交首帧；Java 进程内计时（Process.getStartElapsedRealtime）+ logcat TTFD_FIRST_ARTICLE_MS + reportFullyDrawn() 对齐系统口径；测量方法与基线写入 docs/agents/architecture.md。改前基线（同会话 5 次）4891ms（4808–5008）；另一组 4183ms（3422–4796）。Displayed 仅旁证。
+② splash 撤场（PR #319，先 rebase 到 master 4d3ce96 再合，merge commit 786f957）：删 200ms 定时器，改 onPageCommitVisible + postOnAnimation(revealWebView)，onPageFinished 仅兜底，只认本地服务端口 URL。同会话 A/B 各 5 次：TTFD 4183→4020ms（范围重叠，噪声内）；慢就绪 3s 逐帧录像：改前 SPLASH→WHITE 400ms→CONTENT（三次复现），改后 0 纯白帧，首个内容帧为完整工作台壳。合并后 master push run 42607248350 逐 job 14/14 success（含 Master Direct-Push Scope Gate 与 Windows Portable Smoke，无 failure/cancelled/skipped）。
+③ WebView 初始化（PR #320，draft 维持）：ensureWebView 幂等 + OnDrawListener/post 首帧后创建 + index 0 挂载 + readiness 兜底。同会话 A/B 各 7 次 TTFD：3966→4704ms（回退 19%），Displayed 824→638ms；结论：单独合并即遮盖型改动，draft 不合并，作为 startUpWebView 前置（已在该 PR 留评论）。
+#313 已关闭并留评论：白帧由常数猜测撤场造成，#319 改为首帧提交后撤、逐帧纯白 0ms，故「接住白帧」论据不再成立；分支与历史保留。可保留价值＝以合并后 master 为基线用 TTFD 重测的纯预热项，未改判为合并。
+调研更正（PR #321）：下载 webkit-1.16.0.aar 读元数据 = minCompileSdk 33 / minAGP 7.2.0 / minSdk 24，本项目 34/8.4.2/8.6/24 已满足，**升级只需一行依赖，不动构建链**；此前的「需 compileSdk 36 + AGP≥8.9 + Gradle 8.11」是把 compileSdk 36 自身要求误当成本路线前置（AGP 8.9 自述最大 API 35，AGP 8.13 才支持 36）。Chaquopy 15.0.1 官方支持 AGP 7.0–8.5；若另因升 AGP≥8.9 必换 16.1（7.0–8.13 / min API 24），16.x 插件迁移细节未证实。计划含风险矩阵 7 项、回滚点 R1/R2/R3、放弃条件（两轮 7 次 TTFD 中位数 >4166ms 即回滚）。
+CI：#317 全绿；#319 rebase 后 14/14 success（PR 场景 Master Direct-Push Scope Gate 按设计 skip）；#320 13 pass + 1 skipped（同因）；#321 docs-only，Windows Portable Smoke 因无打包面变更而 skipped，其余 pass。
+清理：emulator 已 kill、worktree 全部移除、%TEMP%\dl-ttfd 探针/录像/APK 删除，无残留监听端口。
