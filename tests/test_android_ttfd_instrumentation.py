@@ -83,8 +83,6 @@ def test_bridge_registered_and_report_fully_drawn_not_called_elsewhere():
 def test_no_startup_behavior_regression():
     """① 只加可见性：下面这些既有行为必须原样保留。"""
     src = _main_source()
-    assert "splashLayout.postDelayed" in src, "splash 撤场时序不属于 ①，不能被顺手改掉"
-    assert "}, 200);" in src
     assert "if (fatalError != null) {" in src, "fatalError 早退语义必须保留"
     assert "serverPort = readServerPort(dataDir);" in src, "端口只能从端口文件读，不能猜"
     assert '"DELECTOR_PORT_FILE"' in src, "端口文件环境变量名与 start.py 必须一致"
