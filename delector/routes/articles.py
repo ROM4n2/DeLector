@@ -240,6 +240,12 @@ def get_article(article_id: int) -> Dict[str, Any]:
                         # single-flight 空转（实测 8 并发算 2 次）。提前 commit 只改提交时机、
                         # 不改事务内容：仍只有备份 + UPDATE，异常时不走到这行、整体回滚。
                         conn.commit()
+        # 响应不再回传 processed_json 原始序列化列：其内容由紧随其后的
+        # `data.update(pj)` 以 sentences / version / sentence_count / stats 展开。
+        # 两份同时回传等于同一份 payload 写两遍，按正文长度线性放大响应
+        # （10 万字文章 30.6MB，其中 57% 是重复）；前端只读展开后的字段，
+        # 迁移/备份路径读的是 DB 行（fresh[...]）与 raw_text，均不依赖本键。
+        data.pop("processed_json", None)
         if isinstance(pj, dict):
             data.update(pj)
         return data

@@ -38,7 +38,6 @@
  * @property {string} title
  * @property {string} created_at
  * @property {string} raw_text
- * @property {string} processed_json
  * @property {string} version             PROCESSED_JSON_VERSION
  * @property {number} sentence_count
  * @property {Array<Object<string, *>>} sentences

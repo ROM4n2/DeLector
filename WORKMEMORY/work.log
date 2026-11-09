@@ -423,3 +423,8 @@ Caps: filesystem-read, filesystem-write, shell-exec
 3. 引用全链对齐：更新 ADR-0029/0030、历史 plans、src/css/06-deck-exam.css、static/style.css、Android sync 与全站相关相对引用，grep 零残留失效路径。
 4. 冗余清理：物理移除根目录历史遗留且 gitignored 的非跟踪目录 D:/Code/DeLector/.superpowers/。
 5. 验证：九道机械闸、主站与 workbench 视觉闸、ruff、mypy strict 全绿。
+
+### 2026-11-09 16:34 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
+任务：详情 GET 去掉重复的 processed_json 原始序列化列（10 万字文章响应 30.6MB 中 57% 是同一份 payload 写两遍）。基线 78dda1b，worktree D:\Code\DeLector-payload，分支 fix/article-payload-dedup。
+不做：不改 stats_json / 列表端点 / 重算逻辑 / vocab_cards / /api/health；不做分页、增量、按需加载。

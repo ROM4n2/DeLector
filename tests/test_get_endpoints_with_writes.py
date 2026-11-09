@@ -434,6 +434,31 @@ def test_b1b_article_seeded_by_real_writer_does_not_update(
     )
 
 
+def test_b4_detail_response_drops_processed_json_but_keeps_reader_fields(
+    client: TestClient,
+) -> None:
+    """B4 详情响应不再回传 processed_json 原始列，但阅读页所需字段一个不少。
+
+    病因：`data = dict(row)` 把数据库里的 processed_json 序列化列原样带进响应，
+    随后 `data.update(pj)` 又把同一份内容展开成 sentences / version / stats ——
+    同一份 payload 写两遍，响应随正文长度线性放大（10 万字文章 30.6MB，其中 57%
+    是重复）。前端（reader.js）只读展开后的字段，全仓没有消费方读 processed_json。
+    """
+    payload = _migrated_payload()
+    aid = _insert_article(json.dumps(payload, ensure_ascii=False))
+
+    resp = client.get(f"/api/articles/{aid}")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "processed_json" not in body, "详情响应仍回传 processed_json 原始列（与展开字段重复）"
+    # 断言「删掉的是重复项，不是阅读页需要的数据」
+    assert body["sentences"] == payload["sentences"]
+    assert body["stats"] == payload["stats"]
+    assert body["version"] == _written_version()
+    assert body["raw_text"] == RAW_TEXT
+
+
 def test_b3_second_get_after_migration_does_not_update(client: TestClient, spy: SqlSpy) -> None:
     """B3 修完后再次 GET 同一篇文章 ⇒ 仍不执行 UPDATE。
 
