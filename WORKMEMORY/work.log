@@ -546,3 +546,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 ### 2026-11-09 23:40 | deepseek-v4.1-flash__trae | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 闭环：PR #325 feat/vocab-identity-upsert 已开（基线 af509dc，12 文件），CI run 42625748172 全绿：13 pass（含 unit-1..4 / cost / integration / Go / 静态闸 / Windows Smoke），仅 Master Direct-Push Scope Gate 按 PR 场景 skipping，无 failure/cancelled。方案文档 #324 仍 OPEN/MERGEABLE（含策略 D + §7 分阶段结论），两 PR 独立、可先合 #324 再合 #325。Step 2（存量处置）未启动，等真实重复统计。
+
+### 2026-11-09 22:15 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
+README 首屏两图按新皮肤重拍，独立分支 docs/readme-screenshot-refresh（基于 master af509dc，未合并；未触碰 release/v5.22.1 工作树与 8000 端口）：
+- docs/images/readme-home-hero.jpg（1440×857，129,522B）：截「欧标色标图例 + 文稿库」。新首页首屏被 Satz-Labor 占据，图例落到第二屏，故滚动到 .cefr-legend 顶部、保留四篇真实文稿行与底部页签；说明文字未改。
+- docs/images/readme-reader-b1.jpg（1440×857，152,576B）：B1 文章、沉浸模式（与旧图同主题），含 CEFR 光谱、词阶下划线、影子跟读播放条。
+- 数据与复现：DELECTOR_DATA_DIR=%TEMP%\delector-readme-shots-data，端口 8799；预置 4 篇文章落库，POST /api/cards/vocab 种入 6 张真实词卡（Umweltschutz/Klimawandel/Digitalisierung/Arbeitsbedingungen/Vereinbarkeit/Ernährung）；CDP 视口 1024×610 CSS + DPR 1.40625 输出 1440×858，裁 1px 转 JPEG q88。脚本 %TEMP%\dl-readme-shots\capture.mjs（未入库）。
+- 校验：pytest tests/test_writer_mobile.py -k readme_first_screen_images_exist = 1 passed；README 无改动。
+- 已知差异：master 顶栏版本号为 V5.22.0（旧图亦滞后，V5.20.2）；曾评估用 B2 考点模式展示更明确的考点高亮，最终为与旧图主题/file 名一致保留 B1 沉浸。
