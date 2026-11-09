@@ -438,3 +438,17 @@ Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
 CI（run 42587245282，head 62da280）逐 job：Detect packaging-surface / Go Gates / Go↔Python / cost-cold-start / cost-guards / integration-heavy / unit-1..4 / Secret Scan / Static Invariants / Windows Portable Smoke 全 pass；Master Direct-Push Scope Gate skipping（PR 场景按设计不跑）。无 failure / cancelled。
 已知未做：stats_json（247B，同类冗余）按用户范围保留；raw_text 未动。
 清理：验证服务已停；临时 DB/脚本均在 %TEMP%；worktree D:\Code\DeLector-payload 推送后移除，分支保留。
+
+### 2026-11-09 18:05 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
+任务：压缩 Android 启动耗时，先立 plan 再按 ③（收紧就绪检测）→ ②（Python 启动与 WebView 并行）两个独立 PR 实施。基线 78dda1b，worktree D:\Code\DeLector-wt-startup。
+不做：① import spacy 挪位（需 ADR，暂缓）、静态资源解包优化、ES module 打包、Perfetto 帧级取证、真机验证。
+约束：不加打包步骤/不改 ABI/不引依赖；每项改前改后同机冷启动实测（3-7 次中位数）；PR 不自动合并。
+
+### 2026-11-09 19:40 | deepseek-v4.1-flash__trae | WORK_END
+状态：done
+PR：plan #311（docs/plans/2026-11-09-android-startup-latency.md）、③ #312（就绪轮询 600ms→前 50 次 120ms）、② #313（本地静态壳预热 WebView）。均不自动合并。
+实测（x86_64 模拟器，5 轮中位）：③ startup→首个 GET / 550→170ms（-380）；② FCP 364→276、DCL 1242→766、首条可见 1450→1259（离差大，DCL 改善含噪声）。
+视觉：逐张截图统计像素，② 把基线既有的转场白帧（white 94.75%）换成同色启动壳（splash 99.73%），无新增空白帧。
+踩坑：CI 的 pull_request 只对 base=master 触发，叠在非 master 分支上的 PR 拿不到 checks——② 已从 ③ 上 rebase 到 master 独立成 PR；改 base 不会自动重跑，需 close/reopen 触发。
+边界：仅模拟器，不可外推真机；① import spacy 挪位需 ADR，未做。
