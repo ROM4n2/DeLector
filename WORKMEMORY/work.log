@@ -543,3 +543,6 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 并发实测（8 线程同身份，TestClient 实测请求真并发 0.54s/8×0.5s）：全 200 且落 1 行；临时去掉 BEGIN IMMEDIATE 后 8 请求全 200 却落 5 行 ⇒ 该用例是有效护栏。边界：绕过 helper 的直接 INSERT 仍写 2 行（无 UNIQUE，用例已写死），不等价唯一索引。
 - 测试：tests/test_vocab_identity_upsert.py 10 例（幂等/变体归一/介词三卡/冠词两卡/台账与池同行/伴学确认/并发/绕过直插），已登记 unit-4 分片 + weights。回归 220+ passed（pool 投影、cards、ledger、unified-pool-e2e、wb-rtc、companion、audit、ci 治理、frontend 契约）。ruff check . 绿；mypy --strict delector tools 与 tests 均绿；4 条前端静态闸全 PASS。
 - 待办：开 PR（不自动合并）→ CI 逐 job → 视情况更新 #324 方案文档与合并顺序。
+### 2026-11-09 23:40 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+闭环：PR #325 feat/vocab-identity-upsert 已开（基线 af509dc，12 文件），CI run 42625748172 全绿：13 pass（含 unit-1..4 / cost / integration / Go / 静态闸 / Windows Smoke），仅 Master Direct-Push Scope Gate 按 PR 场景 skipping，无 failure/cancelled。方案文档 #324 仍 OPEN/MERGEABLE（含策略 D + §7 分阶段结论），两 PR 独立、可先合 #324 再合 #325。Step 2（存量处置）未启动，等真实重复统计。
