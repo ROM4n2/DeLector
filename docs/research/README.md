@@ -78,3 +78,6 @@
 
 - [2026-11-09 首屏启动业界实践调研](2026-11-09-first-screen-startup-industry-research.md)
   - **核心价值**：按「Android 原生 → 混合外壳 → Web 首屏 → 可迁移性」四层核对一手来源（Android 启动指标 / Splash / `startUpWebView`、Electron / Tauri / VS Code、NN/g、web-vitals / Lighthouse / MDN）。给出 4.0s 端到端的分段归因：**2.3s 是「壳等 Python sidecar」，不是 Web 首屏**；可并行余量仅约 0.55s 轮询对齐 + WebView 预热，1.2s 重依赖 import 是进程内结构性成本。结论：业界顺序是「先削串行，再诚实遮盖」，本项目缺口集中在 TTFD 口径缺失、splash 撤场看定时器而非首帧、`androidx.webkit` 1.10.0 缺 `startUpWebView`。未核实项见文末 §7（含 web.dev 原文抓取失败、预热收益无官方数字、实测未复跑）。
+- [2026-11-09 AndroidX WebView 异步启动（`startUpWebView`）可行性调研](2026-11-09-androidx-webview-startup-research.md)
+  - **核心价值**：下载 `webkit-1.16.0.aar` 读元数据实证 **`minCompileSdk=33` / `minAGP=7.2.0` / `minSdk=24`**，推翻「必须升 compileSdk 36 + AGP 8.9 + Gradle 8.11」的假设——本项目（34 / 8.4.2 / 8.6 / 24）已满足，升级只需一行依赖。同时给出 AGP↔API 36 的官方门槛、Chaquopy 15.0.1 仅支持 AGP ≤8.5（若要升 AGP 必须换 16.1）的官方版本表，以及 `startUpWebView` 的调用时机、`shouldRunUiThreadStartUpTasks(false)` 分片、失败降级与审计 API；未证实项单独列清单。
+
