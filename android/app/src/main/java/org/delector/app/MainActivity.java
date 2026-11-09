@@ -10,6 +10,8 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Process;
+import android.os.SystemClock;
 import android.speech.tts.TextToSpeech;
 import android.util.Log;
 import android.util.TypedValue;
@@ -45,6 +47,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import android.speech.tts.Voice;
 
 public class MainActivity extends AppCompatActivity {
@@ -55,6 +58,8 @@ public class MainActivity extends AppCompatActivity {
     private volatile boolean isServerReady = false;
     /** Python 侧抛异常后服务永远不会就绪，用它让轮询与重载立刻停手并保留错误信息 */
     private volatile String fatalError = null;
+    /** 冷启动 TTFD 只上报一次；JS 桥回调来自 WebView 线程，必须原子判定。 */
+    private final AtomicBoolean ttfdReported = new AtomicBoolean(false);
     private int reloadAttempts = 0;
     private long lastBackPressTime = 0;
     private NativeTTSBridge nativeTTS;
@@ -194,6 +199,28 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * 冷启动 TTFD 探针：只记录、不改启动行为。
+     *
+     * TTFD = 首条 `.article-row` 完成首次绘制的时刻。Web 侧在双 rAF 之后回调，
+     * 避免把「innerHTML 已插入但尚未绘制」误记成可见；Java 侧以进程启动为基准算毫秒，
+     * 并 reportFullyDrawn() 让系统口径（logcat `Fully drawn`）与之一致。
+     *
+     * 测量方法与基线见 docs/agents/architecture.md「启动指标 TTFD」。
+     */
+    public class StartupReportBridge {
+        @JavascriptInterface
+        public void onFirstArticleVisible(String pageEpochMs) {
+            if (!ttfdReported.compareAndSet(false, true)) {
+                return;
+            }
+            long ttfdMs = SystemClock.elapsedRealtime() - Process.getStartElapsedRealtime();
+            Log.i("DeLector", "TTFD_FIRST_ARTICLE_MS=" + ttfdMs
+                    + " TTFD_ROW_EPOCH=" + pageEpochMs);
+            mainHandler.post(MainActivity.this::reportFullyDrawn);
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -219,6 +246,7 @@ public class MainActivity extends AppCompatActivity {
         }
         nativeTTS = new NativeTTSBridge();
         webView.addJavascriptInterface(nativeTTS, "AndroidNativeTTS");
+        webView.addJavascriptInterface(new StartupReportBridge(), "DeLectorStartup");
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
