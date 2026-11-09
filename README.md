@@ -22,8 +22,8 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/readme-home-hero.jpg" alt="文稿库首页 · CEFR 色标图例" width="49%" />
-  <img src="docs/images/readme-reader-b1.jpg" alt="沉浸阅读器 · CEFR 难度光谱、考点高亮与影子跟读" width="49%" />
+  <img src="docs/images/readme-home-hero.jpg" alt="首页首屏 · 长句五场域拆解与实时拓扑演示" width="49%" />
+  <img src="docs/images/readme-reader-b2.jpg" alt="沉浸阅读器 · CEFR 难度光谱、B2 考点点线高亮与影子跟读" width="49%" />
 </p>
 
 ---

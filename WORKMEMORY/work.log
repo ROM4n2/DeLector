@@ -555,3 +555,11 @@ README 首屏两图按新皮肤重拍，独立分支 docs/readme-screenshot-refr
 - 数据与复现：DELECTOR_DATA_DIR=%TEMP%\delector-readme-shots-data，端口 8799；预置 4 篇文章落库，POST /api/cards/vocab 种入 6 张真实词卡（Umweltschutz/Klimawandel/Digitalisierung/Arbeitsbedingungen/Vereinbarkeit/Ernährung）；CDP 视口 1024×610 CSS + DPR 1.40625 输出 1440×858，裁 1px 转 JPEG q88。脚本 %TEMP%\dl-readme-shots\capture.mjs（未入库）。
 - 校验：pytest tests/test_writer_mobile.py -k readme_first_screen_images_exist = 1 passed；README 无改动。
 - 已知差异：master 顶栏版本号为 V5.22.0（旧图亦滞后，V5.20.2）；曾评估用 B2 考点模式展示更明确的考点高亮，最终为与旧图主题/file 名一致保留 B1 沉浸。
+
+### 2026-11-09 22:40 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
+按用户裁决重拍（同一分支 docs/readme-screenshot-refresh 追加提交）：
+1) 首页图改为未滚动首屏（masthead + hero + Satz-Labor），README alt 改为「首页首屏 · 长句五场域拆解与实时拓扑演示」。
+2) 阅读器图改为 B2 考点模式（考点 pill 激活 + B2 词元点线高亮），文件更名 readme-reader-b2.jpg，README src/alt 同步；旧 readme-reader-b1.jpg 删除。
+3) 版本号保持 V5.22.0，不做对齐。
+复现：端口 8799 + 原临时库；openReader(4) + setCefrVisionMode("exam")；视口/DPR/JPEG 参数同前。校验：test_readme_first_screen_images_exist = 1 passed。
