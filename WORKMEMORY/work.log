@@ -484,3 +484,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 4. 工作树中另有他方会话未提交的 NOTE（17:52，PR #310 合并复盘），本次未覆盖或回退，两份事件同时保留并随本分支提交。
 5. 分支 docs/first-screen-startup-research，走 PR，不直推 master。
 注：本机时钟仍为 17:52（回拨未恢复），按实际时钟记录。
+
+### 2026-11-09 18:42 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, web-fetch
+三项制度缺口已分 PR 落地并合并（均不动 delector/、static/js/、android/ 源码；未改既有断言、未放松阈值、未绕过钩子）：
+1. #315 docs 归置闸：tools/check_docs_layout.py 进 static-invariants（测试进 unit-2）。按各目录 README 钉顶层归属、命名式、reviews/research/adr/top-level 索引登记；白名单逐条带理由且失效即红。故意造 3 类违规（未登记 review / 平行目录 / 错命名）均 exit 1。
+2. #316 CI 超时语义：取证推翻“步骤级 10m 未生效”的定性——run 41833602180 attempt 1 的 head 05d5c3f 里 Verify 步没有 timeout-minutes；10m 是事后 5248611（22:48 +0800）才加，而该 job 已在 21:31 +0800 被 job 级 30m 终止 ⇒ 根因是“没写”，非层级错误/被覆盖。修法：ci_heartbeat.py 增可选 --deadline-seconds 480，到点杀整棵进程树并 exit 124（步骤 failure，可与被顶掉的 cancelled 区分）；默认仍纯旁路。红证：睡 60s 的子进程 3s 截止后 124/3.3s。
+3. #318 PR 模板自查清单增一条根因/遮盖必答，其余未动（无机械闸，如实说明）。
+合并后 master 4d3ce96；push run 42601952206 逐 job 14/14 success（含 Master Direct-Push Scope Gate 与 Windows Portable Smoke），无 failure/cancelled/skipped。
+边界：docs 闸不认识“reviews vs research”的语义，只钉命名+登记声明；仅未跟踪、从未提交的文件 CI 看不到（本地直接跑脚本会扫 rglob 含未跟踪）。runner/job worker 层停摆仍只能靠 job 级 30m 护栏。
