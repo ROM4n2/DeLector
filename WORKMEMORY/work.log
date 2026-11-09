@@ -615,3 +615,13 @@ Caps: filesystem-read, filesystem-write, shell-exec
 全量 pytest 收尾（补上一条 WORK_END 的待办）：3006 passed / 2 skipped / 1 xfailed / 4 failed（634s）。
 4 条失败中 3 条是本次 adapter 收敛触发的「源码字符串哨兵」过期，已按同一判据改指向 adapter，不做删除：test_exam_domain（initExamCatalog 断言 fetchExamCatalog + data-client 保留 '/api/exams/catalog'）、test_prep_matrix（'/api/prep/matrix' 查 data-client、'/api/cards/vocab' 查 rd-api）、test_server_backup_restore（downloadBackupJson 断言 prepareBackup() + data-client 保留 '/api/backup/prepare'，download 路径仍查 cards.js）。复跑受影响 6 个模块：194 passed。
 剩余 1 条 tests/test_nlp_prewarm.py::test_import_does_not_load_or_prewarm 为环境既有失败：仓库根存在 gitignore 的 delector.db（2026-11-07 14:56，非本轮产物），探针把 DELECTOR_DATA_DIR 指向 tmp 时数据迁移守卫拒绝启动；与本 diff（纯前端 + 测试）无因果关系，未改后端、未删用户库。
+### 2026-11-10 00:09 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+PR #328 已开（head feat/first-screen-store-and-cache，commit 8050a37，基于 b55b7c7）。并发线补写的 ADR-0032 §3.2（方案 B 全表）与 ADR-0031 §6 指向行原样包含，未覆盖/未 revert。
+CI run 42651020121 全绿：12 个 job pass（Detect packaging-surface 8s、Static Invariants 10s、Secret Scan 10s、Go Gates 37s、Go↔Python 41s、unit-1 1m20s、unit-2 1m42s、unit-3 1m50s、unit-4 1m55s、integration-heavy 1m36s、cost-cold-start 1m4s、cost-guards 1m57s、Windows Portable Smoke 3m50s），Master Direct-Push Scope Gate skipped（仅直推 master 生效，符合预期）；0 failure / 0 cancelled / 0 pending。CI 干净树未复现 test_nlp_prewarm 失败，佐证其为本地根目录 delector.db 触发的环境既有问题。
+按用户要求未合并，等待指令。下一步待办（不在本 PR）：测量「后端未就绪」下快照首帧与真实数据接管耗时，桌面优先。
+### 2026-11-10 00:25 | deepseek-v4.1-flash__trae | NOTE
+PR #328 已合并（merge commit 217737e），本地 master 已 fast-forward 到 217737e；工作树此前仅 work.log 记录变更。
+冷启动补充实测（后端未就绪，桌面 Edge headless + CDP，5 次/场景）：快照首帧 721ms（首装，626–738）/ 736ms（缓存命中，643–760）；真实数据接管 3320ms（3306–3460）/ 3350ms（3323–3492）；后端健康 2503/2512ms。首帧 chip 为「同步中」（svg #ui-ico-refresh-cw + role=status）；接管 detail 均 builtin/fromCache=false, rows=4。
+方法：独立 gateway 提供静态壳并挂起首个 /api/articles，首帧后冷启 uvicorn（每次新 DELECTOR_DATA_DIR，复制只读源库过迁移守卫），/api/health 通过后转发。限制：挂起请求代表「等待后端」路径；当前 store 对快速失败不自动重试，真实冷启若首请求先 ECONNREFUSED，需要导航/刷新才接管。安卓未测。
+数字已写入 plan「冷启动实测补充」与 ADR-0032 §5/§9。

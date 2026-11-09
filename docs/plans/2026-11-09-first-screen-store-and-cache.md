@@ -146,6 +146,33 @@ core.js api()    ── 唯一 fetch()
 
 ---
 
+## 冷启动实测补充（后端未就绪，2026-11-10）
+
+> 目的：证明「后端还没起来时首帧已有内容，真实数据随后接管」，而不是在 warm server 下比较两个 mark。
+
+**方法**
+
+- 独立 gateway 提供静态壳（`static/`）并代理 `/api/*`；首个 `/api/articles` 挂起不返回，其余 API 在后端健康前返回 503。
+- 页面先用内置快照或 `localStorage` 快照渲染；确认 `articles-cache-first-paint` 后才启动后端。
+- 后端每次使用新的 `DELECTOR_DATA_DIR`（复制只读源库以通过迁移守卫），`uvicorn delector.server:app` 冷启；`/api/health` 通过后 gateway 转发挂起请求。
+- Edge headless + CDP，5 次/场景；冷启零点 = Edge 进程启动。首帧/接管均读既有 `performance.mark`，不改产品代码。
+
+**结果（ms，中位数（范围））**
+
+| 场景 | 快照首帧 | 真实数据接管 | 后端健康耗时 |
+|---|---|---|---|
+| 首装/无缓存（内置快照） | 721（626–738） | 3320（3306–3460） | 2503（2489–2667） |
+| 缓存命中 | 736（643–760） | 3350（3323–3492） | 2512（2496–2661） |
+
+以导航起点为 0：首装 353 / 2959ms，缓存命中 356 / 2965ms。首帧 detail 均为 `builtin/fromCache=true, rows=4`；接管 detail 均为 `builtin/fromCache=false, rows=4`；首帧 chip 为「同步中」（`svg #ui-ico-refresh-cw` + `role=status`）。
+
+**限制（如实记录）**
+
+- 本次由 gateway 挂起首个 `/api/articles`，代表「请求等到后端可用」的路径；当前 store 在请求**快速失败**（如 ECONNREFUSED）后不会自动重试。真实外壳与后端分离的冷启若首次请求先失败，需要导航/刷新才会接管；要把「静默接管」变成默认行为，需后续补一次就绪重试。
+- 桌面实测；安卓未测。
+
+---
+
 ## [NOTE] 本轮不做
 
 1. 阶段三（搬只读无 NLP 路径）——未触发 ADR-0032 §4.3 任一条件。
