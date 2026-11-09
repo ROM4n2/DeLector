@@ -90,6 +90,7 @@ SHARDS: dict[str, tuple[str, ...]] = {
         "tests/test_desktop_tray_exit.py",
         "tests/test_desktop_window_lifecycle.py",
         "tests/test_dict_pipeline.py",
+        "tests/test_docs_layout_gate.py",
         "tests/test_edge_tts_mini.py",
         "tests/test_enc_coverage_degraded_probe.py",
         "tests/test_enc_degraded_concurrency_probe.py",
