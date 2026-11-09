@@ -590,32 +590,32 @@ jobs:
             dist/DeLector-*.apk
           name: DeLector ${{ github.ref_name }} — 德语学术精读与备考工作台
           # 发版后 MUST 用 `gh release edit <tag> --notes-file <文件>` 追加两个**版本专属**段落：
-          #   「🖥️ 本版重点」与「⚠️ 已知限制」。为什么不在模板里写死：它们逐版不同，写死就会立刻过期
+          #   「本版重点」与「已知限制」。为什么不在模板里写死：它们逐版不同，写死就会立刻过期
           #   （ADR-0022 R4 / §6；2026-10-11 v5.17.0 首次实践）。模板只放跨版本稳定的内容。
           body: |
-            ## 🌟 DeLector ${{ github.ref_name }} 正式发布
+            ## DeLector ${{ github.ref_name }} 正式发布
 
             面向德语精读与歌德（Goethe A1–C1）、德福（TestDaF）、DSH 备考者的本地优先学术级伴读工作台。**三种形态共用同一后端**：原生桌面窗口 / 便携版（Windows · macOS · Linux）/ Android 独立单机版。
 
-            > 📜 逐版完整变更（含门禁与回滚说明）见仓库 [`CHANGELOG.md`](https://github.com/ROM4n2/DeLector/blob/master/CHANGELOG.md)；完整能力清单见 [`FEATURES.md`](https://github.com/ROM4n2/DeLector/blob/master/FEATURES.md)。
+            > 逐版完整变更（含门禁与回滚说明）见仓库 [`CHANGELOG.md`](https://github.com/ROM4n2/DeLector/blob/master/CHANGELOG.md)；完整能力清单见 [`FEATURES.md`](https://github.com/ROM4n2/DeLector/blob/master/FEATURES.md)。
 
-            ### 📦 多平台下载与安装
-            - 🪟 **Windows x64 便携版**：`DeLector-${{ github.ref_name }}-Windows-x64-Portable.zip` —— 解压双击 `DeLector.exe` 打开**原生桌面窗口 + 系统托盘**（无浏览器标签）。⚠️ 需 **Win10+ 与 WebView2 运行时**（Win11 自带）；学习数据默认落在 `%LOCALAPPDATA%\DeLector`（升级时请勿删除该目录）。
-            - 🍎 **macOS 免安装包**：`DeLector-${{ github.ref_name }}-macOS.tar.gz` —— 解压运行 `start`，自动起服务并打开默认浏览器。
-            - 🐧 **Linux x64 便携版**：`DeLector-${{ github.ref_name }}-Linux-x64.tar.gz` —— 解压运行 `start`，全发行版通用。
-            - 📱 **Android 独立单机版**：`DeLector-${{ github.ref_name }}-Android.apk` —— 内嵌 Python 运行时 + spaCy 离线模型 + 原生离线 TTS 桥接，arm64-v8a；CI 钉死签名 keystore 并验签（可覆盖升级）。
+            ### 多平台下载与安装
+            - **Windows x64 便携版**：`DeLector-${{ github.ref_name }}-Windows-x64-Portable.zip` —— 解压双击 `DeLector.exe` 打开**原生桌面窗口 + 系统托盘**（无浏览器标签）。需 **Win10+ 与 WebView2 运行时**（Win11 自带）；学习数据默认落在 `%LOCALAPPDATA%\DeLector`（升级时请勿删除该目录）。
+            - **macOS 免安装包**：`DeLector-${{ github.ref_name }}-macOS.tar.gz` —— 解压后进入 `DeLector-${{ github.ref_name }}-macOS/`，运行其中的裸可执行文件 `./DeLector`（不是 `.app` 包）；正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`。包未做代码签名与公证，若被 Gatekeeper 拦截请右键「打开」，或执行 `xattr -d com.apple.quarantine DeLector`。
+            - **Linux x64 便携版**：`DeLector-${{ github.ref_name }}-Linux-x64.tar.gz` —— 解压后进入 `DeLector-${{ github.ref_name }}-Linux-x64/`，运行 `./DeLector`（若权限丢失先 `chmod +x DeLector`）。在 CI 的 Ubuntu 环境构建，未在其他发行版验证。
+            - **Android 独立单机版**：`DeLector-${{ github.ref_name }}-Android.apk` —— 内嵌 Python 运行时 + spaCy 离线模型 + 原生离线 TTS 桥接，arm64-v8a；CI 用 `keytool` 校验 SHA256 证书指纹一致（可覆盖升级），arm64 真机未验证。
 
-            ### 🚀 核心能力
-            - 📖 **学术级精读台**：CEFR 词阶热力谱 · 0ms 歌德核心离线词库 · 四色荧光笔与便签 · AI 语法剖析 · 打印级《精读指南》导出
-            - ⚡ **形态学引擎**：556+ 强变化动词三态表 · 复合词递归拆解 · **552 词 / 691 条**固定介词搭配 · 可分动词框形双向联动
-            - 🌳 **句法引擎**：德语拓扑五场域（VF/LK/MF/RK/NF）色谱条 · 5 大从句 AST 抽象语法树 · 正文微光光圈联动 · 一键制 Anki 语法卡
-            - 🔍 **全库检索**：词条 / 例句 / 介词搭配 / 语料 四组检索（变音折叠 + 中文子串 + 加权排序）
-            - 🎴 **卡盒与记忆**：3D 物理翻转盒 · FSRS（DSR）自适应排程 · 背词工作台（VOKABELN，与主背词共享统一池）· Anki `.apkg` 一键导出
-            - 🎯 **备考工坊**：歌德 A1 读写听说（702 考纲词 / 真题 / 口语题卡）· 德福 C-Test 与完形填空（服务端判分防作弊）· 听力微训（精听 / 听写 / 填空）· 长难句精读工坊
-            - 📚 **遇见区分级阅读**：7 篇 A1–B1 预置短文 · 已背词高亮 · i+1 就近选材 · 已读队列
-            - ✍️ **写作润色台**：内联 IDE 实时诊断（零误报准则）+ Inlay Hints · 类 Git 版本快照 · 句子级 AI 润色并排审查
-            - 📰 **外刊 RSS 与文库**：Tagesschau / DW / DLF / Spiegel / Zeit 订阅 · 正文智能抽取 · 一键联级删除
-            - 🦉 **伴读宠物与台账**：Eule & 伙伴（4 款内嵌矢量角色 + 自定义 SVG 上传 + 9 大场景德语 TTS）· Atelier 呼吸感台账 · 一键数据备份还原
-            - 🌐 **同步与桌面形态**：局域网静默同步（6 位短码 P2P / WebRTC 加密通道）· 原生桌面窗口（pywebview + 系统托盘）· 顶栏「检查更新」chip
+            ### 核心能力
+            - **学术级精读台**：CEFR 词阶热力谱 · 歌德核心离线词库 · 四色荧光笔与便签 · AI 语法剖析 · 打印级《精读指南》导出
+            - **形态学引擎**：556+ 强变化动词三态表 · 复合词递归拆解 · **552 词 / 691 条**固定介词搭配 · 可分动词框形双向联动
+            - **句法引擎**：德语拓扑五场域（VF/LK/MF/RK/NF）色谱条 · 5 大从句 AST 抽象语法树 · 正文微光光圈联动 · 一键制 Anki 语法卡
+            - **全库检索**：词条 / 例句 / 介词搭配 / 语料 四组检索（变音折叠 + 中文子串 + 加权排序）
+            - **卡盒与记忆**：3D 物理翻转盒 · FSRS（DSR）自适应排程 · 背词工作台（VOKABELN，与主背词共享统一池）· Anki `.apkg` 一键导出
+            - **备考工坊**：歌德 A1 读写听说（702 考纲词 / 真题 / 口语题卡）· 德福 C-Test 与完形填空（服务端判分防作弊）· 听力微训（精听 / 听写 / 填空）· 长难句精读工坊
+            - **遇见区分级阅读**：7 篇 A1–B1 预置短文 · 已背词高亮 · i+1 就近选材 · 已读队列
+            - **写作润色台**：内联 IDE 实时诊断（零误报准则）+ Inlay Hints · 类 Git 版本快照 · 句子级 AI 润色并排审查
+            - **外刊 RSS 与文库**：Tagesschau / DW / DLF / Spiegel / Zeit 订阅 · 正文智能抽取 · 一键联级删除
+            - **伴读宠物与台账**：Eule & 伙伴（4 款内嵌矢量角色 + 自定义 SVG 上传 + 9 大场景德语 TTS）· Atelier 呼吸感台账 · 一键数据备份还原
+            - **同步与桌面形态**：局域网同步（6 位短码 P2P / WebRTC 加密通道；真机双端未验证）· 原生桌面窗口（pywebview + 系统托盘）· 顶栏「检查更新」chip
           draft: false
           prerelease: false

@@ -21,7 +21,7 @@
 - **工程与测试硬化**：pytest 分片改为显式互斥清单（`tools/ci_shards.py`），`--strict-markers` 与恒真断言清理，cost-guards / cost-cold-start 独立分片，静态检查只在 `unit-2` 跑一次，spaCy 模型 wheel 缓存与 Windows smoke 心跳；备份恢复补齐 `articles.stats_json`（PR #217）；Android 新增 `emulator` flavor（`assembleDeviceDebug` 只发设备包）、修复 Python 源码同步与本地 `buildPython` 配置。
 - **依赖**：`spacy>=3.8.18`、`pytest>=9.2.0`（dev）；Python / Node 下限未变。
 
-#### 🧠 NLP 模型档位定案 `sm`（ADR-0027）
+#### NLP 模型档位定案 `sm`（ADR-0027）
 
 - **代码与运行事实收敛**：`delector/nlp_engine/processor.py` 原先按 `de_core_news_md → de_core_news_sm` 顺序加载，但 CI、自动下载、Android 打包与新建 uv 环境实际只安装 `sm`，"md 优先"从未生效、只是静默回退。现改为单一常量 `SPACY_MODEL_NAME = "de_core_news_sm"`，删除候选元组与独立下载口径；`syntax_tree.get_spacy_nlp()` 复用同一常量。
 - **行为边界不变**：本地无模型时 `try_load_nlp_no_download()` 仍返回 `None`；自动下载仅在非 Android 且本地 sm 加载失败时触发，失败仍硬失败；纯 Python 降级路径未改动。
@@ -29,7 +29,7 @@
 - **守卫**：新增 `tests/test_nlp_model_sm_only.py`（单一事实源、运行期与工具脚本无 md 引用、自动下载只尝试 sm、失败语义不退化）。
 - **未验证**：sm 与 md 在真实难句上的句法树/难度判定差异未做对照实验（见 ADR-0027 OPEN）。
 
-#### 📱 Android WebView 可调试性与外链修复
+#### Android WebView 可调试性与外链修复
 
 - **Debug 构建可被 `chrome://inspect` 连接**：`MainActivity` 仅在 `BuildConfig.DEBUG` 分支调用 `WebView.setWebContentsDebuggingEnabled(true)`，release 保持关闭；`tests/test_android_webview_policy.py` 用静态断言锁住"必须被 DEBUG 守卫、只允许一次"，裸调 `true` 会立即变红。**已修复，真机与模拟器均未点检**：`chrome://inspect` 的实际连接未验证。
 - **更新 chip 外链点击无响应已修复**：此前 `WebViewClient` 未覆写 `shouldOverrideUrlLoading`，`target="_blank"` 的 GitHub Releases 链接被 WebView 自己吞掉。现覆写两个重载并统一委派给 `handleExternalNavigation`：站内回环（`127.0.0.1` / `localhost` / `::1` / `0.0.0.0`）、相对路径、`file://` 留在 WebView；其它 `http(s)` 与 `mailto:` 交系统 App；无可用 App 时静默吞掉并记日志，不崩、不把工作台替换成错误页。判定抽为零 Android 依赖纯函数 `WebUrlPolicy.shouldOpenExternally(url)`，`tests/test_android_webview_policy.py` 以 javac 直编直跑 25 条行为断言，另含静态守卫。**已修复，真机与模拟器均未点检**：外链是否真的唤起系统浏览器未验证。
@@ -50,13 +50,13 @@
 
 **v5.21.1（2026-11-03）**
 
-### 🐞 伴学 SSE 跨 chunk 分帧修复（PR #199）
+### 伴学 SSE 跨 chunk 分帧修复（PR #199）
 
 - **用户可见 bug**：SSE 帧被网络切分到多个 chunk 时，旧实现按 chunk 边界解析，导致 assistant 消息与 proposal 静默丢失、对应轮次不落库；这不是内部重构或性能优化，而是传输边界缺陷修复。
 - **修复**：改为缓冲累积原始字节，仅在空行闭合完整 SSE 帧后解析；覆盖 2/3/N 段、逐字节、固定种子随机分片、CRLF/混合空行与多行 `data`。客户端原始字节转发保持不变，`save_turn` 每轮只执行一次，同 id proposal 去重且不同 id 不误删。
 - **回归验证**：跨 chunk 分片、delta / thought / proposal 不丢不重与持久化守恒测试均通过；PR #199 全量 `python -m pytest tests` 为 **2719 passed / 3 skipped**。
 
-### ♻️ Go RunLoop 与 submitPrompt 内部重构（行为不变）
+### Go RunLoop 与 submitPrompt 内部重构（行为不变）
 
 - **Go helper 接线与 `RunLoop` 拆分**：7 个既有 helper 全部进入生产路径，拆出 `buildTurnPrompt` / `receiveTurn` / `executeToolCalls` / `finalize`，`RunLoop` 从 412 行降至 97 行；以旧实现字面 golden、第二请求与空 `callsList` 路径钉住既有行为，未顺手改变 CEFR-only 或异常 tool-call index 语义。
 - **`submitPrompt` 事件控制器**：在同文件收敛七类事件、异常中断与 `finally` 清理，函数从 197 行降至 147 行；公开签名、请求字段、DOM/消息状态和事件顺序均不变，未为拆文件而拆出 `cp-turn.js`。
@@ -76,7 +76,7 @@
 
 **v5.21.0（2026-11-03）**
 
-### 🦉 伴学 Agent 页面级能力分区、HITL 生词提议闭环与跨页历史恢复
+### 伴学 Agent 页面级能力分区、HITL 生词提议闭环与跨页历史恢复
 
 - **上下文与视图隔离**：伴学请求新增可选 `view / context_source / scope_key / draft_text / card_context`，按 `article:<id>` 与 `view:<name>` 隔离会话；非阅读器不再复用旧阅读器句子，german 工作台入口彻底禁用（其它页面可正常唤起）。
 - **页面级能力**：写作台接入 `writing_check`（无草稿降级）、进度页接入 `get_learner_profile` / `vocab_stats`、卡盒基于当前卡面词条走 `propose_vocab_cards` 批量提议；快捷入口按页分区，无可用上下文时显式降级。
@@ -85,7 +85,7 @@
 - **体验修复**：用户手动关闭伴读后可通过头像浮标重新开启；german 禁用样式不再误伤其它 disabled 形态。
 - **验证**：全量 `pytest tests` 2700+ passed、前端探针 140+ checks、`go test ./...` 全绿，真实浏览器 + 真实模型跑通「提议 → 确认 → 入盒」与「提议 → 放弃」。
 
-### 🐞 卡盒测验 choice 模式缺释义空白选项修复
+### 卡盒测验 choice 模式缺释义空白选项修复
 
 - 选择题的正确答案选项此前用裸 `card.definition_zh` 渲染，缺释义卡（HITL 提议允许入盒、其余卡面统一显示「待补充」）会渲染出**空白按钮**，与同函数 flashcard / dictation 分支口径不一致；现正确项与两个分支同走 `formatCardDefinition`，缺释义显示「待补充」。
 - 选项对象化后乱序（`isCorrect` 随对象携带），正确索引不再依赖 `indexOf` 文本比对，同文案干扰项或「待补充」字面量都不会误标正确项。
@@ -93,13 +93,13 @@
 
 ---
 
-### 📲 PWA 安装图标补齐
+### PWA 安装图标补齐
 
 - `manifest.json` 新增 192x192 / 512x512 PNG 位图图标（保留内联 SVG 作 `sizes:any` 备用）；此前单张 SVG 声明 `192x192 512x512`，不满足浏览器安装提示对可解码位图的规格要求。
 - 新增 `tests/test_pwa_manifest.py` 守卫：PNG 实际尺寸与声明一致、图标路径为站点根相对（静态目录挂在 `/`，带 `/static` 前缀会 404）。
 - 实测（TestClient）：`/manifest.json` 200 application/json、`/icon-192.png` 200 image/png、`/icon-512.png` 200 image/png。Android 真机安装提示仍待点检。
 
-### 🦉 桌宠眨眼眼球错位修复与 README 产品图刷新（PR #197）
+### 桌宠眨眼眼球错位修复与 README 产品图刷新（PR #197）
 
 - **根因**：`.char-eye` 的 `transform-box: fill-box` 把按 SVG viewBox 编写的 `transform-origin` 误解为眼球 bbox 相对坐标，96% 闭眼帧产生 `(72-40)×0.9×0.72=20.736px` 位移。
 - **修复**：改用 `transform-box: view-box`，围绕既有眼球中心缩放并保留眨眼动效；修复后同帧中心误差约 `0.000006px`，桌面四角色与窄屏 10 组检查最大误差 `0.0000171px`。
@@ -119,7 +119,7 @@
 
 **v5.20.2（2026-11-01）**
 
-### 📖 自然段排版重塑 + CEFR 视力透视胶囊 + 句法抽屉实时联动同步与 CI 极限加速
+### 自然段排版重塑 + CEFR 视力透视胶囊 + 句法抽屉实时联动同步与 CI 极限加速
 
 本版本为阅读体验与工程效能的重大质量提升与缺陷修复版本：
 - **阅读器连续段落排版重塑 (ADR-0026)**：正文 `<p>` 彻底移除块级 `<div class="sentence-topology-strip">` 预埋节点，根除 HTML5 强制闭合标签导致的德语长文逐句碎行缺陷，恢复自然连贯的段落排版阅读心流；五场域拓扑分析完全收敛至右侧抽屉。
@@ -127,7 +127,7 @@
 - **三档视力透视胶囊**：在阅读器控制条新增「沉浸（默认）/ 考点（仅 B2/C1）/ 热力（全量高亮）」三档模式切换胶囊，支持 `localStorage` 记忆持久化。
 - **单词点击与切句句法抽屉实时联动同步 (DFS-DEBUG)**：
   - 修复点击单词仅更新词汇状态而未触发当前语句法拓扑分析、换到下一句句法抽屉依然冻结在上一句陈旧内容的缺陷；
-  - 抽屉处于「🌳 句法」Tab 时，点击任意单词或切换句子自动记忆并保持当前 Tab，绝不暴力踢回「📖 词汇」，支持句法研读心流；
+  - 抽屉处于「句法」Tab 时，点击任意单词或切换句子自动记忆并保持当前 Tab，绝不暴力踢回「词汇」，支持句法研读心流；
   - 伴读播放器（ShadowPlayer）步进或音频朗读切句时，句法拓扑与从句树实时跟随当前句自动步进渲染。
 - **CI 流水线极限提速 (1.5 ~ 2 分钟极速收敛)**：
   - Windows Portable Smoke 移除 2,670+ 全量测试重复执行，收敛至跨平台打包专用烟测，Windows 耗时由 14.5 分钟降至 ~2.5 分钟；
@@ -137,11 +137,11 @@
 
 **v5.20.1（2026-11-01）**
 
-### 📱 Android 桌宠拖拽手势修复 + 句法默认显示清除 + CI Pytest Matrix 矩阵提速
+### Android 桌宠拖拽手势修复 + 句法默认显示清除 + CI Pytest Matrix 矩阵提速
 
 本版本为紧急缺陷修复与效能增强版本：
 - **Android 移动端桌宠手势修复**：全面补充 `touch-action: none`、`-webkit-touch-callout: none` 与 `window` 全局指针追踪，修复 Android 触屏上萌宠由于移动端系统手势抢占导致的无法拖拽移动缺陷；补充 350ms/400ms 延迟合成 click 屏蔽窗，防止拖拽释放误触选角面板。
-- **正文句法默认显示清除**：清除正文每个句子末尾内联的灰色实体按钮，统一收敛至选区悬浮胶囊工具条（`🌳 句法`）与侧边抽屉，保留阅读流整洁。
+- **正文句法默认显示清除**：清除正文每个句子末尾内联的灰色实体按钮，统一收敛至选区悬浮胶囊工具条（`句法`）与侧边抽屉，保留阅读流整洁。
 - **CI Pytest 套件 Matrix 并行分片**：将 2670+ 全量测试拆分为 `unit`（业务逻辑单测）与 `cost-guards`（基准压测）独立 Runner 并发执行，大幅缩减全量验证反馈耗时。
 - **开源许可证切换**：全仓正式生效 Apache License Version 2.0。
 
@@ -149,7 +149,7 @@
 
 **v5.20.0（2026-11-01）**
 
-### 🦉 伴学导学 Agent 运行时 + SQLite 业务持久化 + 洋葱中间件与安卓可调工作台（PR #179）
+### 伴学导学 Agent 运行时 + SQLite 业务持久化 + 洋葱中间件与安卓可调工作台（PR #179）
 
 自 v5.19.0（2026-10-22）起，完成 DeLector 伴学 Agent 全新架构演化。由 Go Runtime 统一承担 Agent 编排、Tool Calling、流式通信、模型级联和运行时控制，Python/FastAPI 承担 Web 网关、本地 NLP 与 SQLite 学习资产持久化。全量测试规模扩展至 **2,670+ passed**，并通过 4 道前端机械闸与 Go `-race` 全量并发校验。
 
@@ -180,7 +180,9 @@
 
 ---
 
-### v5.19.0 · 🖥️ 桌面单实例锁 + 端口顺延 + 前端继续解耦（PR #172 · #164~#166）
+**v5.19.0（2026-10-22）**
+
+### 桌面单实例锁 + 端口顺延 + 前端继续解耦（PR #172 · #164~#166）
 
 自 v5.18.0（`4646a67`，2026-10-19）起本版收敛两个主题：**「同一台机器只能有一个 DeLector」成为 OS 级事实**，以及前端单体继续分层。全量测试 2,438 → **2,584 passed + 2 skipped（净增 146）**。
 
@@ -201,7 +203,9 @@
 
 **回滚**：单实例锁可用 `DELECTOR_DATA_DIR` 指到临时目录隔离验证；如遇异常启动问题，删除 `%LOCALAPPDATA%\DeLector\instance.lock` 无效（锁随进程退出自动释放），应确认是否有残留 `DeLector.exe`。
 
-### v5.18.0 · 🏗️ 架构与前端单体彻底解耦 + 交互式智能体闭环 + 六道自动化机械闸（PR #131~#161）
+**v5.18.0（2026-10-19）**
+
+### 架构与前端单体彻底解耦 + 交互式智能体闭环 + 六道自动化机械闸（PR #131~#161）
 
 自 v5.17.0（`f359ea6`，2026-10-11）起 **128 个提交、25 个 PR** 汇聚为本里程碑版本。主要涵盖三大维度：**核心业务与架构分层解耦**、**交互式智能体循环与裁判闭环**、以及**六道自动化质量守卫机械闸矩阵**。全量测试规模从 1,768 扩展至 **2,438 passed + 3 skipped（净增 670 个测试）**。
 
@@ -241,9 +245,9 @@
 
 ---
 
-**历史版本：v5.17.0（2026-10-11）**
+**v5.17.0（2026-10-11）**
 
-### 🖥️ 首个原生桌面壳 + 首次数据落点外置 + 发版门（PR #111~#129）
+### 首个原生桌面壳 + 首次数据落点外置 + 发版门（PR #111~#129）
 
 自 v5.16.0（`90f62a3`，2026-10-06）起 **111 个提交**收成一版（不含本次发版 bump）。载荷是两个"首次"——**首个原生桌面壳**与**首次把数据落点外置**；其余是 CI/守卫加固，以及一批"已装用户拿不到"的修复（`static/` 内嵌在产物里，必须重下新产物）。
 
@@ -253,7 +257,7 @@
 
 **③ 打包面（#124 / #128 / #129；ADR-0021 替代投资）**——`DEFAULT_ENTRY` 切到 `desktop.py`，复用现有 Windows 产物位点、不新增第 5 个位点。三件加固：**`.env` 验包闸**（产物夹带即硬失败）、**构建指纹**（`.build-info.json` 四键 + README 顶行人读指纹，供用户分辨双击的是哪个包）、**WebView2 验包闸**（漏 `WebView2Loader.dll` 就白屏，与既有事故同款）。**真启产物闸（#128）**：构建后先跑一次产物（完整性 + `/api/health` 就绪 + 干净退出），坏包不许进 zip/artifact —— **上线即抓出两个产品真 bug**：`--server-only` 在 stdout 被重定向时 `UnicodeEncodeError` **启动即崩**；PR 语境 `GITHUB_REF_NAME`（形如 `128/merge`）把产物目录**嵌套**成 `dist/DeLector-128/merge-…`（构建报成功、下游扫不到）。
 
-**④ 更新可见性（#115 / #116）**——`delector/core/version.py: APP_VERSION` **单一真相源** + `GET /api/update/check`（GitHub Releases 唯一真相源；**成功 6h / 失败 60s** TTL + 3s 超时 + **不挂本机闸**＝ADR-0017 §4.3 显式决定）+ 顶栏落后 chip（`wb_update_chip_probe.mjs` 11 场景）。⚠️ **Android 端未验证**：两条假设（Chaquopy 上 httpx 能否完成到公网 `api.github.com` 的 **HTTPS**、WebView 点 chip 外链是否交给系统浏览器）从未验证，手机现有出网是 **LAN HTTP**、不是证据 ⇒ 本版只上桌面端。
+**④ 更新可见性（#115 / #116）**——`delector/core/version.py: APP_VERSION` **单一真相源** + `GET /api/update/check`（GitHub Releases 唯一真相源；**成功 6h / 失败 60s** TTL + 3s 超时 + **不挂本机闸**＝ADR-0017 §4.3 显式决定）+ 顶栏落后 chip（`wb_update_chip_probe.mjs` 11 场景）。**Android 端未验证**：两条假设（Chaquopy 上 httpx 能否完成到公网 `api.github.com` 的 **HTTPS**、WebView 点 chip 外链是否交给系统浏览器）从未验证，手机现有出网是 **LAN HTTP**、不是证据 ⇒ 本版只上桌面端。
 
 **⑤ 六条用户可感知修复**——错高亮改为**在原文上定位命中**（`ad556a1`，修掉错高亮与实体边界）；列表成本 **918ms → 8.9ms（103×）**；静态首屏少 **383.4 KB**（工作台 iframe 惰性化，`8f07820`，`os.path.getsize` 实测 392,563 B）；四条 P0（`3def83d`：建服前端口/身份校验、`get_setting` 不再吞异常、`openReader` 失败可见、评分防连点）；难度跳变（`c071c08`：构建期预生成 `delector/data/preset_processed.json`，落库直接 spaCy 口径 ⇒ 跳变消失，**未命中给可见 WARNING**，不许静默降级）；启动日志轮转与 `.env` 回落锁。
 
@@ -264,12 +268,12 @@
 **⑧ 性能测量与裁决（ADR-0018，#117~#121）**——五个基准 + 五个门禁落地；判定门定案 **O0（维持现状 + 便宜杠杆）**，条件①成立（加权 Python CPU 代理占比 **85.9%**）/条件②不成立 ⇒ **AND 不成立**；**"换 HTTP 主体"永久否决**（三条依据 + 三条翻盘条件见 ADR-0018 §3.2）。红 master 事故（PR #117 在 CI 未跑完时被合并）同批修复：删两条**跨进程量级比较**断言，改为机器无关自检。
 
 **已知限制（本版不修，明文登记）**
-- **冷启动约 6s**（本机端到端实测）：其中 **~2s 是"建服前端口/身份校验"——本版新引入的显式校验**，另有 ~2s 加载后端依赖；**不得**把这段当提速卖点。⭐ 那 2s 已单独复现为 `is_port_in_use` 的 `connect_ex(("127.0.0.1", port))`（端口空闲时**本机恒 ~2.03s**，正在监听 0.4ms，UDP 不受影响 ⇒ TCP 专属）。已**排除** Defender 网络保护、第三方 LWF 过滤驱动、`初始 RTO≈2s` 重传假说（实测 RTO=1000）；剩余嫌疑是 WFP 层（Clash TUN）与 TCP 全局特性。**环境嫌疑未定案**，三步可逆恢复法见 `docs/adr/2026-10-09-adr-0018-performance-measurement-before-runtime-swap.md` §8；**守卫保持原样、不立项**（改它是 P0 风险换一个可能只影响本机的 2s）。
+- **冷启动约 6s**（本机端到端实测）：其中 **~2s 是"建服前端口/身份校验"——本版新引入的显式校验**，另有 ~2s 加载后端依赖；**不得**把这段当提速卖点。那 2s 已单独复现为 `is_port_in_use` 的 `connect_ex(("127.0.0.1", port))`（端口空闲时**本机恒 ~2.03s**，正在监听 0.4ms，UDP 不受影响 ⇒ TCP 专属）。已**排除** Defender 网络保护、第三方 LWF 过滤驱动、`初始 RTO≈2s` 重传假说（实测 RTO=1000）；剩余嫌疑是 WFP 层（Clash TUN）与 TCP 全局特性。**环境嫌疑未定案**，三步可逆恢复法见 `docs/adr/2026-10-09-adr-0018-performance-measurement-before-runtime-swap.md` §8；**守卫保持原样、不立项**（改它是 P0 风险换一个可能只影响本机的 2s）。
 - **`launch.log` 有已知的整行丢失**（Windows 上多个句柄并发追加同一文件，实测约 **3%**、**整行不是半行**）⇒ `tools/first_screen_from_log.py` 报退出码 3/5（缺锚行）**不必然**等于日志损坏。
 - **Android 不可回滚**：`versionCode` 只升不降（本版 `51700`）。
 - **Win10 需先装 WebView2 运行时**（Win11 自带）：缺运行时双击 `DeLector.exe` 会提示安装后退出，**不会白屏**；此项**打破"解压即用"**，不捆绑固定运行时（否则 +100–150MB）。
 
-**门禁（本版实测）**：**1768 passed + 2 skipped**；`tools/*.mjs` 探针 **29/29** 零漂移；`ruff check .` 零告警；mypy 三道（`--strict delector tools` **87** + `--follow-imports=skip tests` **121** + 入口面 `desktop.py package_windows.py conftest.py start.py` **4** files）零错误；发版守护 `test_writer_mobile.py` **30 passed**。⚠️ 含 `static/` 改动（`update.js` / `api-types.js` / `index.html` / `main.js`）⇒ **Android 需覆盖安装生效**。
+**门禁（本版实测）**：**1768 passed + 2 skipped**；`tools/*.mjs` 探针 **29/29** 零漂移；`ruff check .` 零告警；mypy 三道（`--strict delector tools` **87** + `--follow-imports=skip tests` **121** + 入口面 `desktop.py package_windows.py conftest.py start.py` **4** files）零错误；发版守护 `test_writer_mobile.py` **30 passed**。含 `static/` 改动（`update.js` / `api-types.js` / `index.html` / `main.js`）⇒ **Android 需覆盖安装生效**。
 
 **回滚 (Rollback)**
 - **代码**：`git revert` 本版提交后重建；或直接用上一版产物（`v5.16.0`）覆盖。
@@ -277,7 +281,9 @@
 - **DB**：本版对 schema 只做**加列**（`articles.stats_json`）与 3 个 `CREATE INDEX IF NOT EXISTS`（`idx_exam_lm` / `idx_vocab_queue` / `idx_grammar_queue`），无破坏性变更 ⇒ 旧版代码可继续读同一个库。
 - **Android**：见上「不可回滚」——只能卸载重装（会清应用私有数据，请先导出备份）。
 
-### v5.16.0 · ⚡ 修掉一个长期潜伏的性能缺陷 + 三处守卫加固（PR #108/#109/#110）
+**v5.16.0（2026-10-06）**
+
+### 修掉一个长期潜伏的性能缺陷 + 三处守卫加固（PR #108/#109/#110）
 
 Fog 1~4 全部收口。本版**不含** `static/` 改动——三个 PR 分别是 1 处性能修复与两组测试守卫。
 
@@ -304,7 +310,7 @@ Windows 无 Git-Bash 时跳过是**正确**行为）⇒ **两者都不进 CI 必
 allowlist **20 条逐字未动**（只改「怎么发现」，不改「发现什么」），`delector/` 零改动。
 
 **④ 安全 posture 已裁决：内网可信**（用户裁定，不加固 LAN 写端点）。盘点结果存档：暴露面 28 个写端点
-（🔴6 / 🟡11 / 🟢11），但**不可逆毁数据能力全在闸内**（所有 DELETE、备份导出与**清库式还原**、
+（高风险 6 / 中风险 11 / 低风险 11），但**不可逆毁数据能力全在闸内**（所有 DELETE、备份导出与**清库式还原**、
 `POST /api/settings` 改写 API Key 与网关、`wb/state/key`）；覆盖最大的 `PUT /wb/state` 由 **128-bit `X-WB-Key`**
 保护且该 key **无法经 HTTP 从 LAN 取得**；**加固不会断手机同步**（手机端 32 处调用只写 3 个 `X-WB-Key` 端点）。
 已接受代价：LAN 第二台设备「保存按钮 403」、AI 端点无配额、写入无审计。
@@ -320,7 +326,9 @@ allowlist **20 条逐字未动**（只改「怎么发现」，不改「发现什
 `test_get_endpoints_with_writes.py` 各 **7 passed**。
 **无 `static/` 改动** ⇒ 桌面端刷新即生效；Android APK 仍会随 tag 重新构建（versionCode `51600`，可覆盖安装）。
 
-### v5.15.0 · 🛡️ 登记项收口第二轮：三条新守卫 + 降级串味修复 + LAN posture 裁决（PR #103~#107）
+**v5.15.0（2026-10-05）**
+
+### 登记项收口第二轮：三条新守卫 + 降级串味修复 + LAN posture 裁决（PR #103~#107）
 
 把 v5.14.0 发版后仍在册的 5 项技术债收口，全部以**"立守卫防漂移"**而非"改实现"的方式落地。
 
@@ -334,13 +342,15 @@ allowlist **20 条逐字未动**（只改「怎么发现」，不改「发现什
 
 **⑤ 探针 `--json` 契约冻结（#107）**——28 个探针的 JSON 输出有 5 种形态。**冻结而非统一**：严格迁移要动 23 个 probe + 约 13 个 wrapper，且把结构化样例压成 `{name, ok}` 会**降低诊断能力**。23 条登记进显式过渡清单，并加"清单长度 MUST NOT 增长"守卫。判据是**实跑输出**不是源码文本（对照实验：只改注释 ⇒ 绿；改输出结构 ⇒ 红）。
 
-**⑥ 安全 posture 裁决：内网可信（用户裁定）**——盘点 LAN 暴露面后确认：28 个 LAN 可达写端点（🔴6 / 🟡11 / 🟢11），但**不可逆毁数据能力全在闸内**（所有 DELETE、备份导出与**清库式还原**、`POST /api/settings` 改写 API Key 与网关、`wb/state/key`）；覆盖最大的 `PUT /wb/state` 由 **128-bit `X-WB-Key`** 保护且该 key **无法经 HTTP 从 LAN 取得**。**关键结论：加固不会断手机同步**——手机端 32 处 `/api/` 调用只写 3 个端点且全是 `X-WB-Key` 路径，内容写端点无一被手机端调用。**已知并接受的代价**：LAN 第二台设备从"可读可写"降级为"可读但保存按钮报错"；`GET /api/settings` 会泄露模型网关地址与模型名（key 是掩码）；5 个 AI 端点无配额；写入无审计日志。
+**⑥ 安全 posture 裁决：内网可信（用户裁定）**——盘点 LAN 暴露面后确认：28 个 LAN 可达写端点（高风险 6 / 中风险 11 / 低风险 11），但**不可逆毁数据能力全在闸内**（所有 DELETE、备份导出与**清库式还原**、`POST /api/settings` 改写 API Key 与网关、`wb/state/key`）；覆盖最大的 `PUT /wb/state` 由 **128-bit `X-WB-Key`** 保护且该 key **无法经 HTTP 从 LAN 取得**。**关键结论：加固不会断手机同步**——手机端 32 处 `/api/` 调用只写 3 个端点且全是 `X-WB-Key` 路径，内容写端点无一被手机端调用。**已知并接受的代价**：LAN 第二台设备从"可读可写"降级为"可读但保存按钮报错"；`GET /api/settings` 会泄露模型网关地址与模型名（key 是掩码）；5 个 AI 端点无配额；写入无审计日志。
 
 门禁：**1299 passed + 1 skipped**（分半：非 server **1035** + `test_server` **264**）；`tools/*.mjs` 探针 **28/28** 零漂移；`ruff` 0；`mypy` 两道（**70** + **92** files）零错误；发版守护 **30 passed**；三条新守卫（防漏接线 / 契约冻结 / localhost 集合）全绿。
 **本轮防漏接线守卫第三次当场抓出漏接线**（新探针落地即被顶出，补 wrapper 后转绿）。
-⚠️ 含 `static/` 改动（`cards.js` +16/−6、`encounter.js` +87/−31）⇒ **Android 需覆盖安装生效**。
+含 `static/` 改动（`cards.js` +16/−6、`encounter.js` +87/−31）⇒ **Android 需覆盖安装生效**。
 
-### v5.14.0 · 🛡️ 韧性 / 前端竞态 / KARTEI 去复习化（swarm 审计 5 子计划 + 清债轮，PR #93~#102）
+**v5.14.0（2026-10-05）**
+
+### 韧性 / 前端竞态 / KARTEI 去复习化（swarm 审计 5 子计划 + 清债轮，PR #93~#102）
 
 本版主体是一次 6 席 swarm 审计（`docs/reviews/2026-10-03-swarm-audit-master.md`）的落地：5 个子计划 + 3 组清债，
 **两个 P0 真 bug**（卡盒"白复习"、TTS 并发无闸）与一批"门禁在跑但判别力是假的"缺陷。
@@ -370,10 +380,10 @@ filesort 仅占端点 **8.9%**（20k 档 70.2ms / 790ms），远低于 30% 否�
   仍用旧探针"）。`ci.yml` 加 job 级 `timeout-minutes: 15`。
 
 **⑤ KARTEI 去复习化（#98）—— P0：消除"白复习"**。用户在卡盒点复习一条**工作台词**：DSR 四列被写、卡面却因
-`fsrs_s` 优先仍显示 `📚 工作台 · s=25`、工作台那侧 FSRS 也没动 ⇒ **复习了，等于没复习**（比"两套排程打架"更隐蔽，
+`fsrs_s` 优先仍显示 `工作台 · s=25`、工作台那侧 FSRS 也没动 ⇒ **复习了，等于没复习**（比"两套排程打架"更隐蔽，
 它连打架都算不上，是纯粹的静默丢弃）。用户决策 **A（彻底分家）+ 可见但不可复习**：工作台词在卡盒**保持可见**
 （统一池价值保留）但**只读**——收走四个 DSR 按钮，保留 `mastered` 徽记/按钮（用户亲手设的标记，永不隐藏）
-+ 「📚 去工作台复习」跳转（`href` 沿用既有路由 ⇒ 中键/右键仍可新标签页打开；左键 `preventDefault` + `window.show('german')`
++ 「去工作台复习」跳转（`href` 沿用既有路由 ⇒ 中键/右键仍可新标签页打开；左键 `preventDefault` + `window.show('german')`
 留在主站壳内）。普通 reader 卡的四个按钮**逐字不变**。
 
 **⑥ 清债轮（#99/#100/#101/#102）**——
@@ -383,7 +393,7 @@ filesort 仅占端点 **8.9%**（20k 档 70.2ms / 790ms），远低于 30% 否�
 - `fetchKnownLemmas` 加 **in-flight 去重**（一次会话读 N 篇原本打 N+1 次后端）。**刻意不做 TTL 缓存**——串行重复是
   "每篇刷新一次"的正常语义，用 TTL 会让"刚背的词在 TTL 内不出现"，是 UX 回归。
 - 覆盖率行**标注降级来源**：离线/镜像失败时原本静默显示「已背词覆盖 0/312 词位（0%）」，用户无法分辨"真没背"与
-  "拉取失败"。降级时给 `⚠ … · 数据不完整` + `title` 并列原因。
+  "拉取失败"。降级时给 `… · 数据不完整` + `title` 并列原因。
 - **CI 门禁补全**：`tools/` 下 27 个 `.mjs` 探针全部接入 pytest（此前 **8 个从未进 CI**，含守"白复习"P0 回归的那个）；
   `ci.yml` **显式安装 Node 20**（此前 wrapper 靠 `ubuntu-latest` 镜像**预装**，属隐式依赖——镜像一换版本探针就
   `shutil.which` **静默 skip**，测试全绿而探针根本没跑，**比红更坏**）；新增**防漏接线守卫**（任何
@@ -394,7 +404,9 @@ filesort 仅占端点 **8.9%**（20k 档 70.2ms / 790ms），远低于 30% 否�
 `test_writer_mobile.py`（发版守护：版本一致性 / README 下载表 / Android 重打包）**30 passed**。
 **Android 需覆盖安装 v5.14.0 生效**（改动含 `static/`：`cards.js` +59 / `encounter.js` +237 / `reader.js` +10 / `style.css` +53）。
 
-### v5.13.0 · 🗄️ 统一词库池（ADR-0016）+ P0 数据真相修复（PR #73/#74/#75/#88）
+**v5.13.0（2026-10-03）**
+
+### 统一词库池（ADR-0016）+ P0 数据真相修复（PR #73/#74/#75/#88）
 
 #### ADR-0016 统一词库池：让「我的词汇」成为单一权威池的**派生态**
 
@@ -453,11 +465,13 @@ filesort 仅占端点 **8.9%**（20k 档 70.2ms / 790ms），远低于 30% 否�
 - **Android 需覆盖安装 v5.13.0 生效**：本版含 `static/` 改动（i+1 已知词池打通 + 卡面文案）。
 - 测试基线 **1223 passed + 1 skipped**（分半：非 server **971** + `test_server` **253**）；
   `ruff check .` 零告警；`mypy --follow-imports=skip tests`（74 files）零错误；`tools/*.mjs` 探针零漂移。
-> 🧹 移除 `test_phase3_does_not_modify_frontend_static`：其基座随分支漂移（master 上恒空、合法改 `static/` 的分支上误伤），在浅克隆 CI 上更会直接失败；Phase 3 已合并，该守卫无前瞻价值，按审计建议删除而非留一条假绿门禁。
+> 移除 `test_phase3_does_not_modify_frontend_static`：其基座随分支漂移（master 上恒空、合法改 `static/` 的分支上误伤），在浅克隆 CI 上更会直接失败；Phase 3 已合并，该守卫无前瞻价值，按审计建议删除而非留一条假绿门禁。
 
 ---
 
-### 🛡️ v5.12.1 已发版内容（供参考）：Docker 数据目录迁移闸（fail-loud）
+**v5.12.1（2026-09-26）**
+
+### 已发版内容（供参考）：Docker 数据目录迁移闸（fail-loud）
 
 > 以下内容已随 v5.13.0 一并发布，保留原文备查。
 
@@ -485,7 +499,7 @@ filesort 仅占端点 **8.9%**（20k 档 70.2ms / 790ms），远低于 30% 否�
 
 ---
 
-## 🗺️ 路线图 (Roadmap)
+## 路线图 (Roadmap)
 
 - [x] **v1.0**：德语文章分词、欧标高亮与词汇卡片库
 
@@ -537,9 +551,9 @@ filesort 仅占端点 **8.9%**（20k 档 70.2ms / 790ms），远低于 30% 否�
 
 - [x] **v4.4.9**：**按钮 token 体系补全 + 移动端 sheet 闭合态几何修正**——`.btn-xs` / `.btn-del` / `.btn-secondary` 三条规则**从未在 CSS 里定义过**而模板里到处在用，无声降级成裸 `.btn` 尺寸配色（删除类按钮和主按钮长得一样）；补齐并分出 `--danger` token。移动端 sheet 闭合几何 `bottom: 4.75rem` 抬起 76px 而位移只推走「自身高度 + 16px」，**差额 60px 的条带永远留在屏幕内**盖住底部 dock，改为 `bottom: 0` + `translateY(100%)` 与 reader drawer 同构。另加全仓库 dict 字面量重复键棘轮。测试 **280 全绿**
 
-- [x] **v4.5.0**：**Präpositionen-Matrix 介词矩阵视图**——把 552 词 / 691 条搭配**倒过来**按介词分组（21 组，按搭配数降序），Dat/Akk/Gen 过滤 + 防抖子串搜索 + CEFR 标签 + 逐条一键入卡盒。分层上纯函数内核**不认识 CEFR**（会成循环导入），CEFR 注入与组排序留在服务端。⚠️ 本轮变异验证抓到**三条空转断言**：组内排序断言在数据本身有序时删掉 `sort` 也绿、payload 字段名在别处到处出现、端点测试两端读同一份缓存对象导致比较**恒真** —— 分别改为喂乱序输入 / 切进函数体逐字段断言 / 从数据集直接构造期望多重集。测试 **298 全绿**
+- [x] **v4.5.0**：**Präpositionen-Matrix 介词矩阵视图**——把 552 词 / 691 条搭配**倒过来**按介词分组（21 组，按搭配数降序），Dat/Akk/Gen 过滤 + 防抖子串搜索 + CEFR 标签 + 逐条一键入卡盒。分层上纯函数内核**不认识 CEFR**（会成循环导入），CEFR 注入与组排序留在服务端。本轮变异验证抓到**三条空转断言**：组内排序断言在数据本身有序时删掉 `sort` 也绿、payload 字段名在别处到处出现、端点测试两端读同一份缓存对象导致比较**恒真** —— 分别改为喂乱序输入 / 切进函数体逐字段断言 / 从数据集直接构造期望多重集。测试 **298 全绿**
 
-- [x] **v4.6.0**：**德语背词工作台集成 + 手机端无声根治**——684 词单文件工作台（FSRS-6 / 卡片复习 / 自测 / 统计 / 词库）以 iframe 嵌入而非合并代码：同源共享 localStorage 与 `/api/`（零 CORS），同时与主应用 2449 行强耦合全局 JS 完全隔离。**移动端无声的两个根因**：`file://` 下 Web Speech 被协议禁掉 + 设备没装德语语音包；修法是新增 `GET /api/audio/tts`（服务端 edge-tts）并设为最高优先级音频源。⚠️ 两处 CSS 陷阱：`body` 的 `padding-bottom` **不在** **`.view`** **的 flex 高度链里**，fixed dock 会直接盖住填满视图的 iframe（移动端必须显式扣掉 nav + dock 高度）；裸 `#view-german { display: flex }`（特异性 1,0,0）会压过 `.view { display: none }`（0,1,0），显示规则**必须** `.active` 作用域。备份覆盖 `wb.*` 进度键。测试 **314 全绿**
+- [x] **v4.6.0**：**德语背词工作台集成 + 手机端无声根治**——684 词单文件工作台（FSRS-6 / 卡片复习 / 自测 / 统计 / 词库）以 iframe 嵌入而非合并代码：同源共享 localStorage 与 `/api/`（零 CORS），同时与主应用 2449 行强耦合全局 JS 完全隔离。**移动端无声的两个根因**：`file://` 下 Web Speech 被协议禁掉 + 设备没装德语语音包；修法是新增 `GET /api/audio/tts`（服务端 edge-tts）并设为最高优先级音频源。两处 CSS 陷阱：`body` 的 `padding-bottom` **不在** **`.view`** **的 flex 高度链里**，fixed dock 会直接盖住填满视图的 iframe（移动端必须显式扣掉 nav + dock 高度）；裸 `#view-german { display: flex }`（特异性 1,0,0）会压过 `.view { display: none }`（0,1,0），显示规则**必须** `.active` 作用域。备份覆盖 `wb.*` 进度键。测试 **314 全绿**
 
 - [x] **v4.6.1**：**背词台 TTS 修复：点一下不出声、再点一下读两遍**——两个独立成因叠在一起。① 入口清理在 `removeAttribute('src')` 之后多调了一次 `load()`，这会给 `<audio>` **排一个异步 error 事件**，它在当前同步块跑完后才派发，正好命中同一 tick 里刚装上的 `onerror` —— 首次点击被自己的清理判成失败而静默无声。② `_ttsAudio` 是两条链路共用的**全局单例**，per-attempt 的闭包标志管不住**上一次**尝试的回调：旧 timer 醒来会清掉新播放，旧 `onplaying` 又把新尝试判成已完成 —— 连点于是交叉干扰、重复出声；改为全局递增的 `_ttsAttemptId`，stale handler 自己认出该退出。**教训：共享媒体单例上，per-attempt 的闭包标志不足以做互斥，需要一个全局的 attempt 身份。** 测试 **316 全绿**
 
@@ -581,7 +595,7 @@ filesort 仅占端点 **8.9%**（20k 档 70.2ms / 790ms），远低于 30% 否�
 
 - [x] **v5.1.1**：**审计修复收口 + 性能与稳定性 (M1–M5 + M4)**——① **审计修复（M1–M5）**：旧 6 位短码 LAN 面板停用标注并整体禁用（端点已强制配对密钥，死 UI 明示）；AI 判分/成功提示类残余 `alert` 收敛为 notify（写路径保留 + 双面黑白名单护栏）；wb pull 指数退避、RTC 瞬态不累计、阅读计时器防叠；② **性能（M4）**：查词/判题热路径常量模块级提升、复合词拆解与核心词查表缓存、句切分缩写保护正则提升；③ **稳定性**：PWA 版本更新改温和提示不硬刷窗口、TTS blob URL 统一撤销 + 播放请求令牌防错句覆盖、Reader 陈旧响应守卫、AI 请求输入上限与 TTS voice 白名单；④ **安全补漏**：批注删除纳入本机写闸、X-WB-Key 统一 `secrets.compare_digest` 消除时序侧信道、还原不导入 API 配置防 Key 外泄、Anki 导出 HTML 转义防存储型 XSS；⑤ 测试库隔离与断言护栏补齐。**本版同时回补 v5.0.2 → v5.1.1 的版本面同步**（sw.js 缓存键 / index.html 顶栏 / build.gradle / README / AGENTS）。
 
-- [x] **v5.3.0**：**背词工作台全域 Editorial 重塑 + 精读语法雷达 + A2 词汇全域贯通**——① **共享设计系统 Token 层抽离**（`static/css/tokens.css`）并全量接入背词工作台：统一 Academic Modern Editorial 暖纸墨水调色板、`--serif/--sans/--mono` 字体族与 960px 实体期刊画布，彻底消除硬编码中文字体与 Georgia；考纲词表只读契约 `GET /api/cards/vocab` 上线（CEFR/范围过滤 + 内存解析缓存），工作台顶栏扩展 3 档「⭐ A1 核心 / A1 全量 / 精读生词」范围选择；② **ADR-0006 背词工作台 Zettelkasten 实体学术卡箱与心流优先重塑**：出版物下划线轻量 Tab 导航与聚焦顶栏、剥离厚重阴影与大圆角容器、纯白学术抽认卡纸张层叠翻转（40px 衬线词头）、矿物植物印章式四级柔色评分座（键盘快捷键角标），自测题选项/拼写输入框/KPI 统计/词库浏览表全量 Editorial 化；③ **Grammatik-Radar 精读语法雷达（ADR-0007）**：消除 600ms hover 被动弹出，改行内幽灵微胶囊（Quiet Ghost Pill）显式点击触发句法抽屉（零心流打扰、保护查词抽屉状态）；语料语法 6 维指标（从句复合度/五场域展开率/句框跨度比/关系从句率/虚拟语气率/被动被动态率）落盘 `corpus_syntax_stats` 表 + `POST/GET /api/syntax/stats` 端点，句法抽屉内嵌零外部依赖 SVG 蛛网雷达图对比「本文维度 vs 语料平均基准」；④ **A2 词汇与全域背词系统扩展**：歌德 A2 **974 词全量规范化**（`format_vocab_headword` 精确拼装 497 名词定冠词如 `das Abenteuer` 并首字母大写，动词/形容词保持小写），`GET /api/a2/vocab` + `exam_catalog` 注册 A2 词表模块（动态推导 974 题量，打包 hidden-import 守卫），工作台顶栏第 4 档「📘 A2 词库」异步按需同步持久化，备考域激活 A2 考纲 Tab（3D 扑克翻转/例句发音/网格模式/搜索过滤/加入复习盒）。测试 **582 全绿**（基线 559 → 582）；10/10 Node.js 行为探针全绿（含 13/13 切片护栏 100% 保护）。
+- [x] **v5.3.0**：**背词工作台全域 Editorial 重塑 + 精读语法雷达 + A2 词汇全域贯通**——① **共享设计系统 Token 层抽离**（`static/css/tokens.css`）并全量接入背词工作台：统一 Academic Modern Editorial 暖纸墨水调色板、`--serif/--sans/--mono` 字体族与 960px 实体期刊画布，彻底消除硬编码中文字体与 Georgia；考纲词表只读契约 `GET /api/cards/vocab` 上线（CEFR/范围过滤 + 内存解析缓存），工作台顶栏扩展 3 档「A1 核心 / A1 全量 / 精读生词」范围选择；② **ADR-0006 背词工作台 Zettelkasten 实体学术卡箱与心流优先重塑**：出版物下划线轻量 Tab 导航与聚焦顶栏、剥离厚重阴影与大圆角容器、纯白学术抽认卡纸张层叠翻转（40px 衬线词头）、矿物植物印章式四级柔色评分座（键盘快捷键角标），自测题选项/拼写输入框/KPI 统计/词库浏览表全量 Editorial 化；③ **Grammatik-Radar 精读语法雷达（ADR-0007）**：消除 600ms hover 被动弹出，改行内幽灵微胶囊（Quiet Ghost Pill）显式点击触发句法抽屉（零心流打扰、保护查词抽屉状态）；语料语法 6 维指标（从句复合度/五场域展开率/句框跨度比/关系从句率/虚拟语气率/被动被动态率）落盘 `corpus_syntax_stats` 表 + `POST/GET /api/syntax/stats` 端点，句法抽屉内嵌零外部依赖 SVG 蛛网雷达图对比「本文维度 vs 语料平均基准」；④ **A2 词汇与全域背词系统扩展**：歌德 A2 **974 词全量规范化**（`format_vocab_headword` 精确拼装 497 名词定冠词如 `das Abenteuer` 并首字母大写，动词/形容词保持小写），`GET /api/a2/vocab` + `exam_catalog` 注册 A2 词表模块（动态推导 974 题量，打包 hidden-import 守卫），工作台顶栏第 4 档「A2 词库」异步按需同步持久化，备考域激活 A2 考纲 Tab（3D 扑克翻转/例句发音/网格模式/搜索过滤/加入复习盒）。测试 **582 全绿**（基线 559 → 582）；10/10 Node.js 行为探针全绿（含 13/13 切片护栏 100% 保护）。
 
 - [x] **v5.4.0**：**遇见区 i+1 阅读桥 + Go DAG job#1 内容生产引擎（ADR-0010，PR #25–#27）**——① **遇见区 P0（A1–A7）**：`encounter_texts` 存储 + `/api/encounter` 路由与 `import-pack` 契约（`encounter-pack/v1`，幂等）+ 逐词注解 + `view-encounter` SPA + deck 桥已背词高亮（剥冠词 lemma 判定）+ 生词一键进卡（IndexedDB `wb/words` 双写）+ 会话小复习；② **Go DAG job#1 真执行（B1–B9）**：`delector job run encounter-pack` 本地语料→分级卡包——corpus 两阶段有界扫描（`--max-articles/--max-file-bytes` 护栏）、Pack schema + TokenBudget（含 Release）、DeepSeek gloss（429/5xx 退避）、worker-pool runner（共享预算 + 墙钟 2h 兜底）、cobra CLI 默认护栏，工具注册升至 **6**（新增 `vocab_stats`），`-tags integration` 真链路 `TestEncounterRealChain` PASS；③ **vault-team 评审 8 条修复**：备份/还原纳入 `encounter_texts`、进卡 IDB 双写、403 人话提示等；④ 同期合入 PR #25 备考域独立域迁移（ADR-0005）与 PR #26 自托管字体/弹窗修复。测试基线 **686 passed + 1 skipped**；Go `go test -race ./...` 与 `-tags integration` 全绿。
 
@@ -589,7 +603,7 @@ filesort 仅占端点 **8.9%**（20k 档 70.2ms / 790ms），远低于 30% 否�
 
 - [x] **v5.5.1**：**修复 PWA 更新提示不可交互与常驻遮挡**（PR #40，2026-09-13）——① 「新版本已就绪」提示的刷新动作原先绑在 `#wb-notify` 上，而 `.wb-notify` 带 `pointer-events: none`（toast 的非阻断语义，用于不拦截下层点击）→ `onclick` 物理不可达（用户报障「点了没用」）；② 该提示用 `sticky: true` 且无任何关闭入口 → 常驻遮挡界面（「一直站在那里」）。修法：独立的 `#wb-update-bar`（`pointer-events: auto`）+ 两条明确出路「立即刷新」/「稍后」；新增 `tests/test_pwa_update_notice.py` 两条可用性契约（先红后绿），并以真实浏览器 `elementFromPoint` 命中测试验证点击可达（非字符串断言）。测试基线 **717 passed + 1 skipped**。**本版必须覆盖安装才能让 Android 端生效**（static 打包在 APK 内）。
 
-- [x] **v5.5.2**：**Ruff + Mypy 双静态门禁 + WiFi 手机拉取式内容分发**（PR #41/#43/#42，2026-09-13）——① **Ruff 清账**：`select = ["E","F","I"]` + `line-length = 120`（数据字典 E501 豁免），存量 2265 告警 → 零（E501 占 93%），`ruff format` 全量 106 文件，`ci.yml` 接入门禁（不进 requirements，Android 纯净），守卫测试钉死规则集与豁免面；② **Mypy 适度严格档**（`check_untyped_defs`+`no_implicit_optional`+`warn_unused_ignores`+`warn_redundant_casts`+`ignore_missing_imports`，配置落 `pyproject.toml` 的 `[tool.mypy]`——不放 mypy.ini 以免 GBK 解码崩），138→0 错误（VerbTrio 类级注解一次消 20 处、spaCy 降级带理由豁免），**顺带修 2 处真实缺陷**（`start.py` 给已不存在的 `install_signal_handlers` 赋值致 Android 禁信号防护静默失效；`test_audit_regressions.py` 传 3 个不存在字段名），`ci.yml` 接入门禁；③ **遇见区内容分发改为手机拉取式（WiFi）**：因 `start.py` 中 Android 实例有意绑 `127.0.0.1`（避免无鉴权 `POST /api/settings` 暴露局域网）致「桌面推手机」不可达，反转方向——桌面绑 `0.0.0.0` 作只读货架（`GET /api/encounter/packs` 清单 + `/packs/{id}` 完整 v1，绝不提供写操作、不泄露正文），手机 `POST /api/encounter/pull-pack`（localhost 闸 + 5s 超时）拉取 → `validate_pack` → `import_encounter_pack` 幂等落库，前端「📥 从电脑导入」只调本机相对路径（同源零跨域）；Go 侧与 Android 打包面零改动。测试基线 **788 passed + 1 skipped**（含 WiFi 32 + Ruff 5 + A7 22）；本版 static 打包在 APK 内，Android 需覆盖安装生效。
+- [x] **v5.5.2**：**Ruff + Mypy 双静态门禁 + WiFi 手机拉取式内容分发**（PR #41/#43/#42，2026-09-13）——① **Ruff 清账**：`select = ["E","F","I"]` + `line-length = 120`（数据字典 E501 豁免），存量 2265 告警 → 零（E501 占 93%），`ruff format` 全量 106 文件，`ci.yml` 接入门禁（不进 requirements，Android 纯净），守卫测试钉死规则集与豁免面；② **Mypy 适度严格档**（`check_untyped_defs`+`no_implicit_optional`+`warn_unused_ignores`+`warn_redundant_casts`+`ignore_missing_imports`，配置落 `pyproject.toml` 的 `[tool.mypy]`——不放 mypy.ini 以免 GBK 解码崩），138→0 错误（VerbTrio 类级注解一次消 20 处、spaCy 降级带理由豁免），**顺带修 2 处真实缺陷**（`start.py` 给已不存在的 `install_signal_handlers` 赋值致 Android 禁信号防护静默失效；`test_audit_regressions.py` 传 3 个不存在字段名），`ci.yml` 接入门禁；③ **遇见区内容分发改为手机拉取式（WiFi）**：因 `start.py` 中 Android 实例有意绑 `127.0.0.1`（避免无鉴权 `POST /api/settings` 暴露局域网）致「桌面推手机」不可达，反转方向——桌面绑 `0.0.0.0` 作只读货架（`GET /api/encounter/packs` 清单 + `/packs/{id}` 完整 v1，绝不提供写操作、不泄露正文），手机 `POST /api/encounter/pull-pack`（localhost 闸 + 5s 超时）拉取 → `validate_pack` → `import_encounter_pack` 幂等落库，前端「从电脑导入」只调本机相对路径（同源零跨域）；Go 侧与 Android 打包面零改动。测试基线 **788 passed + 1 skipped**（含 WiFi 32 + Ruff 5 + A7 22）；本版 static 打包在 APK 内，Android 需覆盖安装生效。
 
 - [x] **v5.6.0**：**听力微训工坊 —— 备考域三模式听练**（PR #44，2026-09-14）——① **L 精听 / 影子跟读**：逐句播放 + 变速/重复/循环 + 跟读停顿；② **D 听写诊断**：隐藏文本逐句听写 → `diagnose_diktat` 词级 LCS 逐字归因（correct/umlaut/case/inflection/missing/extra 六色胶囊）；③ **C 听力填空**：动词/名词启发式挖空 + 填答校验。材料源复用遇见区分级短文（encounter）+ A1 听力音频句库（`a1_hoeren` 的 `audio_text_de`）；后端 `delector/services/listen.py`（`diagnose_diktat` + `make_cloze` 纯函数）+ `delector/routes/listen.py`（`/api/listen` materials/diagnose/trials 四端点）+ `listen_trials` 表（对齐 `exam_trials` 模式，随备份还原）；前端 `static/js/listen-lab.js` 挂进备考域。测试基线 **788 passed + 1 skipped**（基线 751→788，净增 35：引擎 21 + API 9 + 探针 2 + 模块图 3）；Android 真机 TTS 链路留发版后一次性真机点检。
 
@@ -601,7 +615,7 @@ filesort 仅占端点 **8.9%**（20k 档 70.2ms / 790ms），远低于 30% 否�
 
 - [x] **v5.7.3**：**揭示句法树 `[object Object]` 渲染修复 + 难度分文案消歧**（2026-09-14，vault-debug）——v5.7.2 复测报：揭示句法树只能看到 `[object Object],[object Object]`（用户简记 [object, object]）。根因：`_topologyHtml` 的 `Array.isArray(ft) ? ft.join(" ") : topo[key]` —— `field_texts` 在 spaCy 与纯 Python 双路径恒为**字符串**，恒走 else → `vals = topo[key]`（原始 token 数组）→ `String(数组)` 渲染成 `[object Object]`；**探针 fixture 误用数组 field_texts（与真实 API 形状不符）→ 恒走 join 分支 → 漏检**。修法：`_topologyHtml` 优先取 `field_texts` 字符串原文，缺失才退化顶层 token 数组 join；探针 fixture 改真实形状 + 新增 2 断言（无 `[object Object]` / 渲染字符串原文），46 断言 + 3 变异全绿。附带消歧：「当前 x/100」实为**难度分**（非句次序，进度在卡面"句 x/y"；列表按难度降序 → 点上一句分数变大属正常），文案改「当前句难度 x/100」。测试基线 **832 passed + 1 skipped**；Android 需覆盖安装生效。
 
-- [x] **v5.7.4**：**pure 降级评分增强 + 前端字号 + spaCy 诊断**（2026-09-14）——① **pure 路径评分增强**：v5.7.3 真机反馈纯 Python 降级句"普遍 5/100 无区分度"（pure 树单节点无 features，只剩句长维度）。`syntax_score` 新增 `_pure_text_hints` 文本启发式（逗号/从属连词 → clause_count 粗估；`wird/wurde` → 被动；`würde/hätte` → 虚拟式；`, weil/dass` → VL 句框；`, der/die` → 关系从句），`score_sentence` 在 `path="pure"` 时注入，难度榜恢复排序依据（**评分仍是内部启发式非权威，排序供参考**）；② **前端字号优化**（字小又累）：材料卡片 13→15px、原句 17→18px、揭示树/拓扑 13→15px+行高 1.85、树节点类型 11→12px、卡片留白加大；③ **文案软化**：`⚠ 近似分析（纯 Python 降级路径，评分仅供参考）` → `✦ 轻量分析：难度画像为粗估，排序供参考，不必当真`；④ **spaCy 加载诊断**（免 adb）：`GET /api/syntax/spacy-status` 返回 `{path, error}`（spaCy import/模型加载失败的具体异常），前端「轻量分析」提示旁自动展示——用于定位 Android 打包 spacy+de_core_news_sm 却仍走 pure 的根因。测试基线 **838 passed + 1 skipped**（832→838：pure 启发式 +5、spacy-status +1）；Android 需覆盖安装生效。
+- [x] **v5.7.4**：**pure 降级评分增强 + 前端字号 + spaCy 诊断**（2026-09-14）——① **pure 路径评分增强**：v5.7.3 真机反馈纯 Python 降级句"普遍 5/100 无区分度"（pure 树单节点无 features，只剩句长维度）。`syntax_score` 新增 `_pure_text_hints` 文本启发式（逗号/从属连词 → clause_count 粗估；`wird/wurde` → 被动；`würde/hätte` → 虚拟式；`, weil/dass` → VL 句框；`, der/die` → 关系从句），`score_sentence` 在 `path="pure"` 时注入，难度榜恢复排序依据（**评分仍是内部启发式非权威，排序供参考**）；② **前端字号优化**（字小又累）：材料卡片 13→15px、原句 17→18px、揭示树/拓扑 13→15px+行高 1.85、树节点类型 11→12px、卡片留白加大；③ **文案软化**：`近似分析（纯 Python 降级路径，评分仅供参考）` → `轻量分析：难度画像为粗估，排序供参考，不必当真`；④ **spaCy 加载诊断**（免 adb）：`GET /api/syntax/spacy-status` 返回 `{path, error}`（spaCy import/模型加载失败的具体异常），前端「轻量分析」提示旁自动展示——用于定位 Android 打包 spacy+de_core_news_sm 却仍走 pure 的根因。测试基线 **838 passed + 1 skipped**（832→838：pure 启发式 +5、spacy-status +1）；Android 需覆盖安装生效。
 
 - [x] **v5.7.5**：**spaCy 诊断竞态修复**（2026-09-14）——v5.7.4 复测：长难句工坊显示「轻量分析」但诊断小字不出现。根因：`enterHardSentences` 里 `_loadSpacyDiag()` **未 await**，`_renderAll()` 在诊断请求返回前抢先渲染，`_q.spacyError` 仍是空串 → 诊断永不渲染。修法：await 诊断就绪后再渲染 + `path="pure"` 且 error 空时显示占位「未捕获到加载异常（需进一步排查）」。探针 46 断言全绿；测试基线 **838 passed + 1 skipped**；Android 需覆盖安装生效。
 
@@ -622,11 +636,11 @@ filesort 仅占端点 **8.9%**（20k 档 70.2ms / 790ms），远低于 30% 否�
 - [x] **v5.9.4**：**精读生词（reader 档）富字段回填 + 原句优先**（2026-09-20，`a7801ec`）——补最后一个同型缺口：**reader 生词卡此前永远裸**（服务端 `scope=reader` 显式置空富字段 + 前端 `syncReaderCardsFromServer` append-only → 存量永不刷新），与 A1/A2/B1 三档信息量不对齐。① **服务端**：新增 `_reader_lemma_key`（去冠词 + 小写归一——`RICH`/`LEXICON` 键 100% 小写，而写入侧 `lemma` 可能大写/带冠词）+ `_reader_rich_fields`（`rich_of` 取 `ipa`/例句、`a1_lemma_meta_of` 取 `gender`/`plural`——源 = 主干 LEXICON 4762 全量、覆盖非 A1、`lookup_irregular_verb` 屈折形兜底 `ging→gehen`），reader 分支改「**命中才补，未命中留空不编造**」；`de` 语义 = **原句优先**（有 `sentence_context` 保留生词原句且不补 `example_zh`，避免「德文原句 + 官方例句中文」文不对题）。② **前端**：`syncReaderCardsFromServer` 由 append-only 升级为「**只增 + 只补空**」（`ipa`/`ex`/`gender`/`plural`），不覆盖非空、不碰 `cards`/`log`/`wrong`、幂等 → 进「生词」档即自愈。③ 行为级探针 `tools/wb_reader_rich_backfill_probe.mjs`（13 场景，真实源码切片 + `node:vm` 真跑，含防死测守卫）接入 pytest。测试基线 **993 passed + 1 skipped**（765 + `test_server` 228；2 条既有 Windows 环境失败 `no such table: exam_trials`）；15 个 `tools/*.mjs` 探针零漂移；ruff 全绿 / mypy `--strict` 0 error。**Android 需覆盖安装 v5.9.4 生效**（改动含 `static/`）。
 
 - [x] **v5.10.0**：**A1 富结构收敛（FRAGMENTS 单源 + membership side-car）**（2026-09-21，PR #62，ADR-0015，`/vault-grill` + `/compose-next`）——落地 ADR-0013/0014 明确 defer 的 A1 三源收敛：① **成员清单 + 共享字段单源**（seed∩GOETHE ≈391，非同一表；membership side-car 按 id 承载）；② **字段级优先级**（同形异义 bitte/essen/leben/sie 按 id 带 `ipa`/`ex`，主干 `"None"` 为无性别哨兵）；③ **专有词全部进 FRAGMENTS**；④ **考纲 A1 露出 IPA**；GOETHE plural 完整形不入 5 元组后缀位。门禁：pytest **1081+1** / ruff 0 / mypy `--strict` 0 / Go 全绿 / 探针 16/16。**Android 需覆盖安装 v5.10.0 生效**（改动含 `static/`）。
-- [x] **v5.9.5**：**例句 / 搭配 / 语料 全文检索（内存扫描版）**（2026-09-21，分支 `feature/vocab-search`，/vault-exec **6 Task 全绿**）——新增「🔍 检索」子系统：对 **词条 4762 + 例句 2722 + 介词搭配 691 + 语料全文**（文章/分级短文）做检索，四组结果（词条 / 例句 / 搭配 / 语料）。① **服务端**：`delector/services/search.py`（纯函数 `fold`/`iter_vocab_docs`/`iter_corpus_docs`/`match_score`/`search`——德语变音折叠 `ä→a ö→o ü→u ß→ss` + **中文子串**匹配；字段加权排序；`groups_total` 每组命中数）+ `delector/routes/search.py`（`GET /api/search?q=&scope=&limit=`，注册于 `main` **之前**）。② **前端**：`view-search` + `static/js/search.js`（顶栏 `nav-btn-search` **+ 移动 dock `mob-btn-search`**、四组渲染、**高亮先 `esc()` 再 `<mark>`**、空态/降级、语料 source 分叉跳转）。③ **截断语义拆分（T6）**：`truncated` **仅**表"语料 hard cap 未扫完"（真异常）；`limit` 每组限量由 `groups_total` 表达（组尾「仅显示前 N 条（命中 M）」）——修「几乎每次搜索都弹 ⚠ 结果已截断」的噪音。④ **测试工程**：行为探针 `tools/wb_search_probe.mjs`（**真实切片 `node:vm`**，4 场景 7 断言：XSS / 四组 / 空态 / 截断提示）+ **性能守卫**（8175 词库 + ~195KB 语料，单次 min≈**21.7ms** < 50ms）+ **注册守卫**（AST）接入 CI。**技术路线 = 内存扫描（不落库）**；**FTS5 被 Spike 否决**（`unicode61` 对 CJK 不切词 / `trigram` 要求查询 ≥3 字符致中文**两字词全废** / Android 内嵌 sqlite FTS5 不确定 / 规模远未达 ADR-0014 门槛）——见 ADR-0014 与 `docs/specs/2026-09-20-vocab-search-design.md`。测试基线 **1071 passed + 1 skipped**（843 + `test_server` 228；2 条既有 Windows 环境失败 `no such table: exam_trials`）；全 `tools/*.mjs` 探针零漂移；ruff 全绿 / mypy 双轨（strict + skip tests）0 error。**Android 需覆盖安装 v5.9.5 生效**（改动含 `static/`）。**已知小限制**：`_highlight` 在 `esc()` 后定位，查询恰为 HTML 实体名子串时 `<mark>` 误插实体内部（**非 XSS**，待后续修）。
+- [x] **v5.9.5**：**例句 / 搭配 / 语料 全文检索（内存扫描版）**（2026-09-21，分支 `feature/vocab-search`，/vault-exec **6 Task 全绿**）——新增「检索」子系统：对 **词条 4762 + 例句 2722 + 介词搭配 691 + 语料全文**（文章/分级短文）做检索，四组结果（词条 / 例句 / 搭配 / 语料）。① **服务端**：`delector/services/search.py`（纯函数 `fold`/`iter_vocab_docs`/`iter_corpus_docs`/`match_score`/`search`——德语变音折叠 `ä→a ö→o ü→u ß→ss` + **中文子串**匹配；字段加权排序；`groups_total` 每组命中数）+ `delector/routes/search.py`（`GET /api/search?q=&scope=&limit=`，注册于 `main` **之前**）。② **前端**：`view-search` + `static/js/search.js`（顶栏 `nav-btn-search` **+ 移动 dock `mob-btn-search`**、四组渲染、**高亮先 `esc()` 再 `<mark>`**、空态/降级、语料 source 分叉跳转）。③ **截断语义拆分（T6）**：`truncated` **仅**表"语料 hard cap 未扫完"（真异常）；`limit` 每组限量由 `groups_total` 表达（组尾「仅显示前 N 条（命中 M）」）——修「几乎每次搜索都弹 结果已截断」的噪音。④ **测试工程**：行为探针 `tools/wb_search_probe.mjs`（**真实切片 `node:vm`**，4 场景 7 断言：XSS / 四组 / 空态 / 截断提示）+ **性能守卫**（8175 词库 + ~195KB 语料，单次 min≈**21.7ms** < 50ms）+ **注册守卫**（AST）接入 CI。**技术路线 = 内存扫描（不落库）**；**FTS5 被 Spike 否决**（`unicode61` 对 CJK 不切词 / `trigram` 要求查询 ≥3 字符致中文**两字词全废** / Android 内嵌 sqlite FTS5 不确定 / 规模远未达 ADR-0014 门槛）——见 ADR-0014 与 `docs/specs/2026-09-20-vocab-search-design.md`。测试基线 **1071 passed + 1 skipped**（843 + `test_server` 228；2 条既有 Windows 环境失败 `no such table: exam_trials`）；全 `tools/*.mjs` 探针零漂移；ruff 全绿 / mypy 双轨（strict + skip tests）0 error。**Android 需覆盖安装 v5.9.5 生效**（改动含 `static/`）。**已知小限制**：`_highlight` 在 `esc()` 后定位，查询恰为 HTML 实体名子串时 `<mark>` 误插实体内部（**非 XSS**，待后续修）。
 
-- [x] **v5.11.0**：**遇见区 i+1 补齐（内容放量 + 就近选材）**（2026-09-23，PR #64，`/vault-spark` → `/vault-plan` → `/vault-exec` **6 Task 全绿 + 2 轮 REVISE**）——补齐北星「遇见区 i+1 阅读桥」的两个缺口。① **内容放量**：预置分级短文 **4 → 7 篇**（A1×2/A2×2/B1×3；复用仓库既有 `OFFICIAL_CORPUS`，`build_encounter_seed.py` 默认分级 `A1,A2` → `A1,A2,B1`），并为每包**预计算** `analysis.lemma_seq`（annotate 口径：剔除 `is_space`、保留标点）→ 运行期零 spaCy 即可算覆盖率。② **存量可升级**：`seed_preset_encounter_texts` 由**空库守卫**升级为**版本闸 + 只增 + 只补空 + 幂等**（`PRESET_SEED_VERSION = 2` + `app_settings["encounter_seed_version"]`）——非空库设备**零操作**补装新增 3 篇，并对旧行**只补空** `lemma_seq`（其余列与其余键逐字段不动）；**不引墓碑**（升级只补一次，用户删除的预置包不会每次启动复活）。语义遵循 Vault `01-Rules/STORED-DATA-BACKFILL` / 项目红线 12。③ **就近选材**：新增只读端点 `GET /api/encounter/texts/index`（零 spaCy、零写库、**不挂**本机闸、未分析行两字段 `null` 但**不丢行**）+ 前端零依赖纯函数 `static/js/enc-i1.js`（`I1_BANDS`/`bandOf`/`coverageOf`/`rankEntries`/`topPick`/`hasCoverage`）+ 遇见区列表**徽章（✅ 正好读 / 偏简单 / 偏难）与「👉 建议先读」推荐条**；索引失败**完全降级**回原列表，未背词显示引导文案。**已背词判定仍永远在本机**（ADR 红线：服务端只给词序列，覆盖率一律前端算）。④ **硬不变量 I-1**：索引 `lemma_seq` 与 `annotate` 逐 token 序列**全序列逐元素相等** + 分母相等 + rate **逐位相等**（反绿变异「让 annotate 也丢标点」→ 7 篇全红）。⑤ **测试工程**：行为探针 `tools/wb_enc_i1_probe.mjs`（`node:vm` 切**真实源码**，38 断言，三处变异实红）+ `tests/test_encounter_i1_consistency.py` 端到端一致性。门禁：**1109 passed + 1 skipped**（非 server 半 881 + `test_server` 228；2 条既有 Windows 环境失败 `no such table: exam_trials`）；ruff 0 / mypy `--strict` 0 / Go 8 包全绿 / 全 `tools/*.mjs` 零漂移。**Android 需覆盖安装 v5.11.0 生效**（改动含 `static/`）。**已知小限制（非阻塞）**：I-1 测试的 known 集合未按 `deck-bridge` 剥冠词规则构造（强形式断言已覆盖口径一致性）；`pyproject.toml` 的 mypy `exclude` 含裸子串 `build` 致 `tools/build_*.py` 目录模式漏检（既有配置缺陷，待单独立项）。
+- [x] **v5.11.0**：**遇见区 i+1 补齐（内容放量 + 就近选材）**（2026-09-23，PR #64，`/vault-spark` → `/vault-plan` → `/vault-exec` **6 Task 全绿 + 2 轮 REVISE**）——补齐北星「遇见区 i+1 阅读桥」的两个缺口。① **内容放量**：预置分级短文 **4 → 7 篇**（A1×2/A2×2/B1×3；复用仓库既有 `OFFICIAL_CORPUS`，`build_encounter_seed.py` 默认分级 `A1,A2` → `A1,A2,B1`），并为每包**预计算** `analysis.lemma_seq`（annotate 口径：剔除 `is_space`、保留标点）→ 运行期零 spaCy 即可算覆盖率。② **存量可升级**：`seed_preset_encounter_texts` 由**空库守卫**升级为**版本闸 + 只增 + 只补空 + 幂等**（`PRESET_SEED_VERSION = 2` + `app_settings["encounter_seed_version"]`）——非空库设备**零操作**补装新增 3 篇，并对旧行**只补空** `lemma_seq`（其余列与其余键逐字段不动）；**不引墓碑**（升级只补一次，用户删除的预置包不会每次启动复活）。语义遵循 Vault `01-Rules/STORED-DATA-BACKFILL` / 项目红线 12。③ **就近选材**：新增只读端点 `GET /api/encounter/texts/index`（零 spaCy、零写库、**不挂**本机闸、未分析行两字段 `null` 但**不丢行**）+ 前端零依赖纯函数 `static/js/enc-i1.js`（`I1_BANDS`/`bandOf`/`coverageOf`/`rankEntries`/`topPick`/`hasCoverage`）+ 遇见区列表**徽章（正好读 / 偏简单 / 偏难）与「建议先读」推荐条**；索引失败**完全降级**回原列表，未背词显示引导文案。**已背词判定仍永远在本机**（ADR 红线：服务端只给词序列，覆盖率一律前端算）。④ **硬不变量 I-1**：索引 `lemma_seq` 与 `annotate` 逐 token 序列**全序列逐元素相等** + 分母相等 + rate **逐位相等**（反绿变异「让 annotate 也丢标点」→ 7 篇全红）。⑤ **测试工程**：行为探针 `tools/wb_enc_i1_probe.mjs`（`node:vm` 切**真实源码**，38 断言，三处变异实红）+ `tests/test_encounter_i1_consistency.py` 端到端一致性。门禁：**1109 passed + 1 skipped**（非 server 半 881 + `test_server` 228；2 条既有 Windows 环境失败 `no such table: exam_trials`）；ruff 0 / mypy `--strict` 0 / Go 8 包全绿 / 全 `tools/*.mjs` 零漂移。**Android 需覆盖安装 v5.11.0 生效**（改动含 `static/`）。**已知小限制（非阻塞）**：I-1 测试的 known 集合未按 `deck-bridge` 剥冠词规则构造（强形式断言已覆盖口径一致性）；`pyproject.toml` 的 mypy `exclude` 含裸子串 `build` 致 `tools/build_*.py` 目录模式漏检（既有配置缺陷，待单独立项）。
 
-- [x] **v5.12.0**：**遇见区「已读状态 + 推荐顺延」**（2026-09-24，PR #65，`/vault-spark` → `/vault-plan` → `/vault-exec` **3 Task 全绿 + 3 轮 REVISE**）——补上 v5.11.0 推荐机制**自造的新需求**：「读过没」此前不是一等状态，而推荐基于覆盖率、与读没读过无关 → 用户按推荐读完那篇后推荐**不顺延**（可能反复推同一篇）、列表也看不出进度（4 篇时不明显，7 篇起是主诉求）。① **打开即记已读**：`openText` 渲染成功后写 `localStorage["delector_encounter_read_v1"]`；键名用 `delector_` 前缀是**有意的**——`static/js/cards.js` 的**前缀即备份契约**（`delector_`/`wb.` 随备份导出+还原，`enc.` 是设备本地偏好），故已读**自动随备份迁移**且 `cards.js` 零改动；存时间戳（`{v:1, read:{id: tsMs}}`）为「最近读过/读几次」留扩展位。② **列表显示**：卡片带 `✓ 已读` + `.is-read` 轻降权；标记置于 `.encounter-card-meta` **段内部**（**不新增 `.encounter-card` 的 grid 子项**，避免破坏 v5.11.0 的 4 列布局）；**排序不变**（不叠第二层排序）。③ **推荐顺延**：`renderI1Hint` 改用 `pickUnread` 跳过已读——i+1 读完 → 「i+1 都读完了，试试《X》（偏简单 96%）」；本就一篇 i+1 都没有 → 中性「试试下一篇：《X》」；全部读完 → 「🎉 N 篇都读过了」；未背词 → 引导文案**优先**；`ranked` 空/非数组 → 隐藏（回到 v5.11.0 行为）。④ **工程**：新增零依赖纯函数 `static/js/enc-read.js`（`loadRead`/`markRead`/`isRead`/`unmarkRead`/`pickUnread`，与 `enc-i1.js` 同纪律）+ 行为探针 `tools/wb_enc_read_probe.mjs`（`node:vm` 切**真实源码**，35 断言；三项变异实红：去幂等早退 / `pickUnread` 返首条 / `loadRead` 坏 JSON 改 throw）。⑤ **服务端零改动**（无新端点/表/迁移）；**已读本机判定**（不走 LAN 同步，跨端不一致为已知限制）。门禁：**1119 passed + 1 skipped**（891 + 228；2 条既有 Windows 环境失败 `no such table: exam_trials`）/ ruff 0 / mypy `--strict` 0 / Go 8 包全绿 / 全 `tools/*.mjs` 零漂移。**Android 需覆盖安装 v5.12.0 生效**（改动含 `static/`）。**已知限制**：`backToList()` / `refreshList()` 复用列表渲染时只补 `readState`、不重算 i+1 排序与徽章（保持 v5.11.0 既有行为，属有意的最小修复）。
+- [x] **v5.12.0**：**遇见区「已读状态 + 推荐顺延」**（2026-09-24，PR #65，`/vault-spark` → `/vault-plan` → `/vault-exec` **3 Task 全绿 + 3 轮 REVISE**）——补上 v5.11.0 推荐机制**自造的新需求**：「读过没」此前不是一等状态，而推荐基于覆盖率、与读没读过无关 → 用户按推荐读完那篇后推荐**不顺延**（可能反复推同一篇）、列表也看不出进度（4 篇时不明显，7 篇起是主诉求）。① **打开即记已读**：`openText` 渲染成功后写 `localStorage["delector_encounter_read_v1"]`；键名用 `delector_` 前缀是**有意的**——`static/js/cards.js` 的**前缀即备份契约**（`delector_`/`wb.` 随备份导出+还原，`enc.` 是设备本地偏好），故已读**自动随备份迁移**且 `cards.js` 零改动；存时间戳（`{v:1, read:{id: tsMs}}`）为「最近读过/读几次」留扩展位。② **列表显示**：卡片带 `已读` + `.is-read` 轻降权；标记置于 `.encounter-card-meta` **段内部**（**不新增 `.encounter-card` 的 grid 子项**，避免破坏 v5.11.0 的 4 列布局）；**排序不变**（不叠第二层排序）。③ **推荐顺延**：`renderI1Hint` 改用 `pickUnread` 跳过已读——i+1 读完 → 「i+1 都读完了，试试《X》（偏简单 96%）」；本就一篇 i+1 都没有 → 中性「试试下一篇：《X》」；全部读完 → 「N 篇都读过了」；未背词 → 引导文案**优先**；`ranked` 空/非数组 → 隐藏（回到 v5.11.0 行为）。④ **工程**：新增零依赖纯函数 `static/js/enc-read.js`（`loadRead`/`markRead`/`isRead`/`unmarkRead`/`pickUnread`，与 `enc-i1.js` 同纪律）+ 行为探针 `tools/wb_enc_read_probe.mjs`（`node:vm` 切**真实源码**，35 断言；三项变异实红：去幂等早退 / `pickUnread` 返首条 / `loadRead` 坏 JSON 改 throw）。⑤ **服务端零改动**（无新端点/表/迁移）；**已读本机判定**（不走 LAN 同步，跨端不一致为已知限制）。门禁：**1119 passed + 1 skipped**（891 + 228；2 条既有 Windows 环境失败 `no such table: exam_trials`）/ ruff 0 / mypy `--strict` 0 / Go 8 包全绿 / 全 `tools/*.mjs` 零漂移。**Android 需覆盖安装 v5.12.0 生效**（改动含 `static/`）。**已知限制**：`backToList()` / `refreshList()` 复用列表渲染时只补 `readState`、不重算 i+1 排序与徽章（保持 v5.11.0 既有行为，属有意的最小修复）。
 
 - [x] **v5.12.1**：**工程债收口（真门禁 + 依赖升级 + 测试隔离）**（2026-09-26，PR #66 / #67 / #68）——**本版无用户可见改动**（`static/` 相对 v5.12.0 **零差异**，四平台制品功能等同 v5.12.0），发版目的是把"门禁在跑、但判别力是假的"这一类缺陷连同依赖面一起收干净。① **路由守卫去对象身份**（`chore/toolchain-guards`）：比对键从「端点函数**对象**」改为 **HTTP 语义键** `(完整 path, METHOD)`（已注册侧取自 `app.openapi()["paths"]`，文档化契约、跨版本稳定）→ 对上游 `include_router` / `APIRoute` 实现漂移**免疫**；判别力反证：临时从 `delector/routes/__init__.py` 摘掉一个模块的 `include_router` → 守卫必红且 `missing` **只列该模块 5 条**（改造前是"全量 115 条"**误报**），`cp` 还原后逐字节一致。② **mypy 真覆盖**：`pyproject.toml` 的 `exclude` 从**裸子串** `build` 锚定为 `(^|/)build(/|$)` → `tools/` 全部 **11** 个 `.py` 纳入 `mypy --strict`（覆盖 **62 → 68** files），4 个产包脚本的 **47** 个注解债清账至 0（**仅注解、零行为**）。③ **依赖升级 + 撤销 dependabot ignore**：`fastapi 0.136.3 → 0.141.1`（starlette 保持 `1.6.0`，唯一变量是 fastapi）——**前置是"守卫已免疫 + 基线真绿"**，因此 2026-09-09 v5.4.0 发版 CI 三平台全炸的那类漂移不再复现；同时**撤销** `.github/dependabot.yml` 对 fastapi/starlette 的 `ignore`，恢复"周更提 PR + `ci.yml` 全量门禁兜底"，并在注释里留下立场：**再遇同类问题优先修守卫，而不是加 ignore**。④ **测试库隔离（真根因）**：消除跨模块 `DATABASE_PATH` / `PROGRESS_DB_PATH` 环境串扰（模块级 env 抢占 + 删库 → 空库 `no such table: exam_trials`）→ **半 A 首次 `0 failed`**；并新增**根因级 AST 守卫**（禁止测试模块在模块级直赋库 env），防止同类回归。⑤ **黄牌收口**：I-1 一致性测试的 known 集合改按 `deck-bridge.js` 生产语义构造（**剥冠词 + 小写**）+ 冠词表**双向同源守卫**（改任一侧即红）；变异自检表去重；`android/app/build.gradle` 补写 `fastapi<0.100.0` / `pydantic<2.0.0` 的**分离理由**（Chaquopy 只能装纯 Python 依赖 → pydantic v2 需 Rust 的 `pydantic-core` → 锁 v1 → fastapi 连带 <0.100；**勿照桌面 `requirements.txt` 对齐**）。门禁：**1124 passed + 1 skipped**（分半：非 server **896** + `test_server` **228**）/ `ruff check .` 0 / mypy **两道**（`delector`+`tools` 68 files、`tests` 69 files）均 0 error / 全 `tools/*.mjs` 探针零漂移 / Go 8 包全绿。**无需 Android 覆盖安装**（无 `static/` 改动）；桌面端亦无行为变化。
 

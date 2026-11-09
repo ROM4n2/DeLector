@@ -65,8 +65,8 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 | 平台               | 版本                   | 说明                                                                                                                                                                                                                                                       | 下载通道                                                                                    |
 | ------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | **Windows x64** | `v5.22.0` | 原生桌面窗口 + 系统托盘，免装 Python，解压双击 `DeLector.exe`；需 Win10+ 与 WebView2 运行时（Win11 自带；Win10 缺运行时的表现见[已知限制](#已知限制)）；首次启动把数据放到 `%LOCALAPPDATA%\DeLector`                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.22.0)     |
-| **macOS**       | `v5.22.0` | 解压运行 `start` 脚本，自动启动服务并打开默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.22.0)  |
-| **Linux x64**   | `v5.22.0` | 解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.22.0)  |
+| **macOS**       | `v5.22.0` | 解压后进入 `DeLector-v5.22.0-macOS/`，运行其中的裸可执行文件 `./DeLector`（不是 `.app` 包）。正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`。包未做代码签名与公证，若被 Gatekeeper 拦截请右键「打开」，或在终端执行 `xattr -d com.apple.quarantine DeLector`。 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.22.0)  |
+| **Linux x64**   | `v5.22.0` | 解压后进入 `DeLector-v5.22.0-Linux-x64/`，运行 `./DeLector`（正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`）。包在 CI 的 Ubuntu 环境构建，未在其他发行版验证。 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.22.0)  |
 | **Android**     | `v5.22.0` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；正式包只出 **arm64-v8a**，CI 用 `keytool` 校验 APK 与 keystore 的 SHA256 证书指纹一致。**arm64 真机未验证**（仅 x86_64 模拟器）。 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.22.0) |
 
 ---
@@ -92,11 +92,11 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 
 ## 核心特性
 
-- **德语精读工作台**：CEFR 词阶热力图 + 0ms 歌德离线词库 + 荧光便签、AI 导读与打印级《精读指南》导出。
+- **德语精读工作台**：CEFR 词阶热力图 + 歌德离线词库 + 荧光便签、AI 导读与打印级《精读指南》导出。
 - **句法拓扑与 AST**：经典五场域（VF/LK/MF/RK/NF）色谱条切分 + 5 大从句抽象语法树 + 一键制 Anki 语法卡。
 - **FSRS 卡盒与背词工作台**：3D 拟真翻牌 + FSRS 现代自适应排程（消解 Ease Hell）；A1/A2/B1 多档背词台（`VOKABELN`）与介词矩阵视图。
 - **备考域 A1–B1**：歌德全真听说读写考场工坊（写作 / 听力 / 阅读 / 口语 / 词表）+ 德福 C-Test + 听力微训 / 长难句精读工坊。
-- **遇见区分级阅读**：i+1 阅读桥 + 逐词注解 + 生词一键进卡，配套桌面→手机局域网 P2P 静默同步。
+- **遇见区分级阅读**：i+1 阅读桥 + 逐词注解 + 生词一键进卡，配套桌面→手机局域网 P2P 同步（WebRTC Stage B；真机双端尚未验证）。
 - **内联 IDE 写作工坊与伴读宠物**：行内实时语法诊断 + VSCode 级 Inlay Hints；Eule 与伙伴混合双模伴读。
 
 > 完整功能清单见 [FEATURES.md](FEATURES.md)。
@@ -200,7 +200,7 @@ DeLector/
 
 ## 已知限制
 
-- **Win10 需先装 WebView2 运行时**（Win11 自带）：缺运行时双击 `DeLector.exe` 会提示安装后退出，不会白屏。
+- **Win10 需先装 WebView2 运行时**（Win11 自带）：缺运行时的表现为启动阶段报错退出（历史记录；本版未在 Win10 上复验具体提示文案）。
 - **冷启动时间未在 v5.22.0 重测**：历史实测（v5.17 时代）源码路径暖启动约 5.4s、便携产物冷启动约 8.5s，其中约 2s 是建服前的端口/身份校验；当前版本的具体数字以本机实测为准，本页不沿用旧值。
 - **`launch.log` 有已知的整行丢失**（Windows 上多个句柄并发追加同一文件，历史实测约 3% 的行整行消失、不是半行）：排查启动问题时若日志缺行，先按此排除；`tools/first_screen_from_log.py` 报退出码 3/5（缺锚行）不必然等于日志损坏。
 - **Android 覆盖安装才生效**：含 `static/` 改动的版本必须覆盖安装（应用按 `versionCode` 判定重解包）。
