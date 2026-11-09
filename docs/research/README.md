@@ -80,4 +80,7 @@
   - **核心价值**：按「Android 原生 → 混合外壳 → Web 首屏 → 可迁移性」四层核对一手来源（Android 启动指标 / Splash / `startUpWebView`、Electron / Tauri / VS Code、NN/g、web-vitals / Lighthouse / MDN）。给出 4.0s 端到端的分段归因：**2.3s 是「壳等 Python sidecar」，不是 Web 首屏**；可并行余量仅约 0.55s 轮询对齐 + WebView 预热，1.2s 重依赖 import 是进程内结构性成本。结论：业界顺序是「先削串行，再诚实遮盖」，本项目缺口集中在 TTFD 口径缺失、splash 撤场看定时器而非首帧、`androidx.webkit` 1.10.0 缺 `startUpWebView`。未核实项见文末 §7（含 web.dev 原文抓取失败、预热收益无官方数字、实测未复跑）。
 - [2026-11-09 AndroidX WebView 异步启动（`startUpWebView`）可行性调研](2026-11-09-androidx-webview-startup-research.md)
   - **核心价值**：下载 `webkit-1.16.0.aar` 读元数据实证 **`minCompileSdk=33` / `minAGP=7.2.0` / `minSdk=24`**，推翻「必须升 compileSdk 36 + AGP 8.9 + Gradle 8.11」的假设——本项目（34 / 8.4.2 / 8.6 / 24）已满足，升级只需一行依赖。同时给出 AGP↔API 36 的官方门槛、Chaquopy 15.0.1 仅支持 AGP ≤8.5（若要升 AGP 必须换 16.1）的官方版本表，以及 `startUpWebView` 的调用时机、`shouldRunUiThreadStartUpTasks(false)` 分片、失败降级与审计 API；未证实项单独列清单。
+- [2026-11-09 `startUpWebView` 预初始化 Chromium 的负结果存档](2026-11-09-android-webview-prestartup-negative-result.md)
+  - **核心价值**：把「并行 WebView 初始化抵消 #320 的 +738ms」这一假设实测证伪。两轮各 7 次 TTFD（x86_64 模拟器）：基线 4095 / 3938ms，`startUpWebView` 版 4067 / 4005ms，通过线 3966ms 未达、放弃线 4166ms 未破——付出 APK +0.08%、dex 方法数 +1,292（+2.18%）的成本，换来 0 收益。归因：Python 启动与 Chromium 初始化抢同一份 CPU，且 #319 之后 TTFD 下界已不在 WebView 上。附带结论：#320 的 +19% 回退在同一构建下被吸收（≈4005ms vs 4704ms），但「挪创建位置」本身无价值；实现留档于 `archive/negative-webview-prestartup`。
+
 
