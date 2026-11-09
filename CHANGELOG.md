@@ -20,6 +20,12 @@
 - **splash 撤场根因修复**：旧实现 `loadUrl` 后固定等 200ms 就撤 splash，服务慢或设备慢时首帧尚未提交，用户看到的是白屏 / 半成品。现以 `WebViewClient.onPageCommitVisible` 为准，`postOnAnimation` 延后一帧撤场；`onPageFinished` 仅作兜底，`revealWebView` 幂等，失败路径仍保留 splash 与可选中错误文本。
 - **调研与负结果归档**：首屏启动业界实践调研迁入 `docs/research/` 并登记索引；Android 启动耗时压缩计划入库；`androidx.webkit` 的 `startUpWebView` 预初始化 Chromium 实测为 **TTFD 负结果，未采用**，另有 ADR-0031 记录 Python import 迁移候选与红线 1 判定保全。**未验证**：androidx 升级仅为调研结论（现有 compileSdk / AGP 已满足 AAR 元数据要求），本版未改构建链、未实施；TTFD 新口径与 splash 修复未在 arm64 真机点检。
 
+### 词卡写入幂等（部分修复）
+
+- **同词重复提交不再产生新卡**：新增 `delector/core/vocab_identity.py` 作为词卡同一性唯一入口（身份 = `lemma_key(lemma)` + `word_key(word)`），`POST /api/cards/vocab` 与伴学提议确认改为在 `BEGIN IMMEDIATE` 写事务内先查后写；已存在同身份卡时只补空字段，不覆盖用户已填内容。读侧台账与卡池复用同一归一函数；`word_key` 不去冠词，保留 `die Wohnung` 与 `Wohnung`、介词搭配 `bestehen auf/aus/in` 等合法多卡。
+- **明确是部分修复，不是「重复卡已修复」**：未建 UNIQUE 索引，**存量重复仍在库里**（规模未知，须先统计再定合并策略）；绕过该入口的写入（旧客户端、直接 SQL、备份还原）仍可能产生重复。读侧按「共 N 张」去重显示。
+- **验证与边界**：新增 `tests/test_vocab_identity_upsert.py`（幂等、变体归一、介词/冠词多卡、台账与池同行、伴学确认、并发、绕过直插）；并发护栏为 TestClient 8 线程实测（全 200 且落 1 行），**不是**真机多进程压测。**未验证**：存量重复的真实规模与合并策略（Step 2 未启动）。
+
 ### 制度闸（把约定变成机械检查）
 
 - **docs 归置闸**：新增 `tools/check_docs_layout.py` 与对应测试，按各目录 README 的命名和索引登记约定检查 `docs/**`，接入 `static-invariants` 分片（测试进 `unit-2`）。
@@ -35,7 +41,7 @@
 - **arm64 真机未覆盖**：本版仅完成 x86_64 模拟器（API 37）覆盖安装与 `versionCode` 检查，未启动点检；arm64-v8a 真机未安装、未启动、未点检。真机不是本版的发版前置，但不得把模拟器结果当作真机结论。
 - **低端机 OOM 未覆盖**：无低端机设备，内存峰值未测量；Android 存量文章惰性重算在低内存设备上的 OOM 风险无证据、无结论。
 - **iOS 键盘态未覆盖**：无 iOS 设备与 Safari 环境；软键盘弹起后的 `visualViewport`、选区手柄与桌宠避让行为均未验证。
-- **生词卡重复卡缺陷仍在**：`vocab_cards` 表无 UNIQUE 约束，写路径仍是裸 `INSERT`；读侧已对重复卡去重，但数据库里仍可能继续累积重复行。本版未做写入侧修复。
+- **生词卡重复卡只做部分修复**：写入侧已改为幂等 upsert（同词重复提交不再新增），但未建 UNIQUE 索引，**存量重复仍在库中**，读侧按「共 N 张」去重显示；存量合并要等真实重复统计后再定策略，本版不做。
 - **大文章首次打开的重算可能阻塞**：`PROCESSED_JSON_VERSION` 3.6.0 的惰性重算在单篇 GET 内同步执行（未下放线程池），10 万字符上限级文章约 4–5s，期间该篇请求等待；已评估为可接受，本版不改。
 - **Android 启动改动未真机验证**：TTFD 口径、就绪轮询节奏与 splash 撤场修复均未在设备上点检。
 

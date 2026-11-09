@@ -7,12 +7,12 @@
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-2996%2F2999%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-3006%2F3009%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License" />
 </p>
 
-<!-- Tests 徽章口径（可复算，非推算）：v5.22.1 发布提交（2026-11-09 本地全量）。
-     分子 = `python -m pytest tests` 的 2996 passed；分母 = `python -m pytest tests --collect-only -q` 的 2999 collected；
+<!-- Tests 徽章口径（可复算，非推算）：v5.22.1 发布提交（2026-11-09 本地全量，基线含 #325）。
+     分子 = `python -m pytest tests` 的 3006 passed；分母 = `python -m pytest tests --collect-only -q` 的 3009 collected；
      差集 2 skipped + 1 xfailed。环境：Windows 11 / Python 3.11（.venv），仓库根 gitignored 的本地 DB 残留临时移开。
      换提交后两条命令都需重跑，不得沿用旧数。 -->
 
@@ -55,6 +55,7 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 
 > **v5.22.1 最新版本亮点（2026-11-09）**：
 > - **文章详情响应体去重**：`processed_json` 不再与展开字段重复回传，100 字与 10 万字样本响应体均缩小约 57%。
+> - **词卡写入幂等（部分修复）**：同词重复提交不再产生新卡（身份归一 + `BEGIN IMMEDIATE` 先查后写）；存量重复仍在库中，读侧按「共 N 张」去重显示。
 > - **Android 启动系列**：建立 TTFD 口径并接入 `reportFullyDrawn()`，就绪轮询前 50 次收紧为 120ms，splash 改为首帧提交后撤场（不再用 200ms 定时器猜）。均未在真机点检。
 > - **制度闸**：docs 归置检查、CI 卡死可识别为 failure、PR 模板新增根因 / 遮盖必答项。
 > - **文档与跨平台说明**：macOS / Linux 运行说明按 tar 包实际结构改写，清理全仓 emoji 与无证据表述。
@@ -208,7 +209,7 @@ DeLector/
 - **Android 装不回旧版**：`versionCode` 只升不降，装错版本只能卸载重装（会清应用私有数据，请先导出备份）。
 - **Android 主路径已统一到 spaCy**：按 [ADR-0028](docs/adr/2026-11-06-adr-0028-android-main-path-spacy-lazy-load.md) 删除平台硬编码的纯 Python 降级；模型缺失/加载失败时句法专线硬失败，不返回近似结果。
 - **存量文章按需惰性重算（3.6.0 起）**：升级前落库的旧结果会在**首次打开该篇时**按需重算并回写；启动路径不扫全表、不批量重算。重算在单篇 GET 内**同步**执行，10 万字符上限级文章约 4–5s，期间只有该篇请求等待。重算失败会保留旧结果并返回 200（日志 warning，响应带 `processed_upgrade_failed: true`），`raw_text` / 生词卡 / 批注从不被改动。旧结果快照在 `processed_json_backup`，可用 `python tools/recompute_processed.py --restore` 逐字回退。
-- **生词卡重复卡缺陷仍在**：`vocab_cards` 表没有 UNIQUE 约束，写路径仍是裸 `INSERT`；读侧已去重，但数据库里可能继续累积重复行。
+- **生词卡重复卡只做部分修复**：写入侧已改为幂等 upsert（同词重复提交不再新增），但未建 UNIQUE 索引、存量重复未合并；读侧按「共 N 张」去重显示。存量合并要等真实重复统计后再定策略。
 - **Android 真机、低端机与 iOS 均未覆盖**：本版仅完成 x86_64 模拟器（API 37）覆盖安装与 `versionCode` 检查，未启动点检；arm64 真机未安装点检，低端机内存峰值与 OOM 未测量，iOS Safari 键盘态未验证。真机与低端机不是发版前置，但不得把模拟器结果当作真机结论。
 
 ---
