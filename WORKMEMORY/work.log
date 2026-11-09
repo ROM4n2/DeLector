@@ -423,3 +423,18 @@ Caps: filesystem-read, filesystem-write, shell-exec
 3. 引用全链对齐：更新 ADR-0029/0030、历史 plans、src/css/06-deck-exam.css、static/style.css、Android sync 与全站相关相对引用，grep 零残留失效路径。
 4. 冗余清理：物理移除根目录历史遗留且 gitignored 的非跟踪目录 D:/Code/DeLector/.superpowers/。
 5. 验证：九道机械闸、主站与 workbench 视觉闸、ruff、mypy strict 全绿。
+
+### 2026-11-09 16:34 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
+任务：详情 GET 去掉重复的 processed_json 原始序列化列（10 万字文章响应 30.6MB 中 57% 是同一份 payload 写两遍）。基线 78dda1b，worktree D:\Code\DeLector-payload，分支 fix/article-payload-dedup。
+不做：不改 stats_json / 列表端点 / 重算逻辑 / vocab_cards / /api/health；不做分页、增量、按需加载。
+
+### 2026-11-09 16:44 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
+产出：PR #310（fix/reader: 详情响应去掉重复的 processed_json 原始列），不自动合并。commit 62da280。
+改动：routes/articles 在 data.update(pj) 前 pop processed_json（附保留依据注释）；api-types.js 删除该 @property；tests/test_get_endpoints_with_writes.py 新增 B4（响应无 processed_json 且 sentences/stats/version/raw_text 仍在），未放松任何既有断言。
+实测（同机同一篇，HTTP 改前→改后）：100 字 39,672→17,030 B（-57.1%），GET 9→9ms；10 万字 30,590,544→13,064,821 B（-57.3%），GET 361/384→262/244ms。
+真浏览器（headless Edge + CDP，临时 DB）：100 字与 10 万字两篇正文 token、点词 #d-word + CEFR、句法/AST 面板全正常。
+CI（run 42587245282，head 62da280）逐 job：Detect packaging-surface / Go Gates / Go↔Python / cost-cold-start / cost-guards / integration-heavy / unit-1..4 / Secret Scan / Static Invariants / Windows Portable Smoke 全 pass；Master Direct-Push Scope Gate skipping（PR 场景按设计不跑）。无 failure / cancelled。
+已知未做：stats_json（247B，同类冗余）按用户范围保留；raw_text 未动。
+清理：验证服务已停；临时 DB/脚本均在 %TEMP%；worktree D:\Code\DeLector-payload 推送后移除，分支保留。
