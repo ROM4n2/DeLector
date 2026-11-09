@@ -25,3 +25,4 @@ $ go vet ./... && gofmt -l . && go test -race ./...
 - [ ] 敏感设置/删除类端点过 `_require_localhost` 闸
 - [ ] 版本面无影响（或已同步五件套：sw.js / index.html / build.gradle / README / OVERVIEW）
 - [ ] `pytest -q` 与 `go test -race ./...` 本地全绿
+- [ ] 修的是根因而非遮盖症状；若为遮盖，已写明掩盖的回归类型与它仍能被发现的保证（遮盖时必填）
