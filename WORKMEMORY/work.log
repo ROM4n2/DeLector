@@ -438,3 +438,9 @@ Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
 CI（run 42587245282，head 62da280）逐 job：Detect packaging-surface / Go Gates / Go↔Python / cost-cold-start / cost-guards / integration-heavy / unit-1..4 / Secret Scan / Static Invariants / Windows Portable Smoke 全 pass；Master Direct-Push Scope Gate skipping（PR 场景按设计不跑）。无 failure / cancelled。
 已知未做：stats_json（247B，同类冗余）按用户范围保留；raw_text 未动。
 清理：验证服务已停；临时 DB/脚本均在 %TEMP%；worktree D:\Code\DeLector-payload 推送后移除，分支保留。
+
+### 2026-11-09 18:05 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
+任务：压缩 Android 启动耗时，先立 plan 再按 ③（收紧就绪检测）→ ②（Python 启动与 WebView 并行）两个独立 PR 实施。基线 78dda1b，worktree D:\Code\DeLector-wt-startup。
+不做：① import spacy 挪位（需 ADR，暂缓）、静态资源解包优化、ES module 打包、Perfetto 帧级取证、真机验证。
+约束：不加打包步骤/不改 ABI/不引依赖；每项改前改后同机冷启动实测（3-7 次中位数）；PR 不自动合并。
