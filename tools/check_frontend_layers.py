@@ -350,6 +350,13 @@ LAYER_SPEC: Dict[str, LayerSpec] = {
         ban_rules=("dom", "toast", "timer", "dynamic-eval"),
         allowed_imports=("./core.js",),
     ),
+    # ADR-0032 阶段二：主站应用数据入口（设置/导入/订阅源/卡片/备份/备考）。
+    # 视图层不得再直接 import api() 或拼 /api/ 路径；换实现只换这一层。
+    "data-client.js": LayerSpec(
+        layer="L2 持久化访问层",
+        ban_rules=("dom", "toast", "timer", "dynamic-eval"),
+        allowed_imports=("./core.js",),
+    ),
 }
 
 # L1 纯层硬契约含「零顶层 let/var」⇒ 一并纳管（只收紧，不放松）。
@@ -363,6 +370,8 @@ MUTABLE_STATE_MODULES: Tuple[str, ...] = (
     "wr-api.js",
     "rd-api.js",
     "cp-api.js",
+    # 主站应用数据入口：同样承载「零顶层可变状态」契约。
+    "data-client.js",
     # 纯状态容器自己同样零顶层 `let`（状态只许在 `cardState` 对象里，见设计稿 §6.1）。
     "cd-state.js",
     "cp-state.js",
@@ -874,7 +883,11 @@ _ROUTE_PARAM_RE = re.compile(r"\{[^}]*\}")
 
 
 def _norm_path(p: str) -> str:
-    """路径参数占位归一：后端 `{essay_id}` 与前端模板 `${x}` 都折成 `{}`。"""
+    """路径参数占位归一：后端 `{essay_id}` 与前端模板 `${x}` 都折成 `{}`。
+
+    query/hash 不参与路由匹配：adapter 可以在同一路径上拼查询串（如 feed/items）。
+    """
+    p = p.split("?", 1)[0].split("#", 1)[0]
     return _ROUTE_PARAM_RE.sub("{}", _TPL_INTERP_RE.sub("{}", p))
 
 

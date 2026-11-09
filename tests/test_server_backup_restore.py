@@ -442,7 +442,9 @@ def test_frontend_export_does_not_use_blob_download():
     src = open(os.path.join(ROOT, "static", "js", "cards.js"), encoding="utf-8").read()
     start = src.index("export async function downloadBackupJson")
     export_fn = src[start : src.index("export function uploadBackupJson")]
-    assert "/api/backup/prepare" in export_fn
+    data_client = open(os.path.join(ROOT, "static", "js", "data-client.js"), encoding="utf-8").read()
+    assert "prepareBackup(" in export_fn
+    assert "/api/backup/prepare" in data_client
     assert "/api/backup/download/" in export_fn
     assert "createObjectURL" not in export_fn, "blob: 下载在 Android 上是静默无操作"
     assert "local_storage" in export_fn, "localStorage 必须一起导出（字号/语音/宠物 SVG 只在那里）"

@@ -20,6 +20,7 @@
 """
 
 import importlib.util
+import re
 import shutil
 import subprocess
 import sys
@@ -43,6 +44,7 @@ _LAYER_MODULES = (
     "cd-state.js",
     "cp-api.js",
     "cp-state.js",
+    "data-client.js",
 )
 
 # `cd-state.js` 由「Task 2」落盘（本任务只注册）。夹具树里必须有**占位**文件：
@@ -144,6 +146,7 @@ def rule5_dir(tmp_path: Path) -> Path:
     )
     _write_module(d / "rd-api.js", "import { api } from './core.js';\nexport async function dummy() {}\n")
     _write_module(d / "cp-api.js", "import { api } from './core.js';\nexport async function dummy() {}\n")
+    _write_module(d / "data-client.js", "import { api } from './core.js';\nexport async function dummy() {}\n")
     _write_module(d / "cp-state.js", "export {};\n")
     _write_module(d / _CD_STATE, _CD_STATE_PLACEHOLDER)
     # 规则⑦：受「零顶层可变状态」约束的模块缺席同样会刷 `missing-mutable-state-module`。
@@ -644,6 +647,33 @@ def test_rd_syntax_l1_top_level_let_red(gate: Any, js_dir: Path) -> None:
 _RD_API = "rd-api.js"
 # 锚点取自计划 Task 2 的 Produces（落盘后首个具名远程导出）
 _RD_API_ANCHOR = "export async function removeArticle(id) {"
+
+
+# ══ 2e. ADR-0032 阶段二：视图层不得再直接 import api() / 拼 /api/ 路径 ═════════
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_VIEW_SOURCES = ("main.js", "cards.js", "reader.js")
+
+
+def test_app_views_do_not_reach_the_network_directly() -> None:
+    """数据入口收敛的回归钉子：三个视图文件必须走 adapter/store。
+
+    只检查「直接网络入口」：`api()` 调用与 `api` 的 core import。
+    `/api/` 字面路径与 `fetch(` 一并禁止，防止绕开 data-client.js。
+    """
+    for name in _VIEW_SOURCES:
+        source = (_REPO_ROOT / "static" / "js" / name).read_text(encoding="utf-8")
+        assert "api(" not in source, f"{name} 仍在直接调用 api()"
+        assert not re.search(
+            r"import\s*\{[^}]*\bapi\b[^}]*\}\s*from\s*['\"]\./core\.js['\"]",
+            source,
+        ), f"{name} 仍在从 core.js 直接 import api"
+        assert "fetch(" not in source, f"{name} 仍在直接 fetch"
+
+
+def test_data_client_is_registered_as_l2(gate: Any) -> None:
+    """新增的 data-client.js 必须被闸登记为 L2，否则收敛没有机械保护。"""
+    assert "data-client.js" in gate.LAYER_SPEC
+    assert "data-client.js" in gate.MUTABLE_STATE_MODULES
 
 
 def _rd_api_rules(gate: Any, js_dir_arg: Path) -> list[str]:

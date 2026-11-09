@@ -411,6 +411,40 @@
   border-top: 1px solid var(--rule);
 }
 
+/* I1：旧数据（缓存/内置快照）在屏时，用图标 + 文案 + 虚线形状表达「同步中」，
+   不用仅颜色变化。 */
+.article-sync-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.35rem 0 0.15rem;
+  padding: 0.2rem 0.55rem;
+  border: 1px dashed var(--rule);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--pencil);
+}
+
+.article-sync-chip .ui-ico {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
+.article-row--seed {
+  cursor: default;
+}
+
+.article-row--seed .article-row-arrow {
+  opacity: 0.15;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .article-row--seed:hover .article-row-title {
+    color: var(--ink);
+  }
+}
+
 @media (hover: hover) and (pointer: fine) {
   .article-row:hover {
     background: var(--paper-tint);

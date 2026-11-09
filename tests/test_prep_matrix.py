@@ -117,6 +117,8 @@ from pathlib import Path  # noqa: E402  (刻意置于契约区块，勿重排以
 _ROOT = Path(__file__).parent.parent
 _INDEX = (_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 _CARDS = (_ROOT / "static" / "js" / "cards.js").read_text(encoding="utf-8")
+_DATA_CLIENT = (_ROOT / "static" / "js" / "data-client.js").read_text(encoding="utf-8")
+_RD_API = (_ROOT / "static" / "js" / "rd-api.js").read_text(encoding="utf-8")
 _CD_STATE = (_ROOT / "static" / "js" / "cd-state.js").read_text(encoding="utf-8")
 
 
@@ -127,14 +129,14 @@ def test_segment_button_exists_and_wired():
 
 
 def test_cards_js_has_lazy_fetch_and_local_filter():
-    assert "/api/prep/matrix" in _CARDS, "cards.js 必须调用新端点"
+    assert "/api/prep/matrix" in _DATA_CLIENT, "data-client.js 必须保留 /api/prep/matrix 端点"
     # 缓存已从 cards.js 的 `_prepMatrixCache` 搬进 cd-state.js 的 `cardState.prep.cache`。
     # 只查一半都是死断言：容器有槽位但没人用 = 白存；有人用但无槽位 = 每次重渲染重拉。
     assert "prep: {" in _CD_STATE, "cd-state.js 必须保留 prep 簇（矩阵缓存与筛选状态的唯一宿主）"
     prep_cluster = _CD_STATE.split("prep: {", 1)[1].split("}", 1)[0]
     assert "cache: null" in prep_cluster, "prep 簇必须声明 cache 槽位（懒加载一次的载体）"
     assert "cardState.prep.cache" in _CARDS, "cards.js 必须真的读写 cardState.prep.cache（槽位不得是死字段）"
-    assert "/api/cards/vocab" in _CARDS, "行内入卡必须打到既有 vocab 端点"
+    assert "/api/cards/vocab" in _RD_API, "行内入卡必须打到既有 vocab 端点（rd-api adapter）"
 
 
 def test_cards_js_reuses_save_payload_shape():
