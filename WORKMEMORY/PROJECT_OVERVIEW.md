@@ -23,11 +23,12 @@
 
 ## 当前状态
 
-- **最新发布 v5.23.0（2026-11-10）** —— **词卡写入幂等修复链收口 + Android 冷启动静态壳 + 桌面 B2 提前加载 + App 内已知限制**。
-  - 体验层：存卡反馈区分新增与幂等命中（`created` / `skipped_fields`）、设置页本地「已知限制」说明、Android 首屏静态骨架先行、桌面静态层提前加载与 WebView2 持久化缓存修复。
-  - 数据层：零 DDL、零迁移；词卡身份走行级 UDF（`card_identity` / `card_lemma_key`），空 lemma 与旧库行同源回退；存量重复仍未合并（只堵新增）。
-  - 验证：本版**未**在本地重跑全量 pytest（约束：只跑定向），完整门禁以 CI 的 master push run 为准；四平台资产见 GitHub Releases。
+- **最新发布 v5.23.1（2026-11-10）** —— **阅读页「未就绪显示成加载错误」修复（Android 真机点验）**。
+  - 体验层：文章详情不再在请求内同步等 spaCy 分词——有旧分词结果先返回并标 `processed_stale`，无旧结果且后台预热在加载时回 `503 nlp_loading` + `Retry-After`，前端显示「正在准备德语分词模型」并按有限退避重试；预算耗尽才降级为带「重试」按钮的常驻提示。快速切换文章不串台（占位标题在 `finally` 按令牌复原）。
+  - 内部：`model_loader.get_nlp_readiness()` 零副作用探针；`/api/health` 两分支同挂 `nlp` 字段；快退只在 `prewarm_started` 为真时生效（否则保留 single-flight 同步迁移通道）。
+  - 验证：本地全量 pytest 3036 passed / 3043 collected（1 failed 为本机 GBK 控制台解码问题，master 同样红，与 CI 无关）；`check_release_docs` / `check_index_html_sync` / `check_css_sync` 通过；ruff + 两档 mypy 零错；进入本版的 PR #340 全部 CI 检查通过。
   - **项目状态：2026-11-10 起阶段性暂停**，短期内不再推进。接手先读 [`handoff_2026-11-10-project-pause.md`](handoff_2026-11-10-project-pause.md)。
+- **上一版 v5.23.0**：词卡写入幂等修复链收口 + Android 冷启动静态壳 + 桌面 B2 提前加载 + App 内已知限制。
 - **历史里程碑归档**：v5.22.1（文章响应体去重 / Android TTFD 口径）、v5.22.0（视觉材质、桌宠 P1–P4、复习台账、存量重算 3.6.0）、v5.21.1（伴学 SSE 跨 chunk 分帧修复）、v5.21.0（伴学页面级能力与 HITL 闭环）、v5.20.2（阅读排版与 CEFR 透视）、v5.20.1（Android 拖拽与 Apache 2.0）、v5.20.0（伴学 Agent 运行时）、v5.19.0 及更早版本演进详见 `CHANGELOG.md` 与 `WORKMEMORY/cold/digest-2026-10.md`。
 
 ## 红线速查（详情见 `docs/agents/architecture.md` / `ops.md`）

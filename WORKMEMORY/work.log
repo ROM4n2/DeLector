@@ -487,3 +487,13 @@ PR #340 被 CI unit-3 打红：无条件「NLP loading ⇒ 503」挡死了 singl
 - 修法：快退拆两段——有旧 `sentences` 时**任何平台**都先返回旧结果 + `processed_stale`；无旧结果时只在 `readiness["prewarm_started"]` 为真才 503（预热占着 `_model_lock`，等也白等），否则落到原同步迁移。
 - 新增锁：`test_detail_migrates_when_loading_but_prewarm_not_started`（loading + 预热未启动 ⇒ 200 且迁移），把这条边界钉死，避免下次再被「更严格的快速失败」误伤。
 - 复跑：`test_article_readiness_fallback.py` 4 passed + singleflight 2 passed；全量 pytest 3032 passed / 1 failed（仅 `test_frontend_layers.py::test_gate_cli_reports_file_line_rule_and_raw_line`，本地 GBK 控制台解码中文字面量，master 同样红）；ruff 与两档 mypy 零错。
+
+### 2026-11-11 00:25 | deepseek-v4.1-flash | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec, git
+发版 v5.23.1（PR #340 合并后按「有用户可见面」判据放行）：阅读页「未就绪显示成加载错误」修复。
+- 判据：`git diff --stat v5.23.0..master -- static/` 非空（reader.js / article-store.js / style.css / index.html / sw.js 版本面），确认有用户可见面再发版，未凭记忆。
+- 五件套：`version.py` 5.23.0→5.23.1；`sw.js` CACHE_NAME；`index.html` 顶栏；`build.gradle` fallback 5.23.1 / versionCode 52301；README（badge、Tests 徽章 3032/3043、亮点、四行下载表、版本历史三轮）；CHANGELOG 新增 v5.23.1 块（修复/内部/已知限制/回滚）；PROJECT_OVERVIEW「当前状态」同步。`tests/test_app_version_source.py` 的两处硬编码字面量同步 bump。
+- Tests 徽章口径：本轮**本地真跑了全量**——`pytest tests` 3036 passed / `--collect-only` 3043 collected（5 skipped + 1 xfailed + 1 failed）。那 1 条 failed 是 `test_frontend_layers.py::test_gate_cli_reports_file_line_rule_and_raw_line`：本机 GBK 控制台把子进程中文输出解码成乱码，**master（v5.23.0）上同样失败**，判为环境问题、不计回归，README 注释里写明不算 v5.23.1 的失败。
+- 顺手踩到并修正：顶栏版本号的**真身是 `static/layout/header.html`**，`static/index.html` 由 `tools/build_index_html.py` 装配；直接改产物会让 `test_check_index_html_sync.py` 两条用例红。正确顺序 = 改片段 → build → `check_index_html_sync`。
+- 已知限制写进 CHANGELOG（不得省略）：arm64 真机未点检（本版含 `static/` 与后端改动，需覆盖安装）；预热被关或线程未起时首开仍可能同步等；就绪等待时长未量化。
+- 回滚：versionCode 52301 不可回拨；零 DDL、零迁移，`v5.23.0` 包可直接回退。
