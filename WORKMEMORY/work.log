@@ -435,7 +435,18 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 Caps: filesystem-read, filesystem-write, shell-exec, git
 远端分支清理（用户指令：没用的 + 未合并的都删）。
 - 盘点 origin 非 master/HEAD 分支共 24 个：21 个已合并（origin/master..branch 的 unique=0），3 个未合并（unique=1）。
-- 删除前按 salvage 规则核实未合并分支的独有提交：fix/android-webview-init@ac1b4e5 与 perf/android-startup-shell@eb3e174 的本地同名分支 sha 与远端完全一致；archive/negative-webview-prestartup@8fe7e08 原本本地无副本，先建本地同名分支保存，其负结果结论已在 master 的 docs/research/2026-11-09-android-webview-prestartup-negative-result.md 与 work.log 留痕。三者都是判负实验，知识不依赖代码分支存在。
+- 删除前按 salvage 规则核实未合并分支的独有提交：fix/android-webview-init@ac1b4e5 与 perf/android-startup-shell@eb3e174 当时与远端同名分支同 sha（2026-11-10 复核：远程已无任何非 master 分支，本地是唯一副本）；archive/negative-webview-prestartup@8fe7e08 原本本地无副本，先建本地同名分支保存，其负结果结论已在 master 的 docs/research/2026-11-09-android-webview-prestartup-negative-result.md 与 work.log 留痕。三者都是判负实验，知识不依赖代码分支存在；2026-11-10 收口时 8fe7e08 已改由 annotated tag `archive/negative-webview-prestartup` 承接。
 - git push origin --delete 一次删除 24 个，含 release/v5.22.0 与 release/v5.22.1（版本 tag 仍在，build-release.yml 由 tag v* 触发，不依赖 release 分支）；master/HEAD 保留，未 force、未跳 hook。
 - 保留：本地 3 个历史未合并分支 + 新建的 archive/negative-webview-prestartup 本地副本，它们是刚删掉的远端判负实验提交的唯一副本，按 unmerged salvage 规则不用 -D 强删；本地 master 仍 ahead 1（外部线 8bbc612，未替它推送）。
 - 本轮未做：未提交/推送 work.log 这两条事件、未删本地未合并分支、未按 §5 轮转热层（事件数 95 > 75）。
+
+### 2026-11-10 20:55 | deepseek-v4.1-flash | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec, git
+判负实验分支收口：按「档 1——只给文档按 sha 引用的负结果打 tag」执行，其余直接删。
+- 归档：annotated tag `archive/negative-webview-prestartup` → `8fe7e08`（消息四段：结论/关键数字/文档路径/日期+commit），随后删同名分支。理由：`docs/research/2026-11-09-android-webview-prestartup-negative-result.md` §7 按 sha 引用该提交，tag 承接唯一副本（远程已无该分支）。
+- 直接删（未合入、结论已完整落档）：`fix/android-webview-init`@ac1b4e5（TTFD +738ms 回退，upgrade plan 与负结果 §6 留痕）、`perf/adr-0031-import-migration`@dd26e87（方案 A 双指标判负，ADR-0032 §3.1 + ADR-0031 Deprecated）。
+- 未测、被取代：`perf/android-startup-shell`@eb3e174 先在 `docs/plans/2026-11-10-android-local-shell.md` F13 注明「未测、已由 S1 取代」，再删，**不打 tag**（无判负结论，不能冒充 negative 归档）。
+- 已合入安全删 14 个（`git branch -d`，全部 ahead=0、master 祖先）：docs 5 / feat 4 / fix 3 / perf 2。
+- 保留 `release/v5.22.0`、`release/v5.22.1`（回滚入口；权威锚点是 `v*` annotated tag）与 `master`。
+- 口径纠正：负结果 §7 原「远程保留」改为 tag 承接；work.log 上一事件原「与远端完全一致」补注「远程现仅 master」。
+- 未 push、未动远程、未改产品代码；本轮 docs + work.log 变更本地提交，worktree clean。

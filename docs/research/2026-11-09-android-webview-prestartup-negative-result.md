@@ -99,7 +99,7 @@
 
 ## 7. 代码证据
 
-- 分支：`archive/negative-webview-prestartup`（远程保留，**不开 PR 合并**）
+- 归档：annotated tag `archive/negative-webview-prestartup` → `8fe7e08`（2026-11-10 打 tag 后删除原分支；远程副本已在远程分支清理中删除，本地 tag 是唯一副本，**不开 PR 合并**）
 - Commit：`8fe7e08`（5 个文件：`android/app/build.gradle`、
   `MainActivity.java`、`tests/test_android_webkit_dependency.py`、
   `tests/test_android_webview_startup_async.py`、`tools/ci_shards.py`）

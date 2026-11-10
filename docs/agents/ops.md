@@ -171,6 +171,37 @@ TTS 链路（真机判定层）：`AndroidNativeTTS.speak`（系统 TTS，免网
 
 保留：`vocab-feedback`（PR #335 open）、`vocab-fix`（PR #332 open）、`vocab-response`（PR #334 open）——均未合入 master，各有未合并的独占提交，按规则 1/5 不删。
 
+### 分支归档与清理记录（2026-11-10）
+
+判定口径：先算 `git cherry master <branch>` 与 `git merge-base --is-ancestor`；再核对结论是否已在 ADR / research / plan 落档。**tag 只给「文档按 sha 引用」的负结果**，其余不建 tag。
+
+**归档 tag（annotated，本轮唯一一个）**
+
+| tag | 指向 | 内容 |
+| --- | --- | --- |
+| `archive/negative-webview-prestartup` | `8fe7e08` | `startUpWebView` 后台预初始化 Chromium 判负：TTFD 4067/4005ms vs 同会话基线 4095/3938ms（−0.7%/+1.7%），#320 的 +738ms 被消除但仍无净收益；文档 `docs/research/2026-11-09-android-webview-prestartup-negative-result.md` §3/§5/§6/§7/§8 |
+
+命名规范：`archive/negative-<topic>`，必须 annotated，消息固定四段（结论 / 关键数字 / 文档路径 / 日期与 commit）；只用于实验留档，不与 `vX.Y.Z` 版本 tag 混用。
+
+**删除的分支（18 个）**
+
+| 类别 | 分支 / 提交 | 依据 |
+| --- | --- | --- |
+| 打 tag 后删 | `archive/negative-webview-prestartup` / `8fe7e08` | 文档按 sha 引用该提交，tag 承接唯一副本（远程副本已不存在） |
+| 未合入直接删 | `fix/android-webview-init` / `ac1b4e5` | WebView 延后到首帧后创建，TTFD 3966→4704ms（+738ms）；已落档于 upgrade plan 与负结果 §6 |
+| 未合入直接删 | `perf/adr-0031-import-migration` / `dd26e87` | ADR-0031 方案 A 双指标判负（ADR-0032 §3.1；ADR-0031 状态 Deprecated），实现不可复用 |
+| 未测、被取代 | `perf/android-startup-shell` / `eb3e174` | 本地壳实现未测、已被 `2026-11-10-android-local-shell.md` 的 S1 取代；F13 已注明，**不打 tag** |
+| 已合入安全删 | `docs/*` 5 个：`adr-python-import-migration` 7c698aa、`android-startup-plan` ca9130d、`android-webview-prestartup-negative` 732f32b、`androidx-webview-startup-plan` ed9901c、`first-screen-startup-research` 5a3bdf8 | `git branch -d`，全部 ahead=0、是 master 祖先 |
+| 已合入安全删 | `feat/*` 4 个：`android-first-paint-static-intercept` 2675872、`android-ttfd` 634a2a9、`article-store-readiness-retry` 2d8d0fb、`first-screen-store-and-cache` 8050a37 | 同上 |
+| 已合入安全删 | `fix/*` 3 个：`android-splash-commit` 2be40ca、`article-payload-dedup` 70dae9e、`desktop-webview-persistent-storage` 14de7df | 同上 |
+| 已合入安全删 | `perf/*` 2 个：`android-readiness-poll` 0459144、`android-startup-instrument` 88c15c6 | 同上 |
+
+**保留**
+
+- `release/v5.22.0`（`4faaf7a`，与 tag `v5.22.0` 同指向）、`release/v5.22.1`（`3b57f95`）——回滚锚点的人肉入口；权威锚点是 annotated `vX.Y.Z` tag。
+- `master`。
+- 口径澄清：远程 `origin` **只剩 `master`**（`git ls-remote --heads origin` 与 GitHub API 双向确认）；本地 `origin/xxx` 的 tracking 配置是历史残留，不代表远端仍有分支。
+
 ---
 
 ## Agent 工作惯例

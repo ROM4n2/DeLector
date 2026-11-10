@@ -32,7 +32,7 @@
 | F10 | `/api/settings` **不含**资源指纹/版本字段（只有 settings 与 NLP 状态） | `delector/routes/settings.py:47-79` |
 | F11 | APK 明文 HTTP 已放行 | `AndroidManifest.xml:21 usesCleartextTraffic="true"` |
 | F12 | CI 打包面 = `android/**`、`static/**`、`tools/sync_android_sources.py`、`delector/core/assets_manifest.py`；命中即**真跑** Windows Portable Smoke | `.github/workflows/ci.yml:259-300` |
-| F13 | 已有一条旧计划把「本地壳」当 splash 的复刻（`file:///android_asset/shell/startup.html`，预期只省 100–300 ms）；其 Task 4–5 **尚未实施**（APK 内无 `assets/shell/`） | `docs/plans/2026-11-09-android-startup-latency.md:121-155`；APK 实测无 `assets/shell` |
+| F13 | 已有一条旧计划把「本地壳」当 splash 的复刻（`file:///android_asset/shell/startup.html`，预期只省 100–300 ms）；其 Task 4–5 **尚未进入生产**（APK 内无 `assets/shell/`）；该实现曾在本地分支 `perf/android-startup-shell`（`eb3e174`），未测、已由本计划 S1 取代，分支已删、不打归档 tag | `docs/plans/2026-11-09-android-startup-latency.md:121-155`；APK 实测无 `assets/shell` |
 
 ---
 
