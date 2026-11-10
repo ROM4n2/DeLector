@@ -647,6 +647,44 @@ PR #329 已按 merge commit 合并，master 头 63d8e91；master CI（run 427308
 结果：快照首帧 3234.5ms（进程零点 3137–3442）/ 469ms（导航零点 452–515）；真实数据接管 3258.5ms（3161–3467）/ 499.5ms（476–539）；提前量仅 24.5ms（22–39），导航零点 run-to-run 极差 63ms 即噪声下限。6 次冷启 /api/articles 均 1 条 200、navCount=1：MainActivity 在 loadUrl 前轮询 /api/settings（L530-540），安卓冷启天然不触发就绪重试；桌面 615ms 级首帧收益在安卓不成立，属桌面专属。
 重试/耗尽用 CDP 拦截 /api/articles 人为验证（非冷启证据）：解除后 4 次请求自动接管 navCount=1；持续拦截超预算 6 次请求落「未连接，显示本地快照」+「重试」按钮，首帧 4 行仍在，点按钮接管。
 文档：plan 新增「安卓侧双账」小节，ADR-0032 §9 同步；android-local-runtime 登记行已置「已关闭」（adb emu kill，devices 空）。临时测量脚本/数据目录已清理。
+### 2026-11-10 09:31 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+安卓静态壳 S0（仪器化 + R1 逐帧）执行完毕，结论写入 docs/plans/2026-11-10-android-local-shell.md §8A；主线产品代码未改。
+S0-a 分段（x86_64 Medium_Phone_API_37.0，worktree d:\Code\DeLector-s0 分支 perf/android-startup-instrument 基于 88c15c6，空格 force-stop+pm clear+弃跑2，2 轮×7 次有效；零点 A=Process.getStartElapsedRealTime）：进程→onCreate 303/305，onCreate→WebView 挂载 241，挂载→setContentView 21/23，→assets 解包 173/174，Chaquopy 321/308，Python 首行→uvicorn 就绪 2174/2147（占 53%，最大块），→端口 75/16（跨线程乱序，出现 −16ms），→/api/settings 200 21/23，loadUrl→commit 644/630，commit→reveal 15/9，进程→首帧 4053/4044，进程→TTFD 4038/4018；两轮中位差 ≤27ms 为噪声下限（个别段 59ms）。ttfd 比 commit 回调早 ~11ms。
+S0-b R1 模拟（临时构建：assets/shell/boot.html + WebViewAssetLoader + 壳 commit 即撤 splash，验证后已还原 MainActivity 并 rebuild 通过）：10 次录屏逐帧（screenrecord→ffprobe pts→ffmpeg 抽帧→Pillow 判定，空白=正文暗像素<5）。结论①壳→应用页无空白帧，10/10 次为 0；末壳帧 3.49–3.86s 到应用页首帧 4.56–5.01s 屏幕静止在壳页（700–1282ms，中位 1124），应用页首帧即完整内容。②但 splash→壳 之间 9/10 次出现 2 帧纯底色空洞，累计 50–116ms、单帧最长 34–101ms（中位 81/66），1 次为 0；成因是 reveal 在壳 commit（1.25–1.71s）触发而壳首内容帧在 1.76–2.08s，中间靠 splash 淡出盖住，尾部露底。
+两条修正：F-A 壳页首帧中位 1823ms（非预估 300–700ms；首次导航 loadUrl→commit 730 + commit→首帧 ~485）；M1 须按“首个内容帧”而非 reveal 计时。F-B 该诊断构建 TTFD 4508 vs 基线 4038/4018（+470~490），python_start_done 1069→1460、settings_200 3391→3988，疑似 WebView 渲染器与 Python 抢 CPU，已超 M3 300ms 门限（未做单项归因）。
+S1 建议：不放行「壳 commit 即撤」形态（M3/M4 双不过），可放行修正形态，前置三条：撤场信号改为壳页首个内容帧之后（rAF 双帧经 JavascriptInterface 回报）、把 +480ms 抢 CPU 压回 300ms 内、M4 可视闸纳入 splash→壳 且按首内容帧计时。基线由 3234.5（article-store 分支快照口径，不可混用）改为 4053ms。
+收尾：模拟器 emu kill、adb kill-server、临时脚本/录像/帧/APK/build 产物已删；worktree 保留未提交（M MainActivity.java + ?? StartupProbe.java），主线仅有 plan 文档与 docs/reviews/2026-11-10-android-shell-s0-images/ 未提交。
 
 
 
+
+### 2026-11-10 10:40 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+S1 修正形态实测完成：**三项判据全过**，但未提交/未推送/未开 PR，等用户决定。代码在 worktree d:\Code\DeLector-s0（分支 perf/android-startup-instrument，基于 88c15c6），主树仅 plan 文档改动（未提交）。
+只做两件事：①撤场信号改为「壳页首个内容帧之后」= assets/shell/boot.html 三帧 rAF + ShellHost.onFirstContentFrame() JavascriptInterface 回报后 revealWebView（双 rAF 实测 7/10 次露 1 帧纯底色 49–99ms，三帧归零）；②压 CPU 争用 = A1 壳页去持续 CSS 动画 + A2 loadUrl(壳) 延后到 python_start_done（新开关 SHELL_LOAD_EAGER=false）。测量开关 SHELL_ENABLED/SHELL_LOAD_EAGER 为测量期专用，开 PR 前需删除。
+口径：同一模拟器会话重建基线（不引 §8A 4038/4018），force-stop+pm clear+logcat -c，批首弃跑 2，有效 8 取中位，零点 Process.getStartElapsedRealtime()。基线两轮 4105.5/4136.5（差 31ms = 噪声下限）；B 立即+动画 4421；D 延后+动画 4423；E 立即+静态 4266.5；F 延后+静态 4171；最终（F+三帧 rAF）4301.5。
+单项归因：A1 去动画 E−B = **−154.5ms**（F−D = −252ms）；A2 延后 loadUrl F−E = **−95.5ms**（带动画 D−B = +2ms，即只延后不砍动画无效）；A1+A2 = F−B **−250ms**。最终 vs 基线 **+196ms**（≤300 通过，未用 M1 抵扣）。残余全在 uvicorn 就绪段：python_start_done +53、settings_200 +282，但真实页 loadUrl→commit −439.5、loadUrl→TTFD −92。
+M1 ≈ **1361.5ms**（python_start_done 1127.5 + shell_frame 234），相对 4053 改善 2691.5ms；选 F 而非 E（M1 1187 但 TTFD +161）不是为 M1 调时序。
+M4 逐帧（screenrecord→ffprobe→ffmpeg 抽帧→逐帧分类）：双帧 rAF 10 次 7 次各 1 帧露底；三帧 rAF 11/11（2 轮 6+5）0 露底；合入形态无判帧条 5/5 0 空白；splash→壳 与 壳→真实页 均直切 0 空白。
+作废：整批模拟器退化（python_start_done 2234、settings_200 6242，各段≈2×）不计中位；-no-window 变体整体慢 35%+ 不可比，弃用。
+落盘：docs/plans/2026-11-10-android-local-shell.md 新增 §8B（S1-a 实现形态 / S1-b TTFD 与归因 / S1-c M1 / S1-d 逐帧 / S1-e 判据对照）。真机 arm64 未覆盖，禁止外推。
+清理：模拟器/adb/temp 脚本与 APK 已清（见收尾）。
+
+### 2026-11-10 11:09 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git-push, gh-api
+S1 修正形态已开 PR **#330**（`feat/android-local-shell`，从 `origin/master` 88c15c6 起），**未合并**，等 CI 全绿后等用户合并指令。
+- 删测量开关：`SHELL_ENABLED` / `SHELL_LOAD_EAGER` 及其分支、`shellLoadStarted` 幂等标记全部删除；行为锁定「启用 + `python_start_done` 后加载」。`private static final` 常量编译期内联 ⇒ 删分支不改变执行路径。
+- 壳页过 I1：状态改为 inline SVG 图标（`aria-hidden`）+ 文案 + 描边胶囊三层，无假卡片/假行/假计数；320 px 渲染与 411 dp 设备截图三层齐全。
+- 复验 2 批（弃 2 + 有效 5）：`python_start_done → shell_frame → real commit → TTFD` 全序列与壳页命中均一致；但该会话整体变慢（py_done 1712–2232 vs 1127.5；settings_200 4515–5653 vs 3718），TTFD 中位 6266/7579 **不可比**，不作为数字证据；screenrecord 仅 4–5 fps，帧级结论仍以 §8B 的 60 fps 复验为准。
+- CI 首轮 Static Invariants（docs-layout）红：`docs/reviews/2026-11-10-android-shell-s0-images/` 未登记索引；已补 `docs/reviews/README.md` 并在本地 `check_docs_layout.py` OK，提交 56b9968 重跑。
+- 清理：模拟器进程、adb server、`D:\temp` 下临时脚本/抽帧/录制、`android/app/build` 全部删除；worktree `d:\Code\DeLector-s0` 工作区干净（`assets/static`、`build/` 均被忽略）。
+- 未覆盖：arm64 真机（无设备）；低端机 CPU 争用未验证；TTFD +196 ms 仅模拟器。
+
+### 2026-11-10 11:23 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, git-merge, gh-api, docs-write
+S1 已合并：**PR #330 → merge commit `6d38ddf`**（`--merge`，未 force、未跳 hook）。PR 描述已含全部限制（x86_64 `Medium_Phone_API_37.0`、无 arm64 真机、低端机 CPU 争用未验证、+196ms 为模拟器数字且真机无保证），M1 与 TTFD 分开陈述。
+- 合并后 master CI：见本次 push run（docs 收尾提交另起一行记）。
+- 文档索引补齐（master 直推，`docs/` 在 `MASTER_DIRECT_ALLOWLIST` 内）：ADR-0032 §9 增「静态壳落地」条目（正结果 M1 4053→1361.5ms；负结果 TTFD +196ms、双 rAF 7/10 露底判负；限制同上）；`docs/adr/INDEX.md` 0032 行补落地备注；plan §8C 标注 PR #330 / 6d38ddf。
+- 分支与 worktree：`feat/android-local-shell` 已合入，删除本地分支与 `d:\Code\DeLector-s0` worktree（主树其它线未动；主树仅 `WORKMEMORY/work.log` 追加）。
+- 环境：模拟器、adb server、`D:\temp` 临时脚本/抽帧、`android/app/build` 均已在合并前清理并复核无残留进程。
