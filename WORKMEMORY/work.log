@@ -734,3 +734,13 @@ ADR-0033 S2 执行完毕（**未提交 / 未开 PR / 未合并**）：先补答 
 - worktree：`MainActivity.java`、`article-store.js`、`reader.js`、`main.js`、`tools/article_store_probe.mjs`、`docs/adr/INDEX.md`、`docs/agents/android-local-runtime.md`、`work.log` 修改；ADR-0033 与 S1/S2 plan 未跟踪；**未提交**。
 - 已知遗留：`MainActivity.loadShell()` 已无调用点（壳页降级为兜底资产），是否随 PR 删除待定范围。
 - 未覆盖：arm64 真机、低端机 CPU 争用、8000 端口顺延；白屏与预算耗尽 UI 本切片未复测。
+
+### 2026-11-10 13:25 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read/write, shell-exec, git, gh
+ADR-0033 S2 开 PR #331（`feat/android-first-paint-static-intercept` → master），**未合并**。
+- 范围：静态拦截 + 就绪信号重试 + SW 就绪补注册；同 PR 删壳页死代码（`loadShell`/`ShellBridge`/`assetLoader`/`WebViewAssetLoader`/`assets/shell/boot.html`/`androidx.webkit` 依赖），`git grep` 零命中，`assets/static` 指纹不变，测量开关零残留。
+- 首轮 CI 红：unit-1 的 `test_android_splash_commit.py::test_page_finished_is_only_an_event_based_fallback` 仍断言 `if (isServerReady)`，与 S1 的 `isServerReady || isAppOriginUrl(url)` 撤场门冲突；integration-heavy 只是 fail-fast 连带取消。改断言到两条实际门条件（撤场 + 就绪钩子），保留「事件驱动、无计时器」。
+- 本地坑：增量 `assembleEmulatorDebug` 会在被替换条目后留死区，`test_android_packaging.py::test_local_headers_are_contiguous` 因此红；`gradle clean assembleEmulatorDebug` 后 4 passed（APK 从 96,890,604 → 96,786,653 B）。该闸只查本机 APK，CI 无 Android 构建 job 故 skip。
+- 本地全量：3006 passed / 1 failed / 5 skipped / 1 xfailed（9m10s）。唯一失败 `test_nlp_prewarm.py::test_import_does_not_load_or_prewarm` 是环境性的：仓库根有本机 `delector.db`（`.gitignore` 的 `*.db`），子进程把 DATA_DIR 指到 pytest 临时目录后 preflight 拒绝启动；本 PR 未改任何 Python 代码（`git diff master -- '*.py'` 只有该测试文件）。
+- CI（run 42761268812）全绿：unit-1/2/3/4、cost-cold-start、cost-guards、integration-heavy、Go Gates、Go↔Python Integration、Detect packaging-surface、Secret Scan、Static Invariants、Windows Portable Smoke 均 pass；Master Direct-Push Scope Gate 按设计 skipping。
+- 收尾：模拟器与 adb 已清（`adb emu kill` / `forward --remove-all` / `kill-server`），临时 A/B APK 与 `results*.jsonl` 已删；`android/app/build` 保留（clean 重建产物，未跟踪）。
