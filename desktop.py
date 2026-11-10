@@ -40,10 +40,20 @@ import time
 import traceback
 from typing import Any, Callable, Dict, List, Mapping, Optional, TextIO, Tuple
 
-from delector.core.data_dir_bootstrap import bootstrap_data_dir, resolve_data_dir
+from delector.core.data_dir_bootstrap import DATA_DIR_ENV, bootstrap_data_dir, resolve_data_dir
+from delector.core.early_static import start as start_early_static
 from delector.core.server_lifecycle import await_ready, build_server, serve_in_thread, shutdown
 
 LOG_FILE_NAME = "launch.log"
+
+# B2（ADR-0033）：页面提前加载是默认路径 —— 静态层先起、后端未就绪即导航；
+# 找不到静态目录（`start_early_static` 返回 None）时才退回「等就绪」旧路径。
+
+# WebView2 用户数据目录（localStorage / CacheStorage / Service Worker 都落在这里）。
+# 必须是数据目录下的子目录：① `private_mode` 关掉后 pywebview 默认会写到 `%APPDATA%\pywebview`
+# （散在用户目录不明位置）；② 落临时目录则每次冷启都白手起家（正是本轮要修的缺陷）；③ 落安装目录
+# 会被「解压新版覆盖」清掉。放在 `DELECTOR_DATA_DIR` 下 ⇒ 用户删数据目录即连同 web 存储一起清掉。
+WEBVIEW_STORAGE_SUBDIR = "webview"
 
 # 局域网地址文件：`--windowed` 打包后没有控制台，start.py 的横幅（唯一带 LAN 地址的输出）
 # 没人看得见 ⇒ 在数据目录落一份 `http://<LAN_IP>:<port>`（每次启动覆盖；能双击打开、能复制、
@@ -758,20 +768,47 @@ def _after_start(
     # 首屏真口径：load_url 前注册 loaded 事件（页面渲染完成）记「真实 UI 已加载（首屏可用）」——注册须
     # 早于 load_url（它会 events.loaded.clear()）。result：回传主线程的退出码容器，失败置 1 并销毁两窗。
     try:
+        # B2（ADR-0033）：静态层先起、页面早导航，后端随后接管同一端口。
+        # 顺序不能反：`load_url` 必须在 WebView2 可承载文档的第一时间发出，而此时
+        # `import delector.server`（~1.1s）还没跑；没有静态层就会撞连接拒绝页。
+        # 找不到静态目录时 `start_early_static` 返回 None ⇒ 退回「等就绪」旧路径（不硬失败）。
+        early_static = start_early_static(BIND_HOST, port)
+        early_loaded = early_static is not None
+        if early_loaded:
+            _append_log(log_path, f"早期静态层已启动：http://127.0.0.1:{port}（后端未就绪即导航）")
+            main.events.loaded += lambda: _append_log(log_path, "真实 UI 已加载（首屏可用）。")
+            main.show()  # 主窗口初始就是 splash-ready HTML，不是空白窗
+            main.load_url(f"http://127.0.0.1:{port}")
+            _destroy_window(splash, log_path)
+            _append_log(log_path, "已提前加载真实 UI，splash 已关闭。")
+
         # Task 3：建服/起服搬进事件循环（原在 `_run_desktop_inner` 循环外、建窗之前）。④~⑥ 三枚
         # 阶段标记随语句一并搬入，各自紧贴它要标记的那一步（launch.log 归因不张冠李戴）。
         from delector.server import app
         _append_log(log_path, "服务端模块已导入（delector.server）。")
         server = build_server(BIND_HOST, port, app)
         _append_log(log_path, "HTTP 服务已装配（build_server 完成）。")
-        thread = serve_in_thread(server)
+        # 同一端口只有一个监听者，但不能「先关再 bind」：关 socket 到 uvicorn 绑定成功之间
+        # 会有 ~1s 空窗，交接期内页面发起的子资源请求直接 ECONNREFUSED（实测早加载样本
+        # 因此整页 boot 中断一次）。改为把监听 socket 原样交给 uvicorn 复用，全程保持监听。
+        sockets = None
+        if early_static is not None:
+            handed = early_static.hand_off()
+            early_static = None
+            if handed is not None:
+                sockets = [handed]
+                _append_log(log_path, "早期静态层已把监听 socket 交接给 uvicorn。")
+            else:
+                _append_log(log_path, "早期静态层未能交出 socket，uvicorn 将自行绑定同一端口。")
+        thread = serve_in_thread(server, sockets=sockets)
         _append_log(log_path, "本地服务线程已启动（等在就绪窗口内命中）。")
         # 把 server/thread 写进交接容器：供主线程 `_run_desktop_inner` 在 webview.start 返回后收尸
         # （本函数跑在后台线程，无法直接 return）。缺省 None / 测试替身非 dict 时跳过交接。
         if isinstance(server_handoff, dict):
             server_handoff["server"] = server
             server_handoff["thread"] = thread
-        _set_splash_stage(splash, SPLASH_STARTING_SERVER, log_path)
+        if not early_loaded:
+            _set_splash_stage(splash, SPLASH_STARTING_SERVER, log_path)
         _append_log(log_path, "等待服务就绪…")
         if not await_ready(port, deadline_s=READY_DEADLINE_S):
             # 就绪失败必须**可见**：日志 + 弹窗 + 真正结束进程（不留空 splash）。
@@ -781,19 +818,24 @@ def _after_start(
             _abort_windows(splash, main, coordinator, log_path)
             return
         _append_log(log_path, "服务已就绪。")
-        _set_splash_stage(splash, SPLASH_READY, log_path)
-        _append_log(log_path, f"切换到主窗口（真实 UI）：http://127.0.0.1:{port}")
-        main.show()  # 先亮主窗口：此刻起至少有一个窗口在，销毁 splash 不会触发 GUI 循环退出
-        # 首屏**真口径**：用 pywebview 的 `loaded` 事件（页面渲染完成 = 首屏可用）。注册必须在
-        # `load_url` **之前**——`load_url` 内部会 `events.loaded.clear()`，注册晚了就收不到。
-        # 此处已在 `webview.start()` 调度的事件循环**之内**（P0 约束：循环启动前碰窗口/事件会被
-        # marshal 到未运行的线程 ⇒ 永久阻塞，故不得挪到 start 之前）；`health_200` 只是"服务就绪"
-        # 的代理口径，不能冒充首屏。已过 `await_ready` ⇒ 主窗口初始 splash-html 的 loaded 早已触发，
-        # 此处注册只捕获后续 `load_url` 的真实 UI 渲染完成。
-        main.events.loaded += lambda: _append_log(log_path, "真实 UI 已加载（首屏可用）。")
-        main.load_url(f"http://127.0.0.1:{port}")  # 再把真实 UI 载入主窗口（非 splash）
-        _destroy_window(splash, log_path)  # 最后收掉 splash（实例非空 ⇒ 不触发 Application.Exit）
-        _append_log(log_path, "已切换到主窗口，splash 已关闭。")
+        if not early_loaded:
+            _set_splash_stage(splash, SPLASH_READY, log_path)
+            _append_log(log_path, f"切换到主窗口（真实 UI）：http://127.0.0.1:{port}")
+            main.show()  # 先亮主窗口：此刻起至少有一个窗口在，销毁 splash 不会触发 GUI 循环退出
+            # 首屏**真口径**：用 pywebview 的 `loaded` 事件（页面渲染完成 = 首屏可用）。注册必须在
+            # `load_url` **之前**——`load_url` 内部会 `events.loaded.clear()`，注册晚了就收不到。
+            # 此处已在 `webview.start()` 调度的事件循环**之内**（P0 约束：循环启动前碰窗口/事件会被
+            # marshal 到未运行的线程 ⇒ 永久阻塞，故不得挪到 start 之前）；`health_200` 只是"服务就绪"
+            # 的代理口径，不能冒充首屏。已过 `await_ready` ⇒ 主窗口初始 splash-html 的 loaded 早已触发，
+            # 此处注册只捕获后续 `load_url` 的真实 UI 渲染完成。
+            main.events.loaded += lambda: _append_log(log_path, "真实 UI 已加载（首屏可用）。")
+            main.load_url(f"http://127.0.0.1:{port}")  # 再把真实 UI 载入主窗口（非 splash）
+            _destroy_window(splash, log_path)  # 最后收掉 splash（实例非空 ⇒ 不触发 Application.Exit）
+            _append_log(log_path, "已切换到主窗口，splash 已关闭。")
+        else:
+            # 就绪钩子：页面在 Python 就绪前就加载了，可能正处在退避等待中。复用 S2 的
+            # `window.notifyServerReady()`（打断退避 + 立即重试 + 补注册 SW），不建第二套机制。
+            _notify_server_ready(main, log_path)
     except Exception:
         # 后台线程里的异常若不接住，线程会**静默死亡**（又回到"窗口不出、零线索"）；必须留痕并收尾。
         # 与就绪超时分支对齐（两条失败出口行为一致）：日志 + 弹窗 + 置失败码 + 销毁两窗。
@@ -805,11 +847,36 @@ def _after_start(
         _abort_windows(splash, main, coordinator, log_path)
 
 
+def _notify_server_ready(main: Any, log_path: str) -> None:
+    """页面早加载时，就绪后通知前端立即重试（复用 S2 的 `window.notifyServerReady`）。
+
+    独立函数而不是在 `_after_start` 里写 try：`_after_start` 的 AST 不变量是「**每个** try 的
+    异常出口都必须置 `result[0]=1`」（后台线程静默死亡防线）。通知失败只是可观测性降级，
+    不该被那条不变量误判成启动失败，故把异常消化在这一层。
+    """
+    try:
+        main.evaluate_js("window.notifyServerReady && window.notifyServerReady()")
+        _append_log(log_path, "已通知页面服务就绪（notifyServerReady）。")
+    except Exception as exc:
+        _append_log(log_path, f"通知页面服务就绪失败：{exc!r}")
+
+
+def _webview_storage_path(env: Mapping[str, str]) -> str:
+    """WebView2 持久化存储目录：`<数据目录>/webview`。
+
+    `bootstrap_data_dir` 已把最终落点写回 `DELECTOR_DATA_DIR`（显式值 / 便携模式 / 平台默认），
+    这里只跟着它走，不再自己猜。未接管时（正常桌面路径不会走到）退回 `resolve_data_dir`。
+    """
+    data_dir = env.get(DATA_DIR_ENV) or resolve_data_dir(env)
+    return os.path.join(data_dir, WEBVIEW_STORAGE_SUBDIR)
+
+
 def _show_window(server_handoff: Any, port: int, log_path: str) -> int:
     """建 splash + 主窗口 → 起托盘 → 进主线程事件循环；就绪等待与切 UI 交给 `_after_start`。
 
     两个窗口（方案 A）：splash 无边框置顶小窗（启动反馈）；主窗口是**普通可缩放窗口**（有标题栏、
-    可最大化/还原/拖边、不置顶、初始隐藏）。就绪后由 `_after_start` 亮主窗口并销毁 splash。
+    可最大化/还原/拖边、不置顶、初始隐藏）。默认（B2）由 `_after_start` 在早期静态层起来后立刻
+    亮主窗口并导航；静态层不可用时才退回「就绪后」切换。
 
     `server_handoff` 是 Task 3 的**服务交接容器**（`_run_desktop_inner` 创建的空 dict）：建服/起服
     已搬进 `_after_start`，server/thread 由它写进该容器，`_run_desktop_inner` 在 `webview.start()`
@@ -864,9 +931,19 @@ def _show_window(server_handoff: Any, port: int, log_path: str) -> int:
     _append_log(log_path, "托盘线程已启动。")
 
     result: List[int] = [0]  # 由 _after_start（后台线程）写回：失败=1，成功保持 0
+    # WebView2 持久化存储：pywebview 默认 `private_mode=True` ⇒ 临时数据目录 ⇒ localStorage /
+    # CacheStorage 每次冷启都清空，ADR-0032 的列表快照在桌面退化为内置 4 篇。显式关掉并指定
+    # 数据目录下的 webview/ 子目录后，第二次冷启才能命中真实快照。
+    storage_path = _webview_storage_path(os.environ)
+    _append_log(log_path, f"WebView 持久化存储目录：{storage_path}")
     _append_log(log_path, "进入 GUI 事件循环（webview.start）。")
     # 阻塞直到所有窗口关闭；第 7 实参 server_handoff 透传给 _after_start（Task 3 建服/起服在其中）。
-    webview.start(_after_start, (splash, main, coordinator, port, log_path, result, server_handoff))
+    webview.start(
+        _after_start,
+        (splash, main, coordinator, port, log_path, result, server_handoff),
+        private_mode=False,
+        storage_path=storage_path,
+    )
     _append_log(log_path, "GUI 事件循环已退出（窗口已关闭）。")
     return result[0]
 

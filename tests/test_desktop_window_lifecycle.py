@@ -694,6 +694,7 @@ def _install_recording_webview(
 
         def evaluate_js(self, _script: str) -> None:
             order.append(f"{self.name}.evaluate_js")
+            record.setdefault("scripts", []).append(_script)
 
         def load_url(self, _url: str) -> None:
             order.append(f"{self.name}.load_url")
@@ -715,7 +716,8 @@ def _install_recording_webview(
         order.append(f"create:{name}")
         return window
 
-    def _start(func: Any = None, args: Any = None, **_k: Any) -> None:
+    def _start(func: Any = None, args: Any = None, **kwargs: Any) -> None:
+        record["start_kwargs"] = dict(kwargs)
         order.append("start")
         if func is not None:
             func(*(args or ()))
@@ -776,8 +778,51 @@ def test_main_window_is_created_as_a_normal_resizable_window(tmp_path: Path, mon
     assert len(splashes) == 1, "splash 仍应保留为无边框小窗（这是刻意的启动反馈设计）"
 
 
+def test_webview_start_persists_storage_under_the_data_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """机械闸：生产桌面入口必须关掉私密模式，并把 WebView2 存储钉在数据目录下。
+
+    背景：`private_mode=True` 是 pywebview 的默认值（此前无意沿用）⇒ WebView2 每次冷启用临时
+    数据目录 ⇒ `localStorage` 不跨启动 ⇒ ADR-0032 的列表快照在桌面永远退化为内置 4 篇。
+    这类「配置写了但从未生效」的缺陷只有闸能防住，故这里直接检查交给 `webview.start` 的 kwargs：
+
+    ① `private_mode is False`（持久化开启）；
+    ② `storage_path` 是数据目录（`DELECTOR_DATA_DIR`）下的子目录 —— 既不许落系统临时目录
+       （pywebview 在未指定时的默认行为之一），也不许散到用户目录（`%APPDATA%\\pywebview`）。
+    """
+    mod = _mod()
+    _stub_server_build(monkeypatch, mod)
+    data_dir = tmp_path / "appdata"
+    monkeypatch.setenv("DELECTOR_DATA_DIR", str(data_dir))
+
+    order: List[str] = []
+    record: Dict[str, Any] = {}
+    _install_recording_webview(monkeypatch, mod, order, record)
+
+    code = mod._show_window(object(), 8000, str(tmp_path / "launch.log"))
+
+    assert code == 0
+    kwargs = record.get("start_kwargs", {})
+    assert kwargs.get("private_mode") is False, (
+        f"webview.start 必须显式 private_mode=False（持久化），实际：{kwargs.get('private_mode')!r}"
+    )
+    storage = kwargs.get("storage_path")
+    assert isinstance(storage, str) and storage, f"必须显式指定 storage_path，实际：{storage!r}"
+
+    storage_real = os.path.normcase(os.path.realpath(storage))
+    data_real = os.path.normcase(os.path.realpath(str(data_dir)))
+    assert storage_real.startswith(data_real + os.sep), (
+        f"WebView 存储必须落在数据目录 {data_real} 下，实际：{storage_real}"
+    )
+    assert storage_real != data_real, "存储应是数据目录的子目录，不能直接占用数据目录根"
+
+
 def test_final_ui_is_the_main_window_shown_after_ready(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """最终呈现给用户的必须**不是** splash：就绪后 show 主窗口 + 销毁 splash，且 show 在就绪之后。
+    """**回退路径**（早期静态层不可用）：就绪后 show 主窗口 + 销毁 splash，且 show 在就绪之后。
+
+    这是 `start_early_static` 返回 None（找不到静态目录 / 端口被占）时的旧路径；默认的提前加载
+    路径由 `test_early_load_navigates_before_ready_and_hands_socket_to_uvicorn` 覆盖。
 
     同时钉住顺序：先亮主窗口再销毁 splash —— 否则销毁瞬间零窗口会让 pywebview 的 GUI 循环提前退出。
     """
@@ -802,6 +847,58 @@ def test_final_ui_is_the_main_window_shown_after_ready(tmp_path: Path, monkeypat
     start_index = order.index("start")
     for op in ("main.show", "main.load_url", "splash.destroy", "splash.evaluate_js"):
         assert order.index(op) > start_index, f"{op} 早于 webview.start()（P0 死锁形状）：order={order}"
+
+
+def test_early_load_navigates_before_ready_and_hands_socket_to_uvicorn(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """B2 提前加载（默认路径）：就绪前 show + load_url，静态层监听 socket 原样交给 uvicorn。
+
+    这是 ADR-0033 §15 判据的机械形状：① 页面不等 `/api/*` 就绪（导航早于 `await_ready`）；
+    ② splash 在导航后立即收掉（不留双窗）；③ 交接**不关 socket**（`hand_off()` 的返回值原样
+    传给 `serve_in_thread`，杜绝「关→重新 bind」的 ECONNREFUSED 空窗）；④ 就绪后调一次
+    `window.notifyServerReady()`（复用 S2 的重试机制，不建第二套）。
+    """
+    mod = _mod()
+    order: List[str] = []
+    record: Dict[str, Any] = {}
+    _stub_server_build(monkeypatch, mod, order)
+    _install_recording_webview(monkeypatch, mod, order, record)
+
+    sentinel = object()
+    seen: Dict[str, Any] = {}
+
+    class _Early:
+        def hand_off(self):
+            order.append("early.hand_off")
+            return sentinel
+
+    monkeypatch.setattr(mod, "start_early_static", lambda *_a, **_k: _Early())
+
+    def _serve(_server: Any, sockets: Any = None) -> str:
+        order.append("serve_in_thread")
+        seen["sockets"] = sockets
+        return "FAKE_THREAD"
+
+    monkeypatch.setattr(mod, "serve_in_thread", _serve)
+
+    code = mod._show_window(object(), 8000, str(tmp_path / "launch.log"))
+
+    assert code == 0
+    assert order.index("main.show") < order.index("await_ready"), "主窗口必须在后端就绪前显示"
+    assert order.index("main.load_url") < order.index("await_ready"), (
+        "页面必须在后端就绪前开始加载（B2 的全部收益都来自这一步）"
+    )
+    assert order.index("splash.destroy") < order.index("await_ready"), "导航后应尽快收掉 splash"
+    assert order.index("main.load_url") < order.index("early.hand_off"), "先导航、后交接 socket"
+    assert seen.get("sockets") == [sentinel], (
+        "监听 socket 必须原样交给 uvicorn；传 None 意味着 uvicorn 重新 bind（空窗回归）"
+    )
+    scripts = record.get("scripts", [])
+    assert any("notifyServerReady" in script for script in scripts), (
+        f"就绪后必须调用 window.notifyServerReady()，实际脚本：{scripts!r}"
+    )
+    assert order.index("main.evaluate_js") > order.index("await_ready"), "就绪钩子必须晚于 await_ready"
 
 
 def test_main_window_close_requests_quit_and_reaps_splash(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

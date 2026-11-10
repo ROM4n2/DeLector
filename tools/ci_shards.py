@@ -88,6 +88,7 @@ SHARDS: dict[str, tuple[str, ...]] = {
         "tests/test_db_cleanup_helper.py",
         "tests/test_desktop_bootstrap.py",
         "tests/test_desktop_data_dir_bootstrap.py",
+        "tests/test_desktop_early_static.py",
         "tests/test_desktop_port_guard.py",
         "tests/test_desktop_shell.py",
         "tests/test_desktop_startup_guards.py",

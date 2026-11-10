@@ -229,6 +229,10 @@ def _stub_server_build(
 
     monkeypatch.setattr(mod, "build_server", _fake_build_server)
     monkeypatch.setattr(mod, "serve_in_thread", _fake_serve_in_thread)
+    # B2（ADR-0033）：`_after_start` 默认先起早期静态层并绑**真实端口**；单元测试不绑真端口，
+    # 故替身返回 None ⇒ 走「等就绪」旧路径。早期路径由
+    # `test_desktop_window_lifecycle.py::test_early_load_navigates_before_ready_...` 用假静态层单独覆盖。
+    monkeypatch.setattr(mod, "start_early_static", lambda *_a, **_k: None)
 
 
 # ── `desktop.py` 源码解析助手（C6 Task 6 上收，多域共用）─────────────────────────────

@@ -20,10 +20,12 @@
 
 from __future__ import annotations
 
+import functools
 import logging
+import socket
 import threading
 import time
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Sequence, Tuple
 
 import httpx
 import uvicorn
@@ -79,13 +81,20 @@ def build_server(host: str, port: int, app: Any) -> uvicorn.Server:
     return uvicorn.Server(config)
 
 
-def serve_in_thread(server: uvicorn.Server) -> threading.Thread:
+def serve_in_thread(
+    server: uvicorn.Server, sockets: Optional[Sequence[socket.socket]] = None
+) -> threading.Thread:
     """在**非 daemon** 线程里跑 `server.run()` 并返回该线程。
 
     非 daemon 是硬要求：daemon 线程会在解释器退出时被强杀，`join()` 收尸随之失去意义
     ——「退不干净」的成因之一正是它。调用方随后必须 `shutdown(server, thread)` 收尾。
+
+    `sockets`：已绑定的监听 socket（桌面壳的早期静态层交接，ADR-0033 B2）。传入时 uvicorn
+    **复用**它而不是重新 bind —— 静态层停 accept 到后端接手之间因此不存在 ECONNREFUSED 空窗。
+    缺省 None 走 uvicorn 自己的 bind（`start.py` 等既有调用方行为不变）。
     """
-    thread = threading.Thread(target=server.run, name="delector-uvicorn", daemon=False)
+    target = server.run if not sockets else functools.partial(server.run, sockets=list(sockets))
+    thread = threading.Thread(target=target, name="delector-uvicorn", daemon=False)
     thread.start()
     return thread
 
