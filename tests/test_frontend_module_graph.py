@@ -15,9 +15,13 @@ actually resolve to a real export in the target module (transitively through
 `export *`).
 """
 
+import json
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
+import pytest
 import wb_source
 
 JS_DIR = Path("static/js")
@@ -672,3 +676,99 @@ def test_hard_sentences_no_circular_dependency():
     """hard-sentences.js 不得出现在任何 import 环上（环破坏 ES 模块求值序）。"""
     cycles = _cycles_through(_load_modules(), "hard-sentences.js")
     assert not cycles, f"hard-sentences.js 存在循环依赖：{cycles}"
+
+
+# ── v5.23.1 事故守卫：重复导出会让整张图在解析期就死 ─────────────────────────
+# 事故：article-store.js 把 RETRY_DELAYS_MS / RETRY_BUDGET_MS / isRetryableError
+# 既写成 `export const` / `export function`，又列进文件底部的 `export { ... }`
+# ⇒ `SyntaxError: Duplicate export of ...`。ES 模块在**解析/链接期**就失败，
+# main.js 一行都不执行，页面只剩静态骨架（用户看到「整块文字」），桌面与 Android
+# 同源同崩；而 `node --check` 只做单文件语法检查、前端探针用桩模块，全部看不见。
+#
+# 上面那套结构化解析用 set 收集导出名，重复天然被折叠 —— 所以这里必须另立检查：
+# ① 结构化计数（不依赖 node，任何环境都跑）；② 真让 node 解析并链接整张图（ground truth）。
+
+_EXPORT_DECL_FUNC_RE = re.compile(r"\bexport\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)")
+_EXPORT_DECL_VAR_RE = re.compile(r"\bexport\s+(?:let|const|var|class)\s+([A-Za-z_$][\w$]*)")
+_EXPORT_OWN_LIST_RE = re.compile(r"\bexport\s*\{([^}]*)\}\s*(?!from\b)", re.S)
+
+
+def _exported_names_in_order(src):
+    """按出现顺序返回模块**自身**声明的导出名（保留重复，用于识别重复导出）。"""
+    names = []
+    for m in _EXPORT_DECL_FUNC_RE.finditer(src):
+        names.append(m.group(1))
+    for m in _EXPORT_DECL_VAR_RE.finditer(src):
+        names.append(m.group(1))
+    for m in _EXPORT_OWN_LIST_RE.finditer(src):
+        for item in m.group(1).split(","):
+            item = item.strip()
+            if item:
+                names.append(item.split(" as ")[0].strip())
+    return names
+
+
+def _duplicate_export_names(src):
+    seen: dict[str, int] = {}
+    for name in _exported_names_in_order(src):
+        seen[name] = seen.get(name, 0) + 1
+    return sorted(name for name, count in seen.items() if count > 1)
+
+
+def test_no_module_exports_the_same_name_twice():
+    """同一符号不得既 `export const/function` 又出现在 `export { ... }` 里。"""
+    offenders = {}
+    for path in sorted(JS_DIR.glob("*.js")):
+        dups = _duplicate_export_names(path.read_text(encoding="utf-8"))
+        if dups:
+            offenders[path.name] = dups
+    assert not offenders, (
+        "以下模块存在重复导出（解析期 SyntaxError: Duplicate export ⇒ 整页白屏）：\n"
+        + "\n".join(f"  {name}: {', '.join(dups)}" for name, dups in offenders.items())
+        + "\n修法：声明处不加 export，只在文件底部 `export { ... }` 列一次。"
+    )
+
+
+# node 侧脚本：逐个 import 每个模块，只把「解析期/绑定期」错误当成致命错误。
+_NODE_PROBE = """
+const fs = await import('node:fs');
+const files = fs.readdirSync('static/js').filter((f) => f.endsWith('.js'));
+const fatal = [];
+for (const f of files) {
+  try {
+    await import('./static/js/' + f);
+  } catch (e) {
+    const name = e && e.constructor ? e.constructor.name : 'Error';
+    const msg = String((e && e.message) || e);
+    // 浏览器专有全局（localStorage / document）在 node 下必然缺失，那是运行期错误，不算缺陷。
+    const parseTime =
+      name === 'SyntaxError' || /ERR_MODULE_NOT_FOUND|does not provide an export/.test(msg);
+    if (parseTime) fatal.push(f + ' :: ' + name + ' :: ' + msg);
+  }
+}
+console.log(JSON.stringify({ total: files.length, fatal }));
+"""
+
+
+def test_node_parses_and_links_every_module():
+    """真让 node 解析+链接每个模块：重复导出、缺失导出都会在这里现形。"""
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("未安装 node：本守卫需要 node 解析 ES 模块图")
+    assert node is not None  # 供类型检查收窄（pytest.skip 在这里不被识别为 NoReturn）
+
+    res = subprocess.run(
+        [node, "--input-type=module", "-e", _NODE_PROBE],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=120,
+    )
+    assert res.returncode == 0, f"node 探针自身失败（不是用例结论）：{res.stderr[-2000:]}"
+    payload = json.loads(res.stdout.strip().splitlines()[-1])
+    assert payload["total"] >= 40, f"扫到的模块数异常（{payload['total']}），目录结构变了吗？"
+    assert not payload["fatal"], (
+        "以下模块在解析/链接期失败，整页会只剩静态骨架：\n"
+        + "\n".join(payload["fatal"])
+    )
