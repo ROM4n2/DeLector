@@ -1052,6 +1052,32 @@ a {
   height: 0.8rem;
 }
 
+/* 重试入口：图标 + 文案 + 实线描边，不靠颜色传达可点。 */
+.article-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.35rem;
+  padding: 2px 7px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.article-retry-btn .ui-ico {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.article-sync-chip--offline {
+  border-style: solid;
+}
+
 .article-row--seed {
   cursor: default;
 }

@@ -800,8 +800,10 @@ def test_frontend_ai_error_paths_reuse_api_and_show_alert():
     writer_src = read_source("static/js/writer.js")
     reader_src = open(os.path.join(ROOT, "static", "js", "reader.js"), encoding="utf-8").read()
     core_src = open(os.path.join(ROOT, "static", "js", "core.js"), encoding="utf-8").read()
-    # core api() 必须在非 ok 时抛 Error
-    assert "throw new Error" in core_src, "core.js api() 必须抛异常"
+    # core api() 必须在非 ok 时抛异常，且 HTTP 错误带 status（供就绪重试分类）。
+    assert "throw httpErr" in core_src and "httpErr.status = res.status" in core_src, (
+        "core.js api() 必须抛带 status 的异常"
+    )
     # writer aiPolishEssay 必须有 try/catch 且 catch 中有 alert
     polish_fn = decl_body(writer_src, "export async function aiPolishEssay()")
     assert "try" in polish_fn and "catch" in polish_fn, "aiPolishEssay 缺 try/catch"

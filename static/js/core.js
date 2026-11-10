@@ -109,11 +109,16 @@ export async function api(url, opts = {}) {
     const res = await fetch(url, { ...rest, signal: controller.signal });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new Error(errData.detail || `HTTP Error ${res.status}`);
+      const httpErr = new Error(errData.detail || `HTTP Error ${res.status}`);
+      // 调用方需要区分「后端未就绪可重试」与「4xx 业务错误不可重试」。
+      httpErr.status = res.status;
+      throw httpErr;
     }
     return await res.json();
   } catch (err) {
-    const e = timedOut ? new Error(`请求超时（${Math.round(timeout / 1000)}s），请检查网络`) : err;
+    const e = timedOut
+      ? Object.assign(new Error(`请求超时（${Math.round(timeout / 1000)}s），请检查网络`), { code: 'TIMEOUT' })
+      : err;
     console.error(`[API Error] ${url}:`, e);
     throw e;
   } finally {

@@ -21,8 +21,8 @@ export async function removeArticle(id) {
   return api('/api/articles/' + id, { method: 'DELETE' });
 }
 
-export async function fetchArticles() {
-  return api('/api/articles');
+export async function fetchArticles(opts) {
+  return api('/api/articles', opts);
 }
 
 export async function fetchArticle(id) {

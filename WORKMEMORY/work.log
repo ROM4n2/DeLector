@@ -625,3 +625,20 @@ PR #328 已合并（merge commit 217737e），本地 master 已 fast-forward 到
 冷启动补充实测（后端未就绪，桌面 Edge headless + CDP，5 次/场景）：快照首帧 721ms（首装，626–738）/ 736ms（缓存命中，643–760）；真实数据接管 3320ms（3306–3460）/ 3350ms（3323–3492）；后端健康 2503/2512ms。首帧 chip 为「同步中」（svg #ui-ico-refresh-cw + role=status）；接管 detail 均 builtin/fromCache=false, rows=4。
 方法：独立 gateway 提供静态壳并挂起首个 /api/articles，首帧后冷启 uvicorn（每次新 DELECTOR_DATA_DIR，复制只读源库过迁移守卫），/api/health 通过后转发。限制：挂起请求代表「等待后端」路径；当前 store 对快速失败不自动重试，真实冷启若首请求先 ECONNREFUSED，需要导航/刷新才接管。安卓未测。
 数字已写入 plan「冷启动实测补充」与 ADR-0032 §5/§9。
+### 2026-11-10 00:33 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+分支 feat/article-store-readiness-retry（基于 master a2be3fc）补「后端未就绪」有限重试，让静默接管在真实冷启（首请求被快速拒绝）下成立。
+实现：article-store.js 注入 fetchArticles/removeArticle/setTimer/clearTimer/now/retryDelays/retryBudgetMs/attemptTimeoutMs；可重试判定仅 TypeError（连接被拒）/code=TIMEOUT/status>=500，4xx 与未知错误不重试。退避 200/400/800/1600/3200ms，总预算 12000ms，单次请求 timeout 6000ms；到顶进 error + retryable，暴露 retryNow()。首帧仍由快照同步渲染，重试全在后台；状态新增 retrying/retryable/attempts。core.js HTTP 错误附 status、超时错误附 code=TIMEOUT；rd-api.fetchArticles 透传 opts。reader.js 状态痕迹接力为「同步中→重试中…→未连接，显示本地快照」，均含 svg 图标 + 文案 + 虚线/实线形状（I1），error 态给 .article-retry-btn；main.js 绑定 retryArticles；02-home-views.css 加重试按钮并用 build_css 重建 style.css。
+验证：探针 22/22（新增 R1–R10：拒绝→自动接管、预算耗尽保留首帧+可重试、4xx 不重试、假时钟断言 200/400/800/1600/3200、retryNow 恢复、分类器、常量）；pytest test_article_store_probe 2 passed；check_frontend_layers PASS；CSS 同步/资产 16 passed；node --check 4 文件通过。
+真机冷启（Edge headless + CDP，8120 静态壳 + /api 反代，后端未起时立即 503，后端随后冷启 uvicorn，每次新 DELECTOR_DATA_DIR）：3 轮快照首帧 85ms（81–347）、自动接管 3216ms（3204–3472），navCount 均 1（无刷新/切页），未捕获未处理异常；持续失败场景 6438ms 进「未连接，显示本地快照」+ 重试按钮，首帧 4 行仍在，点重试后 6ms 接管。安卓未测。
+文档：plan 冷启动限制段更新为「补重试后复测」并写入上述数字。
+### 2026-11-10 00:40 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+PR #329 CI（run 42656258966）unit-1 红：tests/test_server_android_fallback.py::test_frontend_ai_error_paths_reuse_api_and_show_alert 的字符串哨兵要求 core.js 含字面量 "throw new Error"，本轮 HTTP 错误改为抛带 status 的 httpErr 后失配。修法：哨兵改为同时校验 "throw httpErr" 与 "httpErr.status = res.status"（判别力只升不降，锁住「抛异常且带 status」契约），本地单测 + ruff 绿，提交后重跑 CI。其余 job：Go↔Python integration / Go Gates / Secret Scan / Static Invariants / cost-cold-start / integration-heavy / Windows Portable Smoke 均 success；unit-2/3/4 与 cost-guards 因 fail-fast cancelled，Master Direct-Push Scope Gate skipped。
+### 2026-11-10 00:47 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+口径核算：早前 721ms 的零点是 Edge 进程启动（plan 原文），85ms 是 performance.mark 的导航起点零点，且 3 次导航复用同一 Edge 进程（81/85 为暖渲染，首轮 347）。两者不可比，85ms 已作废。
+同口径复测（每轮新 Edge 进程 + 新 profile，5 次，快速 503 路径）：进程零点首帧 615ms（610–709）、接管 4161ms（3738–4310）；导航零点首帧 223ms（215–328）、接管 3767ms（3346–3930）。旧挂起路径同为零点：721（626–738）/ 3320（3306–3460）；导航零点 353/2959。快速拒绝比挂起放行晚约 0.8s 接管（等退避窗口），收益是不用刷新/切页而非更早接管。持续失败冷进程：6898ms 进「未连接」+ 按钮，重试后 6ms 接管。
+已写回 plan 与 ADR-0032 §5/§9，并在 PR #329 留评论；未合并，等指令。
+
+

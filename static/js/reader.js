@@ -182,6 +182,40 @@ export function loadArticles() {
   return articleStore.loadArticles();
 }
 
+// 用户可见的重试入口（预算耗尽 / 不可重试错误时出现）。
+export function retryArticles() {
+  renderArticleState(articleStore.getState());
+  return articleStore.retryNow();
+}
+
+// 状态痕迹：图标 + 文案 + 虚线形状，不依赖颜色（I1）。
+// stale = 屏上是旧数据；retrying 时接力为「重试中」，error 时停在「未连接/同步失败」。
+function renderArticleStatus(snapshot) {
+  const retrying = !!snapshot.retrying;
+  const failed = snapshot.status === "error";
+  if (!retrying && !failed && snapshot.status !== "stale") return "";
+
+  const icon = failed && !retrying ? "x" : "refresh-cw";
+  const text = retrying
+    ? "重试中…"
+    : failed
+      ? snapshot.retryable
+        ? "未连接，显示本地快照"
+        : "同步失败，显示本地快照"
+      : "同步中";
+  const retryBtn = failed
+    ? `<button class="article-retry-btn" onclick="retryArticles()" aria-label="重新加载文章列表">
+        <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-rotate-ccw"></use></svg>
+        <span>重试</span>
+      </button>`
+    : "";
+
+  return `<div class="article-sync-chip${failed ? " article-sync-chip--offline" : ""}" role="status">
+    <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-${icon}"></use></svg>
+    <span>${text}</span>${retryBtn}
+  </div>`;
+}
+
 // 统一出口：加载态 / 错误态 / 空态 / 列表只在这里判一次。
 // status=stale 表示屏上是旧数据（缓存或内置快照），必须带形状/图标痕迹（I1）。
 function renderArticleState(snapshot) {
@@ -190,7 +224,11 @@ function renderArticleState(snapshot) {
 
   if (!snapshot.items.length) {
     if (snapshot.status === "error") {
-      el.innerHTML = '<div class="empty-state">文章列表加载失败</div>';
+      el.innerHTML =
+        '<div class="empty-state">文章列表加载失败' +
+        `<div class="empty-state-extra"><button class="article-retry-btn" onclick="retryArticles()">` +
+        '<svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-rotate-ccw"></use></svg>' +
+        "<span>重试</span></button></div></div>";
     } else if (snapshot.empty) {
       el.innerHTML =
         '<div class="empty-state">暂无文稿，点击上方按钮导入德语文章' +
@@ -202,16 +240,8 @@ function renderArticleState(snapshot) {
     return;
   }
 
-  const syncChip =
-    snapshot.status === "stale"
-      ? `<div class="article-sync-chip" role="status">
-        <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-refresh-cw"></use></svg>
-        <span>${snapshot.error ? "同步失败，显示本地快照" : "同步中"}</span>
-      </div>`
-      : "";
-
   el.innerHTML =
-    syncChip +
+    renderArticleStatus(snapshot) +
     snapshot.items
       .map((a) => {
         if (snapshot.builtin) {
