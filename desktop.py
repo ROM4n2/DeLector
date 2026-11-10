@@ -40,10 +40,16 @@ import time
 import traceback
 from typing import Any, Callable, Dict, List, Mapping, Optional, TextIO, Tuple
 
-from delector.core.data_dir_bootstrap import bootstrap_data_dir, resolve_data_dir
+from delector.core.data_dir_bootstrap import DATA_DIR_ENV, bootstrap_data_dir, resolve_data_dir
 from delector.core.server_lifecycle import await_ready, build_server, serve_in_thread, shutdown
 
 LOG_FILE_NAME = "launch.log"
+
+# WebView2 用户数据目录（localStorage / CacheStorage / Service Worker 都落在这里）。
+# 必须是数据目录下的子目录：① `private_mode` 关掉后 pywebview 默认会写到 `%APPDATA%\pywebview`
+# （散在用户目录不明位置）；② 落临时目录则每次冷启都白手起家（正是本轮要修的缺陷）；③ 落安装目录
+# 会被「解压新版覆盖」清掉。放在 `DELECTOR_DATA_DIR` 下 ⇒ 用户删数据目录即连同 web 存储一起清掉。
+WEBVIEW_STORAGE_SUBDIR = "webview"
 
 # 局域网地址文件：`--windowed` 打包后没有控制台，start.py 的横幅（唯一带 LAN 地址的输出）
 # 没人看得见 ⇒ 在数据目录落一份 `http://<LAN_IP>:<port>`（每次启动覆盖；能双击打开、能复制、
@@ -805,6 +811,16 @@ def _after_start(
         _abort_windows(splash, main, coordinator, log_path)
 
 
+def _webview_storage_path(env: Mapping[str, str]) -> str:
+    """WebView2 持久化存储目录：`<数据目录>/webview`。
+
+    `bootstrap_data_dir` 已把最终落点写回 `DELECTOR_DATA_DIR`（显式值 / 便携模式 / 平台默认），
+    这里只跟着它走，不再自己猜。未接管时（正常桌面路径不会走到）退回 `resolve_data_dir`。
+    """
+    data_dir = env.get(DATA_DIR_ENV) or resolve_data_dir(env)
+    return os.path.join(data_dir, WEBVIEW_STORAGE_SUBDIR)
+
+
 def _show_window(server_handoff: Any, port: int, log_path: str) -> int:
     """建 splash + 主窗口 → 起托盘 → 进主线程事件循环；就绪等待与切 UI 交给 `_after_start`。
 
@@ -864,9 +880,19 @@ def _show_window(server_handoff: Any, port: int, log_path: str) -> int:
     _append_log(log_path, "托盘线程已启动。")
 
     result: List[int] = [0]  # 由 _after_start（后台线程）写回：失败=1，成功保持 0
+    # WebView2 持久化存储：pywebview 默认 `private_mode=True` ⇒ 临时数据目录 ⇒ localStorage /
+    # CacheStorage 每次冷启都清空，ADR-0032 的列表快照在桌面退化为内置 4 篇。显式关掉并指定
+    # 数据目录下的 webview/ 子目录后，第二次冷启才能命中真实快照。
+    storage_path = _webview_storage_path(os.environ)
+    _append_log(log_path, f"WebView 持久化存储目录：{storage_path}")
     _append_log(log_path, "进入 GUI 事件循环（webview.start）。")
     # 阻塞直到所有窗口关闭；第 7 实参 server_handoff 透传给 _after_start（Task 3 建服/起服在其中）。
-    webview.start(_after_start, (splash, main, coordinator, port, log_path, result, server_handoff))
+    webview.start(
+        _after_start,
+        (splash, main, coordinator, port, log_path, result, server_handoff),
+        private_mode=False,
+        storage_path=storage_path,
+    )
     _append_log(log_path, "GUI 事件循环已退出（窗口已关闭）。")
     return result[0]
 

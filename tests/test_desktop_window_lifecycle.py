@@ -715,7 +715,8 @@ def _install_recording_webview(
         order.append(f"create:{name}")
         return window
 
-    def _start(func: Any = None, args: Any = None, **_k: Any) -> None:
+    def _start(func: Any = None, args: Any = None, **kwargs: Any) -> None:
+        record["start_kwargs"] = dict(kwargs)
         order.append("start")
         if func is not None:
             func(*(args or ()))
@@ -774,6 +775,46 @@ def test_main_window_is_created_as_a_normal_resizable_window(tmp_path: Path, mon
 
     splashes = [kwargs for kwargs in created if kwargs.get("frameless") is True]
     assert len(splashes) == 1, "splash 仍应保留为无边框小窗（这是刻意的启动反馈设计）"
+
+
+def test_webview_start_persists_storage_under_the_data_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """机械闸：生产桌面入口必须关掉私密模式，并把 WebView2 存储钉在数据目录下。
+
+    背景：`private_mode=True` 是 pywebview 的默认值（此前无意沿用）⇒ WebView2 每次冷启用临时
+    数据目录 ⇒ `localStorage` 不跨启动 ⇒ ADR-0032 的列表快照在桌面永远退化为内置 4 篇。
+    这类「配置写了但从未生效」的缺陷只有闸能防住，故这里直接检查交给 `webview.start` 的 kwargs：
+
+    ① `private_mode is False`（持久化开启）；
+    ② `storage_path` 是数据目录（`DELECTOR_DATA_DIR`）下的子目录 —— 既不许落系统临时目录
+       （pywebview 在未指定时的默认行为之一），也不许散到用户目录（`%APPDATA%\\pywebview`）。
+    """
+    mod = _mod()
+    _stub_server_build(monkeypatch, mod)
+    data_dir = tmp_path / "appdata"
+    monkeypatch.setenv("DELECTOR_DATA_DIR", str(data_dir))
+
+    order: List[str] = []
+    record: Dict[str, Any] = {}
+    _install_recording_webview(monkeypatch, mod, order, record)
+
+    code = mod._show_window(object(), 8000, str(tmp_path / "launch.log"))
+
+    assert code == 0
+    kwargs = record.get("start_kwargs", {})
+    assert kwargs.get("private_mode") is False, (
+        f"webview.start 必须显式 private_mode=False（持久化），实际：{kwargs.get('private_mode')!r}"
+    )
+    storage = kwargs.get("storage_path")
+    assert isinstance(storage, str) and storage, f"必须显式指定 storage_path，实际：{storage!r}"
+
+    storage_real = os.path.normcase(os.path.realpath(storage))
+    data_real = os.path.normcase(os.path.realpath(str(data_dir)))
+    assert storage_real.startswith(data_real + os.sep), (
+        f"WebView 存储必须落在数据目录 {data_real} 下，实际：{storage_real}"
+    )
+    assert storage_real != data_real, "存储应是数据目录的子目录，不能直接占用数据目录根"
 
 
 def test_final_ui_is_the_main_window_shown_after_ready(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
