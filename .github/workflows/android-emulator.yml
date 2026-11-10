@@ -46,7 +46,7 @@ jobs:
 
       # 504 治理：见 tools/download_spacy_model.py 的模块 docstring（有界重试 + wheel 缓存）。
       - name: Restore spaCy German model wheel
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .spacy-wheel-cache
           key: spacy-model-de_core_news_sm-3.8.0-${{ runner.os }}-py311

@@ -153,7 +153,7 @@ jobs:
       # 重试耗尽必须**响亮失败**：模型缺失会让 cost-cold-start 的 nlp_path 从 spacy 掉成
       # pure（被测对象就变了），MUST NOT 用 continue-on-error 降级成警告。
       - name: Restore spaCy German model wheel
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .spacy-wheel-cache
           key: spacy-model-de_core_news_sm-3.8.0-${{ runner.os }}-py311
@@ -339,7 +339,7 @@ jobs:
 
       # 504 治理：见 tools/download_spacy_model.py 的模块 docstring（有界重试 + wheel 缓存）。
       - name: Restore spaCy German model wheel
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .spacy-wheel-cache
           key: spacy-model-de_core_news_sm-3.8.0-${{ runner.os }}-py311
@@ -433,7 +433,7 @@ jobs:
       # 显式预下载使三条集成用例都拿到真信号，避免「日志全绿但用例根本没跑」。
       # 504 治理：见 tools/download_spacy_model.py 的模块 docstring（有界重试 + wheel 缓存）。
       - name: Restore spaCy German model wheel
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .spacy-wheel-cache
           key: spacy-model-de_core_news_sm-3.8.0-${{ runner.os }}-py311
