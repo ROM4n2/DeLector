@@ -460,6 +460,8 @@ tag `DeLectorProbe`，格式 `PROBE ev=<name> t_proc_ms=<> [t_nav_ms=<>] detail=
 
 ## §8C 合入形态（删开关 + I1）与复验
 
+> 落地：PR **#330**（`feat/android-local-shell`，merge commit `6d38ddf`，2026-11-10）。
+
 ### S1-f 合入形态改动
 
 | 项 | 改动 | 判据 |
