@@ -290,3 +290,50 @@ def test_direct_insert_bypass_still_duplicates(test_db_path):
     _insert_vocab_card(word="Haus", lemma="Haus")
     _insert_vocab_card(word="Haus", lemma="Haus")
     assert _count(test_db_path) == 2, "无 UNIQUE 约束 ⇒ 直接 INSERT 必须如实写出两行（不得假装幂等）"
+
+
+# ── ⑦ 响应契约：created / skipped_fields ───────────────────────────────────
+
+
+def test_post_response_reports_created_and_skipped_fields(client, test_db_path):
+    """命中既有卡时，响应必须说清「这次没新增」以及「哪些字段没写进去」。"""
+    first = _post(client, definition_zh="房子", sentence_context="Das Haus ist alt.")
+    assert first.status_code == 200
+    assert first.json()["created"] is True
+    assert first.json()["skipped_fields"] == []
+
+    second = _post(client, definition_zh="公寓", sentence_context="Das Haus ist neu.")
+    assert second.status_code == 200
+    assert second.json()["id"] == first.json()["id"]
+    assert second.json()["created"] is False
+    skipped = second.json()["skipped_fields"]
+    assert "definition_zh" in skipped and "sentence_context" in skipped
+
+    with db_conn(test_db_path) as conn:
+        row = conn.execute(
+            "SELECT definition_zh, sentence_context FROM vocab_cards WHERE id = ?",
+            (first.json()["id"],),
+        ).fetchone()
+    assert row[0] == "房子" and row[1] == "Das Haus ist alt.", "只补空，绝不覆盖用户已填内容"
+
+
+def test_post_response_skipped_fields_empty_when_existing_columns_blank(client, test_db_path):
+    """既有列全空 ⇒ 本次全部写入，skipped_fields 必须为空（不能误报跳过）。"""
+    _post(
+        client,
+        pos="",
+        gender="",
+        plural="",
+        cefr_level="",
+        definition_zh="",
+        sentence_context="",
+    )
+    second = _post(client, definition_zh="房子", sentence_context="Das Haus ist alt.")
+    assert second.status_code == 200
+    assert second.json()["created"] is False
+    assert second.json()["skipped_fields"] == []
+    with db_conn(test_db_path) as conn:
+        row = conn.execute(
+            "SELECT definition_zh FROM vocab_cards WHERE id = ?", (second.json()["id"],)
+        ).fetchone()
+    assert row[0] == "房子", "空列应被补上"

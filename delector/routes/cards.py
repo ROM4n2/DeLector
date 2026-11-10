@@ -184,6 +184,7 @@ def add_vocab_card(req: VocabCardReq) -> Dict[str, Any]:
     # （official/manual/ai；主干未收录的自定义词 = user）。全部前端存词入口
     # （reader / a1_cards / a1_hoeren / search）都打本端点 ⇒ 一处覆盖。
     source = primary_source(req.lemma or req.word)
+    skipped_fields: list[str] = []
     with db_conn() as conn:
         # Step 1（只堵新增）：身份 = (lemma_key(lemma), word_key(word))，见
         # delector/core/vocab_identity.py。存量重复未知，故**不建 UNIQUE**；
@@ -215,8 +216,9 @@ def add_vocab_card(req: VocabCardReq) -> Dict[str, Any]:
         else:
             created = False
             # upsert 的「update」只补空，不覆盖用户已填内容（合法多卡靠 word 区分，
-            # 不会被这里合并，见方案 §5.3）。
-            fill_empty_columns(
+            # 不会被这里合并，见方案 §5.3）。返回被跳过的列名，让响应体能说明
+            # 「这次填的内容没写进去」，而不是一律回报「已保存」。
+            skipped_fields = fill_empty_columns(
                 conn,
                 card_id,
                 {
@@ -231,7 +233,17 @@ def add_vocab_card(req: VocabCardReq) -> Dict[str, Any]:
     if created:
         # 只有真正新增才记事件，避免重复提交把学习日志刷爆。
         log_study_event("add_card", card_id, req.word)
-    return {"status": "ok", "id": card_id, "word": req.word, "plural": req.plural or ""}
+    # 响应语义：created=false 表示命中既有卡、什么都没新增；skipped_fields 列出
+    # 「本次有值、但既有列已非空因而未写入」的列。前端据此区分「已保存」与
+    # 「已在词卡中 / 你填的内容保留了原值」，不再把幂等命中渲染成一次成功新增。
+    return {
+        "status": "ok",
+        "id": card_id,
+        "word": req.word,
+        "plural": req.plural or "",
+        "created": created,
+        "skipped_fields": skipped_fields,
+    }
 
 
 @router.post("/api/cards/grammar")
