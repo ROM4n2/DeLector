@@ -7,7 +7,7 @@
  *
  * 硬约束：探针里**不得重抄一份实现**。被测逻辑一律来自 `static/js/` 真源码
  * （剥 import/export 后进 node:vm），本文件只提供 DOM / 网络 / 伴侣桩。
- * 5 个入口共用从 rd-api.js 真源码取出的 `vocabSaveOutcome` / `vocabSaveNotice`，
+ * 5 个入口共用从 vocab-save.js 真源码取出的 `vocabSaveOutcome` / `vocabSaveNotice`，
  * 避免「手写桩 + 真源码切片」两个真相源。
  *
  * `--json` 输出**精确标准三键** `{failures, total, cases}`（新增探针即标准，
@@ -130,12 +130,12 @@ function buildCtx(file, response, pureFns, extra = {}) {
   return { ctx, calls, doc };
 }
 
-/* ── ① 纯函数：全部从 rd-api.js 真源码取 ───────────────────────────────── */
-const apiCtx = buildCtx("rd-api.js", {}, {});
-const vocabSaveOutcome = vm.runInContext("vocabSaveOutcome", apiCtx.ctx);
-const vocabSaveNotice = vm.runInContext("vocabSaveNotice", apiCtx.ctx);
+/* ── ① 纯函数：全部从 vocab-save.js 真源码取 ───────────────────────────── */
+const saveCtx = buildCtx("vocab-save.js", {}, {});
+const vocabSaveOutcome = vm.runInContext("vocabSaveOutcome", saveCtx.ctx);
+const vocabSaveNotice = vm.runInContext("vocabSaveNotice", saveCtx.ctx);
 if (typeof vocabSaveOutcome !== "function" || typeof vocabSaveNotice !== "function") {
-  console.error("rd-api.js 缺少 vocabSaveOutcome / vocabSaveNotice 纯函数");
+  console.error("vocab-save.js 缺少 vocabSaveOutcome / vocabSaveNotice 纯函数");
   process.exit(1);
 }
 const pureFns = { vocabSaveOutcome, vocabSaveNotice };

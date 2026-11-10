@@ -5,7 +5,7 @@
 `created:false` / `skipped_fields`，此前 5 个前端入口一律「已保存」+ 庆祝动画，
 用户手填的释义被「只补空」静默丢弃却回报成功。
 
-探针把 `rd-api.js`（纯判定函数）与 `reader.js` / `cards.js` / `a1_cards.js` /
+探针把 `vocab-save.js`（纯判定函数）与 `reader.js` / `cards.js` / `a1_cards.js` /
 `a1_hoeren.js`（5 个存卡入口）的**真源码**切进 node:vm 沙箱真跑，桩只提供
 DOM/网络/伴侣环境；断言按钮文案、庆祝动画次数、以及提示文案，不是字符串存在断言。
 `--json` 输出精确标准三键 `{failures, total, cases}`（新增探针即标准），

@@ -2,7 +2,7 @@
 "use strict";
 
 import { api, esc, jsAttr, notify } from "./core.js";
-import { vocabSaveOutcome, vocabSaveNotice } from "./rd-api.js";
+import { vocabSaveOutcome, vocabSaveNotice } from "./vocab-save.js";
 import { playGermanAudio } from "./player.js";
 import { refreshCardCounters } from "./reader.js";
 import { Companion } from "./companion.js";

@@ -7,7 +7,8 @@ import {
   fetchAudioCache, purgeAudioCache, prepareBackup, restoreBackup,
   fetchPrepMatrix, fetchPrepSaved, savePrepSaved,
 } from "./data-client.js";
-import { saveVocabCard, vocabSaveOutcome, vocabSaveNotice } from "./rd-api.js";
+import { saveVocabCard } from "./rd-api.js";
+import { vocabSaveOutcome, vocabSaveNotice } from "./vocab-save.js";
 import { playGermanAudio } from "./player.js";
 import { Companion } from "./companion.js";
 import { refreshCardCounters } from "./reader.js";

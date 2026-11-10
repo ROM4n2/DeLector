@@ -8,10 +8,10 @@ import {
   fetchArticle,
   lookupVocab, lookupGrammar,
   saveVocabCard, saveGrammarCard, fetchCardCounts, fetchVocabLedger,
-  vocabSaveOutcome, vocabSaveNotice,
   fetchArticleNotes, saveArticleNote, removeNote, fetchNoteAssist,
   saveSyntaxStats, fetchSyntaxStats
 } from './rd-api.js';
+import { vocabSaveOutcome, vocabSaveNotice } from './vocab-save.js';
 import { articleStore } from './article-store.js';
 import {
   CEFR_LEVELS, safeCefr, safeTokens,
