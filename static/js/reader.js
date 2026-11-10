@@ -12,7 +12,12 @@ import {
   saveSyntaxStats, fetchSyntaxStats
 } from './rd-api.js';
 import { vocabSaveOutcome, vocabSaveNotice } from './vocab-save.js';
-import { articleStore } from './article-store.js';
+import {
+  articleStore,
+  isRetryableError,
+  RETRY_DELAYS_MS,
+  RETRY_BUDGET_MS,
+} from './article-store.js';
 import {
   CEFR_LEVELS, safeCefr, safeTokens,
   renderMiniBar, renderFelderSpectrum, renderDetailedFelderGrid,
@@ -338,19 +343,111 @@ let _readerOpenToken = 0;
 // P0-3：本函数曾全程静默失败（无 try/catch、无加载态）——首次打开恰逢 spaCy 惰性迁移
 // 时 25s 超时 ⇒ 页面停在列表零提示。拆成两层：本壳负责"加载占位 + 失败 notify +
 // finally 恢复标题"；正文原样搬进 _openReaderBody（逐行零改动，降低搬运风险）。
+// ── 文章详情的就绪等待与降级（2026-11-10 真机点验）────────────────────────────
+// Android 首屏在服务 listening 后立刻可进入，但文章详情首次 GET 会触发 processed_json
+// 惰性迁移，需要等 spaCy 模型加载完成（数十秒）。旧实现直接 await fetchArticle，超时后
+// catch 只弹一条「打开文章失败」的红色 toast —— 用户看到的是「加载错误」。
+//
+// 现在：详情与文章列表共用同一套「未就绪可重试」判定与退避策略（isRetryableError +
+// RETRY_DELAYS_MS / RETRY_BUDGET_MS，来自 article-store.js，不写第二份）；未就绪时正文区
+// 显示加载态（不是错误），预算耗尽或不可重试才降级为带「重试」按钮的友好错误态。
+const READER_LOADING_HINT = "首次打开可能需要十几秒，请稍候。";
+const READER_NLP_LOADING_HINT = "正在准备德语分词模型（首次启动较慢），请稍候。";
+
+function _readerStateHtml(kind, title, hint, opts) {
+  const options = opts || {};
+  const retry = options.retry
+    ? `<button type="button" class="reader-state-retry">重试</button>`
+    : "";
+  const tip = options.tip ? `<div class="reader-state-tip">${esc(options.tip)}</div>` : "";
+  const role = kind === "loading" ? 'role="status" aria-live="polite"' : 'role="alert"';
+  return `
+    <div class="reader-state reader-state-${kind}" ${role}>
+      <div class="reader-state-title">${esc(title)}</div>
+      <div class="reader-state-hint">${esc(hint)}</div>
+      ${bar}
+      ${retry}
+      ${tip}
+    </div>`;
+}
+
+function _renderReaderLoading(hint) {
+  const content = document.getElementById("reader-content");
+  if (!content) return;
+  content.innerHTML = _readerStateHtml("loading", "正在加载文章…", hint || READER_LOADING_HINT);
+}
+
+function _renderReaderError(message, canRetry, onRetry) {
+  const content = document.getElementById("reader-content");
+  if (!content) return;
+  content.innerHTML = _readerStateHtml("error", "这篇暂时打不开", message, {
+    retry: !!canRetry,
+    tip: "如果持续失败，可以返回文章列表稍后再试。",
+  });
+  if (canRetry && onRetry) {
+    const btn = content.querySelector(".reader-state-retry");
+    if (btn) btn.addEventListener("click", onRetry, { once: true });
+  }
+}
+
+function _isNlpLoadingError(err) {
+  if (!err || Number(err.status) !== 503) return false;
+  return /nlp_loading|nlp_unavailable/i.test(String(err.message || err.detail || ""));
+}
+
+function _humanizeReaderError(err) {
+  const status = err && Number.isFinite(Number(err.status)) ? Number(err.status) : null;
+  if (status === 503) return "本地服务正在准备中，请稍后重试。";
+  if (status === 404) return "这篇文章可能已被删除。";
+  if (status === 401 || status === 403) return "没有权限打开这篇文章。";
+  if (status && status >= 500) return "本地服务暂时不可用，请稍后重试。";
+  const msg = String((err && err.message) || err || "");
+  if (/Failed to fetch|NetworkError|Load failed|ECONNREFUSED/i.test(msg)) {
+    return "无法连接到本地服务，请确认应用已完全启动。";
+  }
+  return msg || "未知错误";
+}
+
 export async function openReader(id) {
   const token = ++_readerOpenToken;
   const titleEl = document.getElementById("reader-title");
   const prevTitle = titleEl ? titleEl.textContent : "";
   if (titleEl) titleEl.textContent = "⏳ 载入中…";
+  _renderReaderLoading(READER_LOADING_HINT);
+
+  const startedAt = Date.now();
   try {
-    await _openReaderBody(id, token);
-  } catch (err) {
-    console.error("openReader failed:", err);
-    notify(`打开文章失败: ${(err && err.message) || err}`, { kind: "error" });
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        const result = await _openReaderBody(id, token);
+        if (result === "superseded" || result === "rendered") return;
+        throw new Error("文章数据为空");
+      } catch (err) {
+        if (token !== _readerOpenToken) return; // 期间用户已打开另一篇，丢弃本次
+        console.warn("[reader] 打开文章失败，第 %d 次：", attempt, err);
+        const canRetry = isRetryableError(err);
+        const delay = RETRY_DELAYS_MS[attempt - 1];
+        const withinBudget =
+          canRetry &&
+          Number.isFinite(delay) &&
+          Date.now() - startedAt + delay <= RETRY_BUDGET_MS;
+        if (!withinBudget) {
+          // 预算耗尽 / 不可重试：降级为带「重试」按钮的友好错误态（不再是一条会消失的 toast）。
+          _renderReaderError(_humanizeReaderError(err), canRetry, () => {
+            void openReader(id);
+          });
+          return;
+        }
+        _renderReaderLoading(
+          _isNlpLoadingError(err) ? READER_NLP_LOADING_HINT : READER_LOADING_HINT,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        if (token !== _readerOpenToken) return;
+      }
+    }
   } finally {
-    // 成功路径标题已被 a.title 覆盖；失败/早退且仍是占位时才还原旧标题。
-    // 以 token 收窄：被更新的调用接手后，旧调用不得回写旧标题。
+    // 占位标题必须在所有退出路径复原，否则会永久停在「载入中」。
+    // 只复原仍属于本次打开、且没人接手写标题的情形（后继 openReader 已写入自己的标题）。
     if (titleEl && token === _readerOpenToken && titleEl.textContent === "⏳ 载入中…") {
       titleEl.textContent = prevTitle;
     }
@@ -359,8 +456,8 @@ export async function openReader(id) {
 
 async function _openReaderBody(id, token) {
   const a = await fetchArticle(id);
-  if (!a || a.id !== Number(id)) return;
-  if (token !== _readerOpenToken) return; // 期间用户已打开另一篇，丢弃本次
+  if (token !== _readerOpenToken) return "superseded"; // 期间用户已打开另一篇，丢弃本次
+  if (!a || a.id !== Number(id)) throw new Error("文章数据为空或已被删除");
   state.currentArticle = a;
   document.getElementById("reader-title").textContent = a.title;
   renderReaderHeatbar(a.stats);
@@ -452,6 +549,7 @@ async function _openReaderBody(id, token) {
 
   // Dispatch view change
   if (window.show) window.show("reader");
+  return "rendered";
 }
 
 // ── 复习台账（方案 B：单行等宽，只排版既有列） ──────────────────────────────

@@ -1777,6 +1777,51 @@ body.focus-mode .tok.focus-active {
   text-decoration-skip-ink: none;
 }
 
+/* ── 文章加载 / 降级状态（2026-11-10 真机点验）─────────────────────────────
+ * 服务 listening 后立即进入阅读页，但文章详情首次 GET 需要等 spaCy 模型加载；
+ * 未就绪时显示加载态而不是错误。刻意不加循环动画：状态区可能持续十几秒，
+ * 常驻动效既抢注意力又受 `infinite animations` 视觉闸（硬顶 7）约束。 */
+.reader-state {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 48px 24px;
+  color: var(--muted);
+}
+
+.reader-state-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.reader-state-hint {
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.reader-state-tip {
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--ink-mute);
+}
+
+.reader-state-retry {
+  margin-top: 4px;
+  padding: 8px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.reader-state-retry:hover {
+  background: var(--line-soft);
+}
+
 /* ── Sticky Note Drawer (Analysis Hub) ───── */
 
 #drawer {

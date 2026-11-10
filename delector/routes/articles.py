@@ -34,6 +34,7 @@ from delector.core.security import (
     parse_rss_feed,
 )
 from delector.core.utils import _attachment_headers
+from delector.nlp_engine.model_loader import get_nlp_readiness
 from delector.nlp_engine.processor import (
     PROCESSED_JSON_VERSION,
     get_cefr_level,
@@ -191,6 +192,24 @@ def get_article(article_id: int) -> Dict[str, Any]:
         except Exception:
             pj = {}
         if _needs_lazy_migration(pj):
+            # 就绪快退（2026-11-10 真机点验）：下面的惰性迁移会在请求内同步调
+            # process_german_text()，首次需等 spaCy 模型加载完成（Android 上数十秒）。
+            # 前端 fetch 超时后会把「还没准备好」渲染成「加载失败」，用户看到红色错误。
+            # 因此模型仍处于 loading 时不在请求里等：有旧结果就先返回旧结果并打标，
+            # 没有旧结果就回 503 + Retry-After，让前端显示「正在准备分词」并按退避重试。
+            _readiness = get_nlp_readiness()
+            if _readiness["state"] == "loading":
+                if isinstance(pj, dict) and pj.get("sentences"):
+                    data.pop("processed_json", None)
+                    data.update(pj)
+                    data["processed_stale"] = True
+                    data["nlp_state"] = "loading"
+                    return data
+                raise HTTPException(
+                    status_code=503,
+                    detail="nlp_loading",
+                    headers={"Retry-After": "2"},
+                )
             # 惰性迁移：老数据（processed_json 缺失/非 dict/无 stats/版本落后）首次 GET
             # 时重算并回写。判据 MUST 引用 processor 的单一真相源 —— 曾硬编码字面量
             # 与写入端漂移，导致本分支恒真 ⇒ 每次 GET 都重跑 spaCy 并 UPDATE。

@@ -21,11 +21,13 @@ const CACHE_KEY = 'delector.articles.snapshot.v1';
 const ARTICLE_LIST_KEYS = ['id', 'title', 'created_at', 'char_count', 'stats'];
 
 // 「后端未就绪」重试：仅覆盖可恢复失败，总预算内有限次退避，不无限轮询。
-const RETRY_DELAYS_MS = [200, 400, 800, 1600, 3200];
-const RETRY_BUDGET_MS = 12000;
-const ATTEMPT_TIMEOUT_MS = 6000;
+// 导出给 reader.js 的「文章详情」加载复用 —— 详情与列表走同一套就绪判定与退避策略，
+// 不在阅读器里再写第二份 isRetryableError（红线：同一条策略只允许一处实现）。
+export const RETRY_DELAYS_MS = [200, 400, 800, 1600, 3200];
+export const RETRY_BUDGET_MS = 12000;
+export const ATTEMPT_TIMEOUT_MS = 6000;
 
-function isRetryableError(err) {
+export function isRetryableError(err) {
   if (!err) return false;
   if (err.code === 'TIMEOUT' || err.name === 'TypeError') return true;
   if (Number.isFinite(err.status)) return err.status >= 500;
