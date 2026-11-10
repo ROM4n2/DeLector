@@ -284,9 +284,19 @@ def test_concurrent_duplicate_posts_collapse_to_one_row(client, test_db_path):
 def test_direct_insert_bypass_still_duplicates(test_db_path):
     """Step 1 过渡期反向证据：无 UNIQUE，绕过 find_card_id 的写入仍能写出重复行。
 
-    这是**临时**护栏：Step 3 按方案稿 §6.3 建唯一索引时必须同步删除/改写本用例，
-    不要把「缺陷仍在」钉成长期契约。
+    用 ``PRAGMA index_list`` 先判存储层有没有唯一索引：Step 3 按方案稿 §6.3 建
+    UNIQUE 后本用例 **MUST 变红**，提示同步改写成「唯一索引挡住重复写入」的正向
+    断言，而不是让「必须写出两行」把正确修复挡在门外、或把缺陷钉成长期契约。
     """
+    with db_conn(test_db_path) as conn:
+        unique_indexes = [
+            row[1]
+            for row in conn.execute("PRAGMA index_list('vocab_cards')").fetchall()
+            if row[2]
+        ]
+    assert not unique_indexes, (
+        f"Step 3 已建唯一索引 {unique_indexes}：本过渡护栏 MUST 同步改写/删除（方案稿 §6.3）"
+    )
     _insert_vocab_card(word="Haus", lemma="Haus")
     _insert_vocab_card(word="Haus", lemma="Haus")
     assert _count(test_db_path) == 2, "无 UNIQUE 约束 ⇒ 直接 INSERT 必须如实写出两行（不得假装幂等）"

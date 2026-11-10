@@ -22,7 +22,7 @@
 
 ### 词卡写入幂等（部分修复）
 
-- **同词重复提交不再产生新卡**：新增 `delector/core/vocab_identity.py` 作为词卡同一性唯一入口（身份 = `lemma_key(lemma)` + `word_key(word)`），`POST /api/cards/vocab` 与伴学提议确认改为在 `BEGIN IMMEDIATE` 写事务内先查后写；已存在同身份卡时只补空字段，不覆盖用户已填内容。读侧台账与卡池复用同一归一函数；`word_key` 不去冠词，保留 `die Wohnung` 与 `Wohnung`、介词搭配 `bestehen auf/aus/in` 等合法多卡。
+- **同词重复提交不再产生新卡**：新增 `delector/core/vocab_identity.py` 作为写侧身份唯一入口（身份 = `lemma_key(lemma)` + `word_key(word)`）；`POST /api/cards/vocab` 在 `BEGIN IMMEDIATE` 写事务内先查后写，已存在同身份卡时只补空字段、不覆盖用户已填内容。读侧台账是**按 `lemma_key` 聚合的视图**（`card_count` + 代表卡），与写侧双列身份口径不同，两侧归一均走 `vocab_identity` 的行级 UDF；`word_key` 不去冠词，保留 `die Wohnung` 与 `Wohnung`、介词搭配 `bestehen auf/aus/in` 等合法多卡。**勘误（2026-11-10 收尾）**：本版发布时「伴学提议确认也在同一写事务内」并不成立（状态更新会内部 `commit()` 提前放锁），该竞态由 PR #332 修复；「读侧台账与卡池复用同一归一函数」的表述亦已按聚合视图口径更正。
 - **明确是部分修复，不是「重复卡已修复」**：未建 UNIQUE 索引，**存量重复仍在库里**（规模未知，须先统计再定合并策略）；绕过该入口的写入（旧客户端、直接 SQL、备份还原）仍可能产生重复。读侧按「共 N 张」去重显示。
 - **验证与边界**：新增 `tests/test_vocab_identity_upsert.py`（幂等、变体归一、介词/冠词多卡、台账与池同行、伴学确认、并发、绕过直插）；并发护栏为 TestClient 8 线程实测（全 200 且落 1 行），**不是**真机多进程压测。**未验证**：存量重复的真实规模与合并策略（Step 2 未启动）。
 

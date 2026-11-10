@@ -450,3 +450,11 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 - 保留 `release/v5.22.0`、`release/v5.22.1`（回滚入口；权威锚点是 `v*` annotated tag）与 `master`。
 - 口径纠正：负结果 §7 原「远程保留」改为 tag 承接；work.log 上一事件原「与远端完全一致」补注「远程现仅 master」。
 - 未 push、未动远程、未改产品代码；本轮 docs + work.log 变更本地提交，worktree clean。
+
+### 2026-11-10 21:11 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+只读 swarm 审计的收尾记录：性能裁决留痕 + 口径/护栏收口。
+- 性能假说（原 P2 / action 6）按「先测量再决定」裁决，结论：不加索引。实测为临时库 20000 行、15 次重复、匹配末行的最坏情况：find_card_id 的 EXPLAIN 为 SCAN vocab_cards，中位 35.86 ms（35.10~36.64）；台账窗口查询为 SCAN + USE TEMP B-TREE FOR ORDER BY，中位 34.30 ms（31.66~35.11）；建普通 (lemma, word) 索引后仍 SCAN、32.91 ms。根因是 Python UDF 包裹列使普通索引失效。
+- 由此证伪原报「查重/台账把 save_wb_state 推到 busy_timeout 5s」：查重写锁持有约 36 ms，与 busy_timeout=5000 ms 差两个数量级；台账是只读 SELECT，不持写锁。真要优化必须落持久化生成列/表达式索引（DDL，属 Step 2/3），本轮不改代码。边界：Android arm64 低端机未测；临时库已清理，零代码改动、未碰用户库。
+- 同一 PR 的收尾：统一 delector/core/vocab_identity.py 模块 docstring 与 CHANGELOG v5.22.1 词卡条目的口径措辞（台账是按 lemma_key 聚合的视图，不是与写侧共用的同一身份），并给 v5.22.1 的伴学 BEGIN IMMEDIATE 描述加勘误；tests/test_vocab_identity_upsert.py 的过渡期反向护栏改用 PRAGMA index_list 感知 Step 3 唯一索引。
+- 仍未做（按方案稿登记、非本轮范围）：Step 2 存量重复 G/S/M 统计与合并、三套计数口径统一、App 内已知限制文案、prep_saved 缺 refl、备份还原/wb 投影写锁统一。

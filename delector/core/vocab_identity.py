@@ -1,6 +1,6 @@
-"""词卡同一性：唯一归一入口（读 / 写共用，禁第二份实现）。
+"""词卡写入身份：唯一归一入口（禁第二份实现）。
 
-身份 = ``(lemma_key(lemma), word_key(word))``：
+身份 = ``(lemma_key(lemma), word_key(word))``，用于写侧「查重 → 插入」：
 
 - ``lemma`` 侧复用 :func:`delector.data.lexicon_merge.lemma_key`（去冠词、去 ``(sich)``、
   空白/连字符折叠）；
@@ -9,6 +9,10 @@
 
 为什么不是 ``lemma`` 单列：介词搭配 ``bestehen auf/aus/in`` 同 lemma 不同 word，
 听力 ``die Wohnung`` 与正文 ``Wohnung`` 也同 lemma 不同 word —— 单列会把合法多卡判成重复。
+
+台账口径：``GET /api/cards/vocab/ledger/{lemma}`` 是**按 lemma_key 聚合的读侧视图**
+（``card_count`` + 代表卡），与这里的双列身份不是同一个键，也别把「多卡只显示一张」
+当成写侧合并。两侧都走本模块的行级 UDF 只为共用空值回退，不是「读写共用同一身份」。
 
 空值回退：``vocab_identity`` 在参数侧把空 ``lemma`` / 空 ``word`` 回退到另一列（兼容老
 前端传空串与旧备份还原出的 ``lemma=''`` 行）。SQL 侧**不**再对单列直接套归一函数，而是
