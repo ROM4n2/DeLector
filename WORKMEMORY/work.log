@@ -538,3 +538,13 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 - 顺带发现（未修，记在 CHANGELOG 已知限制）：启动瞬间服务未就绪时 SW 会回落上一轮缓存，可能短暂遮蔽新静态文件（本次实测旧 reader.js 被缓存复用，`pm clear` 后才换新）。
 - 验证证据：模拟器截图证明首页/文章列表/阅读页均正常渲染，顶栏 V5.23.3、`/api/health` 返回 `nlp.state=ready`；本地全量 3037 passed / 3044 executed（5 skipped + 1 xfailed + 1 failed=GBK 环境）。
 - 另外：`test_android_packaging.py` 会扫 `android/app/build/outputs/apk/{device,emulator}/debug/*.apk`，本地 debug 包未做 zipalign ⇒ 报「本地头不连续」17 处死区。发版前删掉本地 debug 产物即可（不是产品缺陷，但别把这条红当成回归）。
+
+### 2026-11-11 11:40 | deepseek-v4.1-flash | PITFALL
+Caps: filesystem-read, filesystem-write, shell-exec
+桌面壳导出「假成功」：文件不写盘，前端仍弹「已导出」。
+- 现象：桌面包（desktop.py + pywebview 6.2.1 / WebView2）点导出，磁盘无文件，toast 照报成功。
+- 根因：① 全仓零处设置 `webview.settings['ALLOW_DOWNLOADS']`，默认 False（`webview/__init__.py:120`）② `edgechromium.py:316-319` 在开关为假时 `args.Cancel=True` 静默取消（只订阅 `DownloadStarting` @284，无完成事件、无落盘路径回传）③ 前端 `download()` 后无条件 `toast("已导出...")`（旧 `workbench.html:2586/2594`）。
+- 解法（DECISION）：不翻开关。新增 `POST /api/wb/backup/save` 由 Python 显式落盘并返回真实 path/bytes（`delector/routes/backup.py:163`）；前端 `download()` 返回结果对象，`exportAndReport()` 只在拿到 path 时报成功（`workbench.html:2561/2605`）；失败 toast 用「⚠ + 8px 左边框 + 方角」满足 I1；Android 保持 501 回退系统下载。why：WebView 放行只会落默认下载目录且无完成回调，前端仍拿不到成功证据，等于换个地方假成功。
+- 闸：`tools/wb_export_probe.mjs`（6 场景，精确定义「无 path 不报成功」）+ `tests/test_wb_export_save.py`（8 用例）+ `tools/ci_shards.py` 登记。
+- 落盘目录：自动创建 `Path.home()/Downloads`；建不出来才退回主目录，并在返回体带 `fallback_dir/warning`，前端文案显式说明位置。
+- 验证：desktop.py 实跑，toast `已导出轻量同步文件：C:\Users\Haoyu\wb-sync-2026-11-11.json（134 字节）`，`Get-Item` Length=134。未测：冻结 exe、桌面 UI 真实磁盘写失败、macOS/Linux。
