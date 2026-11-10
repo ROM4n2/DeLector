@@ -365,7 +365,6 @@ function _readerStateHtml(kind, title, hint, opts) {
     <div class="reader-state reader-state-${kind}" ${role}>
       <div class="reader-state-title">${esc(title)}</div>
       <div class="reader-state-hint">${esc(hint)}</div>
-      ${bar}
       ${retry}
       ${tip}
     </div>`;

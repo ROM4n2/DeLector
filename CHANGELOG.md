@@ -15,6 +15,36 @@
 5. README.md 的「版本历史」表只保留最近 3 版，旧版只进本文件。
 -->
 
+## v5.23.3 - 2026-11-11
+
+### 修复
+
+- **点开文章毫无反应：阅读页模板引用了已删除的变量**（v5.23.1 / v5.23.2 两版均带）。`static/js/reader.js` 的 `_readerStateHtml` 删掉 `const bar = ...` 后，模板里仍留着 `${bar}`，一进阅读页就抛 `ReferenceError: bar is not defined`；全局兜底弹一条提示后交互静默失效，用户看到的是「点了没反应」。模块本身能解析，所以 `node --check`、模块图守卫、前端桩探针全部看不见。修法：删掉该插值。
+- **Android 退出重进后停在「Webpage not available」**。首帧导航发生在本地服务 listening 之前，Service Worker 的 network-first 用 `fetch` 取页面——SW 发起的请求**不经过** `shouldInterceptRequest`，因此拿不到 APK 内的静态骨架，直接以 `ERR_FAILED` 结束；Chromium 错误页的 URL 仍是应用 origin、且不会触发 `onPageFinished`，旧的「已在应用 origin 就跳过重载」判据把它当成加载成功，服务就绪后也不重试。修法：就绪信号注入后发现窗口里根本没有 `window.notifyServerReady`（即不是我们的页面）时再确认一次，仍没有就补载一次（一次性，防抖成循环）；同时把主帧加载失败记入 `mainFrameLoadFailed`，就绪后强制重载。
+- 两处均用 x86_64 模拟器（`emulator` 渠道 debug 包）实测通过：首次启动、退出重进、点开文章渲染正文与 CEFR 光谱均正常。
+
+### 内部
+
+- 新增守卫 `test_reader_state_template_uses_only_declared_vars`：核对阅读页状态模板里 `${名字}` 形式的纯标识符必须在本函数内声明过（做过变异自证：把 `${bar}` 写回立即变红）。
+
+### 已知限制（Known Limitations）
+
+- **arm64 真机仍未点检**：本版修复在 x86_64 模拟器（`emulator` 渠道 debug 包）验证，正式 arm64-v8a 包只验证到「能构建、能发布」；覆盖安装后的真机表现未测。
+- **模拟器包与正式包不同源**：`emulator` 渠道 `applicationId` 带 `.emulator` 后缀、含 x86_64 ABI，静态资源与 Python 代码同源但构建类型为 debug；结论不能等同于 release 包已验证。
+- **SW 缓存可能短暂遮蔽新静态文件**：若启动瞬间服务未就绪，SW 会回落到上一轮缓存；本版靠「就绪后补载一次」恢复，但没有做「版本不一致即清缓存」的强制校验。
+- **v5.23.1 / v5.23.2 应视为不可用版本**：v5.23.1 全平台白屏、v5.23.2 阅读页点开无反应；请使用本版。
+- **重复卡存量未合并**：写入侧已幂等，未建 UNIQUE，历史重复仍在库中。
+
+### 回滚（Rollback）
+
+- **代码 / 产物**：可回退至 `v5.23.0` 发布包（`v5.23.1` 白屏、`v5.23.2` 阅读页不可用，均不宜作为回退目标）；`build-release.yml` 由 tag 触发。
+- **Android**：`versionCode` 由 `52302` 升至 `52303`，不可回滚；只能卸载重装旧 APK（会清应用私有数据，须先备份）；`versionCode` 不得回拨。
+- **数据位置 / 格式**：未搬移数据目录、未改变数据文件格式。
+- **Schema**：零 DDL、零迁移，旧版可直接读同一 SQLite。
+- **配置 / 发布通道**：无新增必需配置或密钥；git revert 可回退代码。
+
+---
+
 ## v5.23.2 - 2026-11-10
 
 ### 修复

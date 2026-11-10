@@ -64,6 +64,18 @@ public class MainActivity extends AppCompatActivity {
     /** 冷启动 TTFD 只上报一次；JS 桥回调来自 WebView 线程，必须原子判定。 */
     private final AtomicBoolean ttfdReported = new AtomicBoolean(false);
     private int reloadAttempts = 0;
+    /**
+     * 首帧导航是否以失败告终（{@code onReceivedError} 且 isForMainFrame）。
+     *
+     * 为什么要这个标志：SW 的 network-first 在 fetch 时**不经过** {@code shouldInterceptRequest}
+     * （那是 WebView 的网络栈，SW 的 fetch 走的是另一条路），所以「服务还没 listening 就导航」
+     * 会拿到 ERR_FAILED —— 页面上根本不是我们的骨架，只剩 Chromium 的错误页。旧的
+     * 「已经在应用 origin 上 ⇒ skip_reload」判据分不清「页面正常」与「页面是错误页」，
+     * 于是服务就绪后也不重试，用户停在错误页（2026-11-11 模拟器实证：退出重进必现）。
+     */
+    private volatile boolean mainFrameLoadFailed = false;
+    /** 「窗口里没有我们的 JS」只允许补载一次，避免抖动成循环。 */
+    private boolean reloadedForMissingPage = false;
     private long lastBackPressTime = 0;
     private NativeTTSBridge nativeTTS;
     private ValueCallback<Uri[]> filePathCallback;
@@ -377,6 +389,9 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) {
+                    // 记住「当前页面是错误页」：服务就绪时必须强制重载，不能因为 URL 已经是
+                    // 应用 origin 就当成加载成功（见 mainFrameLoadFailed 的字段注释）。
+                    mainFrameLoadFailed = true;
                     checkAndReloadServer();
                 }
             }
@@ -643,8 +658,42 @@ public class MainActivity extends AppCompatActivity {
             StartupProbe.markNav("ready_notify", value);
             if ("\"missing\"".equals(value)) {
                 readyHookInjected.set(false);
+                // 文档已经加载结束，却连 window.notifyServerReady 都没有 ⇒ 这不是我们的页面。
+                // 典型成因：SW 的 network-first 在服务 listening 前导航，fetch 被拒（SW 发起的
+                // 请求不经过 shouldInterceptRequest），Chromium 换成错误页，而 URL 仍是应用
+                // origin、onReceivedError 也不为 SW 请求回调主帧 —— 旧判据因此一直 skip_reload。
+                // 此刻服务已就绪，补载一次即可恢复；只补一次，防止抖动成循环。
+                if (!reloadedForMissingPage && serverPort > 0) {
+                    scheduleMissingPageCheck();
+                }
             }
         });
+    }
+
+    /**
+     * 就绪信号注入后发现窗口里没有我们的 JS 时，隔一拍再确认一次；仍没有就补载一次。
+     *
+     * 为什么不直接重载：页面可能只是还在解析（慢设备/大页面），立刻重载会白跑一次导航。
+     * 为什么不靠 {@code pageFinished}：Chromium 的错误页**不会**触发 onPageFinished
+     * （2026-11-11 模拟器实测：整轮 logcat 没有 page_finished），所以无法用它区分
+     * 「还在加载」与「页面就是错误页」。改用「同一条探针再问一次」加一拍延迟来区分。
+     */
+    private void scheduleMissingPageCheck() {
+        mainHandler.postDelayed(() -> {
+            if (!isServerReady || reloadedForMissingPage || serverPort <= 0) {
+                return;
+            }
+            final String probe = "(function(){try{return window.notifyServerReady"
+                    + " ? String(window.notifyServerReady()) : 'missing';}catch(e){return 'err';}})()";
+            webView.evaluateJavascript(probe, value -> {
+                if (!"\"missing\"".equals(value) || reloadedForMissingPage) {
+                    return;
+                }
+                reloadedForMissingPage = true;
+                StartupProbe.markNav("loadurl_retry_missing_page", serverBaseUrl(serverPort));
+                webView.loadUrl(serverBaseUrl(serverPort));
+            });
+        }, 1500);
     }
 
     /**
@@ -696,7 +745,7 @@ public class MainActivity extends AppCompatActivity {
                         isServerReady = true;
                         final int readyPort = serverPort;
                         mainHandler.post(() -> {
-                            if (readyPort == APP_PORT) {
+                            if (readyPort == APP_PORT && !mainFrameLoadFailed) {
                                 // 页面已在应用 origin 上加载：不再导航，接管交给 store 的重试。
                                 // 这里只补一次状态（splash 通常已被首个内容帧撤掉）。
                                 StartupProbe.markNav("skip_reload", "app_origin_ready");
@@ -708,9 +757,15 @@ public class MainActivity extends AppCompatActivity {
                                 return;
                             }
                             statusTextView.setText("服务已就绪，正在加载工作台...");
-                            // 端口顺延（8000 被占）时才导航；该场景是二次导航，不计入 navCount==1。
+                            // 两条路都会到这里：① 端口顺延（8000 被占）；② 首帧导航失败后强制重载
+                            // （此时页面是 Chromium 错误页，必须重来一次）。两者都是二次导航，
+                            // 不计入 navCount==1。
+                            final boolean retryAfterError = mainFrameLoadFailed;
+                            mainFrameLoadFailed = false;
                             StartupProbe.navZero();
-                            StartupProbe.markNav("loadurl", serverBaseUrl(readyPort));
+                            StartupProbe.markNav(
+                                    retryAfterError ? "loadurl_retry_after_error" : "loadurl",
+                                    serverBaseUrl(readyPort));
                             webView.loadUrl(serverBaseUrl(readyPort));
                         });
                         return;

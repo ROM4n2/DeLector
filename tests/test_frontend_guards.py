@@ -176,3 +176,23 @@ def test_modal_close_buttons_have_accessible_name():
     # version_preview + cloze_overlay），匹配数骤降说明守卫已被改瞎。
     assert len(hits) >= 6, f"只匹配到 {len(hits)} 个 drawer-close 按钮，正则疑似失效"
 
+
+# ── v5.23.2 事故守卫：状态模板里引用了已删除的变量 ────────────────────────────
+# 事故：_readerStateHtml 删掉 `const bar = ...` 后，模板里仍留着 `${bar}`。模块能
+# 解析（不是重复导出那种解析期错误），但**一进阅读页就** `ReferenceError: bar is
+# not defined` —— 点文章毫无反应，只有全局兜底弹一条提示。node --check 与模块图
+# 守卫都只查语法/绑定，看不见这条渲染路径。这里只核对这一个模板函数：`${名字}`
+# 形式的纯标识符必须在本函数内声明过。
+def test_reader_state_template_uses_only_declared_vars():
+    body = _extract_function(READER, "function _readerStateHtml(")
+
+    declared = set(re.findall(r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)", body))
+    declared |= set(re.findall(r"function\s+\w+\s*\(([^)]*)\)", body))
+    declared |= {"kind", "title", "hint", "opts", "options"}
+
+    used = set(re.findall(r"\$\{\s*([A-Za-z_$][\w$]*)\s*\}", body))
+    missing = sorted(used - declared)
+    assert not missing, (
+        "reader 状态模板引用了未声明的变量（运行时 ReferenceError，阅读页打不开）："
+        + ", ".join(missing)
+    )
