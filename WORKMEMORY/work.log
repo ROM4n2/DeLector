@@ -776,3 +776,11 @@ ADR-0033 桌面 B2 落地：提交 A（缓存持久化）已提交 `ac2e0b4`；�
 - 测试：desktop 相关 154 passed / 2 skipped；docs 闸 + CI 分片闸 39 passed；`ruff check .` 全绿。`tools/ci_shards.py` unit-2 加入新测试文件。
 - 落盘：ADR-0033 §15.7–15.9、`docs/plans/2026-11-10-adr-0033-b2-desktop-baseline.md` §13、ADR INDEX。
 - 未测：冻结 exe、低核 CPU、节能、机械盘、杀软、8000 顺延、macOS/Linux；交接窗口内 SSE/大下载未单独构造。
+
+### 2026-11-10 19:31 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read/write, shell-exec, git
+PR #333 已以 merge commit `96369ec` 合入 master（2026-11-10 11:30Z），未 force、未跳 hook。两提交：A `ac2e0b4`（`private_mode` 缺陷修复）、B `14de7df`（B2 提前加载）。
+- 合并前 PR CI 全绿；合并后 master 推送 CI（run 42807971902）全绿，含 Windows Portable Smoke（build + 真启闸，3m44s 量级）、mypy strict、unit-1..4、cost-cold-start/cost-guards/integration-heavy、Go 双侧、Static Invariants、Secret Scan。
+- 定性已写入 ADR-0033 §15.8 与 B2 plan §13.1：`private_mode=True` 是 pywebview 默认值，导致 ADR-0032 桌面缓存「从未生效」，按缺陷修，不属性能调优，已加机械闸 `test_webview_start_persists_storage_under_the_data_dir`。
+- ADR-0033 §15 头部标注「已实施并合入 master（PR #333 / 96369ec）」；§9 行、§15.6/15.7、INDEX 备注同步；B2 plan §13.4 记录合入；未测项照旧挂账。
+- 清理：`%TEMP%\del-b2` 已删（实施轮结束后）；8000/8002 与 9350–9400 无监听；无 DeLector 残留进程（其他 msedgewebview2 属 Cortana/clash-verge，未动）。worktree：主仓 D:/Code/DeLector 在 master；另有 5 个与本次无关的既有 worktree，仅报告不删。

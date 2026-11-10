@@ -268,7 +268,7 @@
 | B1 的安卓真实 TTFD | 页面与 Chaquopy 并行，CPU 争抢幅度未知；既有 +95.5ms 只测了壳页 | 实现最小拦截后，`force-stop` + `pm clear`，≥5 次 × 2 轮，读 `StartupProbe` 的 TTFD/M1，同会话与当前基线对照 |
 | 真实冷启下重试能否无人干预接管 | 此前证据是 CDP 人为拦截（已标注非冷启证据） | 首帧出现后观察 `/api/articles` 首次失败 → 退避 → 就绪后接管；记录请求次数、`navCount`、接管耗时；预算耗尽场景单独跑一次 |
 | 生产桌面壳首次可用基线 | 615ms 是 gateway 条件，生产壳 `await_ready` 后 `load_url` | **已闭合（§15）**：入口 `desktop.py`（冻结 exe 未测），零点=OS 进程创建，终点=FCP/双 rAF（不用 `loaded` 冒充）；10 次冷启 × 全新数据目录，FCP 中位 6126.0ms、首行 6454.0ms，0 弃跑 |
-| 桌面 B2 的收益是否 ≥300ms | 受 1341ms 服务就绪约束，窗口/页面成本未测 | **已闭合（§15）**：`nav − E` 中位 2202.9ms（2127.8–2371.7），≥300ms 成立；但真实行接管需桌面就绪钩子，且 `private_mode` 使快照不持久（§15.3–15.5），实施后仍须同构建 A/B |
+| 桌面 B2 的收益是否 ≥300ms | 受 1341ms 服务就绪约束，窗口/页面成本未测 | **已闭合并落地（§15）**：基线 `nav − E` 中位 2202.9ms（2127.8–2371.7）；实施后同构建交替 A/B（2 轮×5 对）**FCP −2124.0ms、首条真实行 −586.8ms**、首次交互最大回退 +0.5ms/+0.8%，判定通过；PR **#333** / merge `96369ec` 已合入 master |
 | 8000 被占用时的回落行为 | 未构造该场景 | 占用 8000 后冷启，验证是否回落「等就绪再 loadUrl」且不出现错误 origin |
 | arm64 真机 / 低端机 | 本机 `adb devices` 为空，无真机 | 明确写「未覆盖」，不做外推；有真机后按同一脚本复测 |
 | WebView 拦截对 module MIME/缓存的影响 | 只在模拟器可验 | 用 CDP 看控制台与网络，断言 `text/javascript`、`no-store`/`no-cache` 行为符合预期 |
@@ -450,6 +450,8 @@ S1 起壳页只作「防回归兜底」，但代码里已无调用点（`onCreat
 
 ## 15. 桌面 B2 生产基线（2026-11-10；只测不改）
 
+> **阶段状态：B2 已实施并合入 master** —— PR #333，merge commit `96369ec`（提交 A `ac2e0b4` 缓存持久化缺陷修复；提交 B `14de7df` 页面提前加载）。实施前基线见 §15.1–15.7，实施后同构建 A/B 与判定见 §15.8–15.9。未测项照旧挂账（§15.9 末）。
+
 > 协议、逐样本与复现命令见 `docs/plans/2026-11-10-adr-0033-b2-desktop-baseline.md`。本轮**未改产品代码、未改桌面壳、未开 PR、未碰安卓**；测量脚本只在 `%TEMP%`，测后删除。
 
 ### 15.1 口径（先定后跑）
@@ -519,7 +521,7 @@ S1 起壳页只作「防回归兜底」，但代码里已无调用点（`onCreat
 
 ### 15.6 未测项（如实）
 
-- B2 未实现：2.2s 是反事实估算，不是同构建 A/B；页段在并发 import 下的膨胀 Δ 未测。
+- B2 未实现（**后续已消除**）：2.2s 是反事实估算，不是同构建 A/B；页段在并发 import 下的膨胀 Δ 未测。实施后的同构建交替 A/B 见 §15.9（FCP −2124.0ms、真实行 −586.8ms），本条只剩「页段膨胀 Δ 未单列」。
 - 冻结 `DeLector.exe`（PyInstaller）未测；本轮只测源入口 `python desktop.py`。打包后 bootloader/PYZ 可能改变绝对时点（相对收益口径仍适用，但需复测）。
 - 静态服务器启动/HTTP 开销未测；反代/socket 交接、SSE、下载、大请求体未测。
 - 8000 被占用后的端口顺延未构造（本轮每次确认 8000 空闲）。
@@ -536,11 +538,13 @@ S1 起壳页只作「防回归兜底」，但代码里已无调用点（`onCreat
 - §9 的「生产桌面壳首次可用基线」「桌面 B2 收益是否 ≥300ms」两行**闭合**：基线见 §15.2，收益 ≥300ms 成立。
 - B2 进入「建议实施」而非「立即实施」：先完成 15.5 的两项前置（快照持久化、就绪钩子），再做同构建 A/B；未过 A/B 不合并。
 - 「桌面由 ADR-0032 缓存层覆盖」分支**不成立**：缓存层是必要条件，但拿不到 `nav − E ≈ 2.2s` 的页面提前量；现状 FCP 6126ms 中，页面导航被压在 ready（5437.9ms）之后。
-- **后续落地**：提交 A（快照持久化，§15.8）与提交 B（提前加载，§15.9）已实施；B 同构建 A/B 判定通过（FCP −2124ms、真实行 −587ms），两者同 PR。
+- **后续落地（已合入）**：提交 A（快照持久化缺陷修复，§15.8）与提交 B（提前加载，§15.9）经 PR **#333** 以 merge commit `96369ec` 合入 master；B 同构建 A/B 判定通过（FCP −2124ms、真实行 −587ms）。
 
 ### 15.8 提交 A：桌面快照持久化（已完成并独立验证）
 
 **根因**：`webview.start(...)` 未传 `private_mode`，pywebview 默认 `private_mode=True` ⇒ WebView2 每次冷启用临时数据目录 ⇒ `localStorage` / CacheStorage 不跨启动 ⇒ ADR-0032 的列表快照在桌面从未生效（首条行永远是内置 4 篇 seed）。
+
+> **性质：这是缺陷修复，不是性能调优。** ADR-0032 的桌面缓存路径「写了但从未生效」—— 代码存在、测试绿、人工抽查看不出问题，直到冷启两次对比首条行才暴露。它不属于 B2 的收益，也不应用性能预算衡量；B2 的 A/B 数字（§15.9）已把这一层作为既定前提。已加机械闸（`test_webview_start_persists_storage_under_the_data_dir`），防止再次静默失效。
 
 **改动**（`desktop.py`）：
 
@@ -600,7 +604,7 @@ webview.start(..., private_mode=False, storage_path=storage_path)
 | 白屏 / 露底帧 | 25/25 早加载样本均正常绘出（seed 行与 FCP 同刻），0 失败 | 不触发 |
 | 真实行接管晚于基线 | 真实行提前 **586.8ms**（两轮均提前） | 不触发 |
 
-**结论：B 判定通过，随 A 进入同一 PR 的第二个提交。**
+**结论：B 判定通过，随 A 经 PR #333（merge commit `96369ec`）合入 master。**
 
 **新增机械闸**：`test_desktop_window_lifecycle.py::test_early_load_navigates_before_ready_and_hands_socket_to_uvicorn`（就绪前 `show` + `load_url`、splash 先收、socket 原样交给 `serve_in_thread`、就绪后调一次 `notifyServerReady`）；`test_hand_off_socket_is_still_listening_and_reused_by_uvicorn`（socket 仍 listen 且 uvicorn 可复用）。
 
