@@ -256,6 +256,19 @@ function createArticleStore(options) {
     return loadArticles({ force: true });
   }
 
+  // 后端就绪信号（宿主探活成功）：**只打断正在等待的退避计时器**，提前发起下一次尝试。
+  // 不新建 cycle、不改退避序列、不动已在途的请求与已就绪的状态，因此不构成第二套重试机制。
+  function retryIfWaiting() {
+    const current = cycle;
+    if (!current || current.timer == null) return false;
+    unschedule(current.timer);
+    current.timer = null;
+    if (current.seq !== loadSeq || current.settled) return false;
+    current.attempts += 1;
+    runAttempt(current);
+    return true;
+  }
+
   async function deleteArticle(id) {
     // 写操作不走缓存：删除成功后先失效快照，再由成功 GET 重建。
     await removeRemote(id);
@@ -264,7 +277,7 @@ function createArticleStore(options) {
     await loadArticles({ force: true });
   }
 
-  return { getState, subscribe, loadArticles, deleteArticle, retryNow };
+  return { getState, subscribe, loadArticles, deleteArticle, retryNow, retryIfWaiting };
 }
 
 export const articleStore = createArticleStore();

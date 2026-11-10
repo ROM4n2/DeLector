@@ -188,6 +188,11 @@ export function retryArticles() {
   return articleStore.retryNow();
 }
 
+// 宿主就绪信号：只在「正在退避等待」时提前重试；已就绪/请求在途时返回 false，不产生多余请求。
+export function retryArticlesIfWaiting() {
+  return articleStore.retryIfWaiting();
+}
+
 // 状态痕迹：图标 + 文案 + 虚线形状，不依赖颜色（I1）。
 // stale = 屏上是旧数据；retrying 时接力为「重试中」，error 时停在「未连接/同步失败」。
 function renderArticleStatus(snapshot) {

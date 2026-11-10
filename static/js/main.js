@@ -37,6 +37,7 @@ import {
 import {
   loadArticles,
   retryArticles,
+  retryArticlesIfWaiting,
   deleteArticle,
   openReader,
   inspect,
@@ -1209,6 +1210,7 @@ Object.assign(window, {
   // Reader & Token Inspector
   openReader,
   retryArticles,
+  notifyServerReady,
   deleteArticle,
   inspect,
   toggleCefrFocus,
@@ -1413,6 +1415,25 @@ Object.assign(window, {
   // Full-Text Search（全文检索 · Search 命名空间接线，view-search inline onclick）
   Search,
 });
+
+// ── 宿主就绪钩子（Android 原生侧 /api/settings 探活成功后调用）───────────────
+// 做两件事，都只发生在「页面已绘制完成之后」，不参与首帧路径：
+//   1) 打断正在等待的退避计时器、立刻重试一次 —— 复用 article-store.retryIfWaiting，
+//      不是第二套重试机制；已就绪或请求在途时返回 false，不产生多余请求。
+//   2) 补注册 Service Worker —— S1 起页面先于 Python 加载，window.load 时的注册
+//      必然因连接被拒失败；不补这一步，安卓上 SW 永远注册不上（离线能力静默丢失）。
+function notifyServerReady() {
+  let retried = false;
+  try {
+    retried = retryArticlesIfWaiting();
+  } catch (_) {
+    // 就绪钩子失败不得影响页面其它功能
+  }
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(() => {});
+  }
+  return retried;
+}
 
 // ── PWA Service Worker Registration ──────────────────────────────────────────
 if ("serviceWorker" in navigator) {
