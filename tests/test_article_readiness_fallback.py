@@ -7,10 +7,12 @@
 
 修法：模型仍 ``loading`` 时**不在请求里等** ——
 - 有旧 ``sentences``：先返回旧结果，并打 ``processed_stale`` / ``nlp_state``；
-- 没有可用旧结果：回 ``503 nlp_loading`` + ``Retry-After``，让前端显示「正在准备分词」
-  并按退避重试。
+- 没有可用旧结果且**后台预热已接手加载**：回 ``503 nlp_loading`` + ``Retry-After``，
+  让前端显示「正在准备分词」并按退避重试；
+- 没有可用旧结果且预热未启动：仍走同步惰性迁移（预热没接手时，同步加载是唯一能让
+  模型加载起来的路径，挡掉会破坏 single-flight 契约，见 tests/test_lazy_migration_singleflight.py）。
 
-本文件钉住这三条路径（就绪时不得误伤原有惰性迁移）。
+本文件钉住这四条路径（含就绪时不得误伤原有惰性迁移）。
 """
 
 import gc
@@ -63,12 +65,12 @@ def _insert_article(db: str, processed_json: str) -> int:
         return int(cur.lastrowid or 0)
 
 
-def _readiness(state: str) -> Dict[str, Any]:
+def _readiness(state: str, prewarm_started: bool = True) -> Dict[str, Any]:
     return {
         "state": state,
         "loaded": state == "ready",
         "model": "de_core_news_sm",
-        "prewarm_started": True,
+        "prewarm_started": prewarm_started,
         "error": "",
     }
 
@@ -111,6 +113,33 @@ def test_detail_returns_stale_payload_when_nlp_loading_with_old_sentences(
     assert body["nlp_state"] == "loading", f"应回传 nlp_state=loading，实际 {body.get('nlp_state')!r}"
     assert body["sentences"] == [{"id": 1, "tokens": []}], "旧 sentences 必须原样返回"
     assert "processed_json" not in body, "响应不得回传原始序列化列（与既有去重契约一致）"
+
+
+def test_detail_migrates_when_loading_but_prewarm_not_started(
+    db_paths: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """loading 但预热未接手 ⇒ 必须仍走同步惰性迁移（否则 single-flight 契约被挡死）。
+
+    CI unit-3 实证：无条件「loading 就 503」会让
+    tests/test_lazy_migration_singleflight.py 两条用例红——预热未启动时，同步加载是唯一
+    能触发模型加载的路径。
+    """
+    aid = _insert_article(db_paths, "{}")
+    monkeypatch.setattr(
+        articles_route, "get_nlp_readiness", lambda: _readiness("loading", prewarm_started=False)
+    )
+    migrated: Dict[str, Any] = {
+        "version": "test",
+        "stats": {"word_count": 4},
+        "sentences": [{"id": 3, "tokens": []}],
+    }
+    monkeypatch.setattr(articles_route, "process_german_text", lambda _text: dict(migrated))
+    client = TestClient(server.create_app(), client=("127.0.0.1", 54321))
+
+    res = client.get(f"/api/articles/{aid}")
+
+    assert res.status_code == 200, f"预热未接手时应同步迁移，实际 {res.status_code}：{res.text[:200]}"
+    assert res.json()["stats"]["word_count"] == 4
 
 
 def test_detail_still_migrates_when_nlp_ready(

@@ -195,8 +195,14 @@ def get_article(article_id: int) -> Dict[str, Any]:
             # 就绪快退（2026-11-10 真机点验）：下面的惰性迁移会在请求内同步调
             # process_german_text()，首次需等 spaCy 模型加载完成（Android 上数十秒）。
             # 前端 fetch 超时后会把「还没准备好」渲染成「加载失败」，用户看到红色错误。
-            # 因此模型仍处于 loading 时不在请求里等：有旧结果就先返回旧结果并打标，
-            # 没有旧结果就回 503 + Retry-After，让前端显示「正在准备分词」并按退避重试。
+            #
+            # 两条分支刻意分开，别合并成「loading 就 503」：
+            # ① 有旧结果 ⇒ 永远先返回旧结果并打标（不阻塞、不降级体验，任何平台都划算）；
+            # ② 没有旧结果 ⇒ **只有后台预热已接手加载时**才 503 + Retry-After。此时请求进
+            #    process_german_text() 只会堵在同一把 `_model_lock` 上白占一个 worker，退避
+            #    重试更快。预热从未启动（裸建 app 的测试、显式关预热）时不能 503：那时同步
+            #    加载是**唯一**能触发模型加载的路径，挡掉会让「单请求 single-flight 惰性迁移」
+            #    契约失效（CI unit-3 实证：test_lazy_migration_singleflight 两条用例红）。
             _readiness = get_nlp_readiness()
             if _readiness["state"] == "loading":
                 if isinstance(pj, dict) and pj.get("sentences"):
@@ -205,11 +211,12 @@ def get_article(article_id: int) -> Dict[str, Any]:
                     data["processed_stale"] = True
                     data["nlp_state"] = "loading"
                     return data
-                raise HTTPException(
-                    status_code=503,
-                    detail="nlp_loading",
-                    headers={"Retry-After": "2"},
-                )
+                if _readiness.get("prewarm_started"):
+                    raise HTTPException(
+                        status_code=503,
+                        detail="nlp_loading",
+                        headers={"Retry-After": "2"},
+                    )
             # 惰性迁移：老数据（processed_json 缺失/非 dict/无 stats/版本落后）首次 GET
             # 时重算并回写。判据 MUST 引用 processor 的单一真相源 —— 曾硬编码字面量
             # 与写入端漂移，导致本分支恒真 ⇒ 每次 GET 都重跑 spaCy 并 UPDATE。

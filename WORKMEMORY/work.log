@@ -478,3 +478,12 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 - 视觉：`.reader-state` 刻意**不加**循环动画——状态区可长达十几秒，且 `infinite animations` 视觉闸是硬顶 7（== 判等，加一条即红）。
 - 契约变更 1 处：`tests/test_frontend_guards.py::test_open_reader_body_has_try_catch_and_notify` 的「失败必须 notify」放宽为「notify 或正文区错误态」，理由=常驻错误态不弱于会消失的 toast；其余断言（try/catch/finally/载入中）原样保留且现由真实 `finally` 满足。
 - 验证（worktree 实测）：新文件 `tests/test_article_readiness_fallback.py` 3 passed（已登记 `tools/ci_shards.py` unit-1，否则分片漏测守卫红）；`ruff check .` clean；`mypy --strict delector tools` 与 `mypy --follow-imports=skip tests` 零错；`build_css` 14096 行 sha256=4fa3f09f…，`check_css_sync` PASS；全量 pytest 3028 passed / 4 failed → 修完 3 条，仅剩 `test_frontend_layers.py::test_gate_cli_reports_file_line_rule_and_raw_line`，已确认 **master 上同样失败**（本地 GBK 控制台解码中文字面量，非本次引入）。
+
+### 2026-11-10 23:58 | deepseek-v4.1-flash | PITFALL
+Caps: filesystem-read, filesystem-write, shell-exec, git
+PR #340 被 CI unit-3 打红：无条件「NLP loading ⇒ 503」挡死了 single-flight 惰性迁移。
+- 失败：`tests/test_lazy_migration_singleflight.py::test_concurrent_gets_stale_article_compute_once` 与 `::test_single_thread_stale_article_still_migrates` 均拿到 `503 {"detail":"nlp_loading"}`（期望 200）。本地全量跑过却全绿——因为这两条用例不在我挑的那几个文件里，"全量绿"当时是**旧代码**的全量绿，改动后才补的条件没被这两条覆盖。
+- 根因：测试环境裸建 `app`（lifespan 未跑、`_prewarm_started=False`），模型永远 loading；此时「请求内同步加载」是**唯一**能触发模型加载的路径，挡掉它等于把迁移通道焊死。
+- 修法：快退拆两段——有旧 `sentences` 时**任何平台**都先返回旧结果 + `processed_stale`；无旧结果时只在 `readiness["prewarm_started"]` 为真才 503（预热占着 `_model_lock`，等也白等），否则落到原同步迁移。
+- 新增锁：`test_detail_migrates_when_loading_but_prewarm_not_started`（loading + 预热未启动 ⇒ 200 且迁移），把这条边界钉死，避免下次再被「更严格的快速失败」误伤。
+- 复跑：`test_article_readiness_fallback.py` 4 passed + singleflight 2 passed；全量 pytest 3032 passed / 1 failed（仅 `test_frontend_layers.py::test_gate_cli_reports_file_line_rule_and_raw_line`，本地 GBK 控制台解码中文字面量，master 同样红）；ruff 与两档 mypy 零错。
