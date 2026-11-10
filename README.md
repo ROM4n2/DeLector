@@ -1,19 +1,19 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v5.23.1-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v5.23.2-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-3036%2F3043%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-3035%2F3045%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License" />
 </p>
 
-<!-- Tests 徽章口径（可复算，非推算）：**v5.23.1 发布分支本地全量（2026-11-10）**。
-     分子 = `python -m pytest tests` 的 3036 passed；分母 = `python -m pytest tests --collect-only -q` 的 3043 collected；
-     差集 5 skipped + 1 xfailed + 1 failed。环境：Windows 11 / Python 3.11（.venv）。
+<!-- Tests 徽章口径（可复算，非推算）：**v5.23.2 发布分支本地全量（2026-11-10）**。
+     分子 = `python -m pytest tests` 的 3035 passed；分母 = `python -m pytest tests --collect-only -q` 的 3045 collected；
+     差集 8 skipped + 1 xfailed + 1 failed。环境：Windows 11 / Python 3.11（.venv）。
      那 1 条 failed 是 tests/test_frontend_layers.py::test_gate_cli_reports_file_line_rule_and_raw_line：
      本机 GBK 控制台把子进程输出的中文字面量解码成乱码（在 v5.23.0 的 master 上同样失败，与本版改动无关），
      Linux/CI 环境不受影响，故分子按 passed 计、不把它算成回归。
@@ -56,9 +56,9 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 
 ## 多平台下载发布包
 
-> **v5.23.1 最新版本亮点（2026-11-10）**：
-> - **阅读页不再把「还没准备好」显示成「加载错误」**：文章详情不再在请求里同步等 spaCy 分词；有旧结果就先给你读，没有时显示「正在准备德语分词模型」并自动重试，只有真的打不开（已删除 / 无权限 / 服务异常）才给出带「重试」按钮的提示。
-> - **快速切换文章不串台**：连续点开多篇时，标题与正文只属于最后打开的那一篇。
+> **v5.23.2 最新版本亮点（2026-11-10）**：
+> - **修复 v5.23.1 的全平台白屏**：v5.23.1 的前端模块存在重复导出，浏览器在解析阶段就整页失败，打开后只剩静态文字块。**若你装了 v5.23.1，请直接升级本版或回退 v5.23.0**。本版同时补了一条机械守卫：真让 node 解析并链接整张前端模块图，重复导出/缺失导出会立刻红灯。
+> - **阅读页不再把「还没准备好」显示成「加载错误」**（v5.23.1 的内容，本版已可正常使用）：文章详情不再在请求里同步等 spaCy 分词；有旧结果就先给你读，没有时显示「正在准备德语分词模型」并自动重试，只有真的打不开（已删除 / 无权限 / 服务异常）才给出带「重试」按钮的提示。
 > - **健康检查暴露分词状态**：`/api/health` 新增 `nlp` 字段（ready / loading / error / unavailable），排障时能直接看出是模型未就绪还是真的出错。
 
 > **Android 用户注意**：含 `static/` 改动的版本需**覆盖安装**才生效。
@@ -66,10 +66,10 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 
 | 平台               | 版本                   | 说明                                                                                                                                                                                                                                                       | 下载通道                                                                                    |
 | ------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| **Windows x64** | `v5.23.1` | 原生桌面窗口 + 系统托盘，免装 Python，解压双击 `DeLector.exe`；需 Win10+ 与 WebView2 运行时（Win11 自带；Win10 缺运行时的表现见[已知限制](#已知限制)）；首次启动把数据放到 `%LOCALAPPDATA%\DeLector`                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.23.1)     |
-| **macOS**       | `v5.23.1` | 解压后进入 `DeLector-v5.23.1-macOS/`，运行其中的裸可执行文件 `./DeLector`（不是 `.app` 包）。正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`。包未做代码签名与公证，若被 Gatekeeper 拦截请右键「打开」，或在终端执行 `xattr -d com.apple.quarantine DeLector`。 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.23.1)  |
-| **Linux x64**   | `v5.23.1` | 解压后进入 `DeLector-v5.23.1-Linux-x64/`，运行 `./DeLector`（正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`）。包在 CI 的 Ubuntu 环境构建，未在其他发行版验证。 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.23.1)  |
-| **Android**     | `v5.23.1` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；正式包只出 **arm64-v8a**，CI 用 `keytool` 校验 APK 与 keystore 的 SHA256 证书指纹一致。**arm64 真机未验证**（仅 x86_64 模拟器）。 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.23.1) |
+| **Windows x64** | `v5.23.2` | 原生桌面窗口 + 系统托盘，免装 Python，解压双击 `DeLector.exe`；需 Win10+ 与 WebView2 运行时（Win11 自带；Win10 缺运行时的表现见[已知限制](#已知限制)）；首次启动把数据放到 `%LOCALAPPDATA%\DeLector`                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.23.2)     |
+| **macOS**       | `v5.23.2` | 解压后进入 `DeLector-v5.23.2-macOS/`，运行其中的裸可执行文件 `./DeLector`（不是 `.app` 包）。正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`。包未做代码签名与公证，若被 Gatekeeper 拦截请右键「打开」，或在终端执行 `xattr -d com.apple.quarantine DeLector`。 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.23.2)  |
+| **Linux x64**   | `v5.23.2` | 解压后进入 `DeLector-v5.23.2-Linux-x64/`，运行 `./DeLector`（正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`）。包在 CI 的 Ubuntu 环境构建，未在其他发行版验证。 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.23.2)  |
+| **Android**     | `v5.23.2` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；正式包只出 **arm64-v8a**，CI 用 `keytool` 校验 APK 与 keystore 的 SHA256 证书指纹一致。**arm64 真机未验证**（仅 x86_64 模拟器）。 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.23.2) |
 
 ---
 
@@ -194,9 +194,9 @@ DeLector/
 
 | 版本 | 发布日期 | 里程碑概要 |
 | :--- | :--- | :--- |
-| **v5.23.1** | 2026-11-10 | 阅读页「未就绪显示成加载错误」修复：详情不再同步等分词、旧结果先行、加载态与退避重试、友好降级；详情支持 `processed_stale` 打标；`/api/health` 暴露分词状态 |
+| **v5.23.2** | 2026-11-10 | 修复 v5.23.1 全平台白屏（前端模块图重复导出导致解析期崩溃）· 新增「node 真链接整张模块图」守卫 · 含 v5.23.1 的阅读页就绪降级修复 |
+| **v5.23.1** | 2026-11-10 | 阅读页「未就绪显示成加载错误」修复：详情不再同步等分词、旧结果先行、加载态与退避重试、友好降级；**本版前端白屏，请用 v5.23.2** |
 | **v5.23.0** | 2026-11-10 | 词卡写入幂等修复链收口（伴学事务边界 / 空 lemma 同源归一 / 存卡反馈语义）· Android 冷启动静态壳 · 桌面 B2 提前加载与 WebView2 缓存修复 · App 内已知限制说明 · 发布文档规范化 |
-| **v5.22.1** | 2026-11-09 | 文章详情响应体去重（-57%）· Android TTFD 口径 / 就绪检测 / splash 根因修复 · 三条制度闸 · 跨平台说明与全仓去 emoji |
 
 > 更早的版本（v5.14.0–v5.21.1 等）已完整迁入 [CHANGELOG.md](CHANGELOG.md)，本页只保留最近三版。
 

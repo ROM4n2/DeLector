@@ -507,3 +507,14 @@ v5.23.1 发版收尾（含 GitHub Release 正文）。
 - Release 正文：按 `.github/release-notes-template.md` **整份覆盖**（`gh release edit --notes-file`），含本版更新（修复/内部/文档）+ 已知限制 + 回滚四轴 + 本版资产表 + CHANGELOG 指针；无 emoji。`isDraft=false`、`isPrerelease=false`。
 - 分支：`release/v5.23.1` 合并后已删（本地+远端），tag 为权威锚点；临时 worktree `DeLector-readiness` 与 `fix/article-readiness-ux` 亦已清理。
 - 遗留（用户已确认口径）：arm64 真机仍未点检，本版含 `static/` 与后端改动 ⇒ 需覆盖安装验证；CHANGELOG 与 Release 正文均已按「未验证」写明，不得改记为已验证。
+
+### 2026-11-11 01:20 | deepseek-v4.1-flash | PITFALL
+Caps: filesystem-read, filesystem-write, shell-exec, git
+v5.23.1 全平台白屏（P0）：前端模块图解析期 SyntaxError，**发版前所有门禁全绿也没抓住**。
+- 现象（用户真机）：Android 更新 v5.23.1 后，首次进入「没感觉有什么变化」，退出重进后「前端完全无法正常显示，只剩文字方框」。
+- 根因：`static/js/article-store.js` 把 `RETRY_DELAYS_MS` / `RETRY_BUDGET_MS` / `isRetryableError` **既**写成 `export const` / `export function` **又**列进文件底部 `export { ... }` ⇒ `SyntaxError: Duplicate export of ...`。ES 模块在解析/链接期失败 ⇒ `main.js` 一行不执行 ⇒ 只剩静态骨架文字。桌面同源同崩，只是用户先在 Android 上撞到。
+- 为什么三层门禁都瞎：① `node --check` 只做单文件语法检查，不解析 import/export 绑定；② 前端 `tools/*.mjs` 探针用桩模块替真实 import 图；③ 既有 `tests/test_frontend_module_graph.py` 用 **set** 收集导出名 —— 重复被静默折叠。**判据错误，不是覆盖不足。**
+- 首次修复过程再踩一坑：新建同名测试文件时**覆盖掉了仓库里已存在的 674 行** `tests/test_frontend_module_graph.py`（同名的既有守卫）。`git status` 立刻显示 ` M`（已跟踪文件被改）才发现，`git checkout --` 复原后改为在该文件尾部追加两条用例。教训：写新文件前先 `ls`/`git ls-files` 确认同名文件不存在。
+- 修法与守卫：声明处去 `export`、只在底部 `export { ... }` 列一次；新增 ① 结构化重复导出检查（不依赖 node）② node 真 `import()` 每个 `static/js/*.js`，把 `SyntaxError` / `ERR_MODULE_NOT_FOUND` / 缺失导出判失败（浏览器专有全局缺失的运行期错误不计）。两条都做了变异自证：把重复导出写回去 → 2 failed。
+- 发布：v5.23.2（versionCode 52302）。CHANGELOG 顶部新增 v5.23.2 并给 v5.23.1 条目加「本版白屏，请用 v5.23.2」警示；v5.23.1 的 Release 正文同步加警示。
+- 遗留：仓库无浏览器自动化（无 Chrome/Playwright），修复后没有像素级渲染证据，只有「node 能解析并链接整张图」+ 本地 `/` `/style.css` 200；MUST 不得写成「已验证渲染正常」。
