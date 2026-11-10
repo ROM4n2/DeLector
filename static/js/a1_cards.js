@@ -1,7 +1,8 @@
 /* DeLector - Goethe-Zertifikat A1 Wortliste & Sprechen Module */
 "use strict";
 
-import { state, api, esc, jsAttr } from "./core.js";
+import { state, api, esc, jsAttr, notify } from "./core.js";
+import { vocabSaveOutcome, vocabSaveNotice } from "./vocab-save.js";
 import { playGermanAudio } from "./player.js";
 import { refreshCardCounters } from "./reader.js";
 import { Companion } from "./companion.js";
@@ -750,7 +751,7 @@ export async function saveA1WordToDeck(
 ) {
   if (btn) btn.disabled = true;
   try {
-    await api("/api/cards/vocab", {
+    const res = await api("/api/cards/vocab", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -765,13 +766,18 @@ export async function saveA1WordToDeck(
         sentence_context: exampleDe || "",
       }),
     });
+    const outcome = vocabSaveOutcome(res);
     _a1SavedLemmas.add((lemma || word).toLowerCase());
     if (btn) {
       btn.textContent = "已在复习盒";
       btn.classList.add("saved");
     }
     refreshCardCounters();
-    Companion.celebrate("card_vocab");
+    if (outcome.created) {
+      Companion.celebrate("card_vocab");
+    } else {
+      notify(vocabSaveNotice(outcome));
+    }
   } catch (e) {
     if (btn) btn.disabled = false;
     alert("保存词汇卡失败");

@@ -11,6 +11,7 @@ import {
   fetchArticleNotes, saveArticleNote, removeNote, fetchNoteAssist,
   saveSyntaxStats, fetchSyntaxStats
 } from './rd-api.js';
+import { vocabSaveOutcome, vocabSaveNotice } from './vocab-save.js';
 import { articleStore } from './article-store.js';
 import {
   CEFR_LEVELS, safeCefr, safeTokens,
@@ -1035,7 +1036,7 @@ export async function saveVocab() {
     state.selectedToken.lemma ||
     state.selectedToken.text;
   try {
-    await saveVocabCard({
+    const res = await saveVocabCard({
       article_id: state.currentArticle.id,
       word: state.selectedToken.text,
       lemma: state.selectedToken.lemma,
@@ -1046,19 +1047,24 @@ export async function saveVocab() {
       sentence_context: state.selectedSent ? state.selectedSent.text : "",
       plural: state.selectedToken.plural || "",
     });
+    const outcome = vocabSaveOutcome(res);
     if (btn) {
-      btn.textContent = "已保存";
+      btn.textContent = outcome.created ? "已保存" : "已在词卡中";
       btn.disabled = false;
       btn.classList.add("is-saved");
     }
     refreshCardCounters();
-    // 刚入卡：立刻重取台账，让「未入卡」的空行变成真实状态。
+    // 命中既有卡也要重取台账：card_count / 代表卡可能因这次提交而变化。
     fetchVocabLedger(savedToken.lemma || savedToken.text)
       .then((data) => {
         if (state.selectedToken === savedToken) renderVocabLedger(data);
       })
       .catch(clearVocabLedger);
-    Companion.celebrate("card_vocab");
+    if (outcome.created) {
+      Companion.celebrate("card_vocab");
+    } else {
+      notify(vocabSaveNotice(outcome));
+    }
   } catch (e) {
     if (btn) {
       btn.textContent = originalText;
@@ -1090,7 +1096,7 @@ export async function savePrepCollocation(index, btn) {
   const def = `${p.bedeutung_zh.replace("(sich)", "").trim()} (+${p.kasus})`;
   if (btn) btn.disabled = true;
   try {
-    await saveVocabCard({
+    const res = await saveVocabCard({
       article_id: state.currentArticle.id,
       word: head,
       lemma: lemma,
@@ -1099,9 +1105,14 @@ export async function savePrepCollocation(index, btn) {
       definition_zh: def,
       sentence_context: p.beispiel,
     });
-    if (btn) btn.textContent = "已保存";
+    const outcome = vocabSaveOutcome(res);
+    if (btn) btn.textContent = outcome.created ? "已保存" : "已在词卡中";
     refreshCardCounters();
-    Companion.celebrate("card_vocab");
+    if (outcome.created) {
+      Companion.celebrate("card_vocab");
+    } else {
+      notify(vocabSaveNotice(outcome));
+    }
   } catch {
     if (btn) {
       btn.disabled = false;
