@@ -16,7 +16,7 @@ import os
 import threading
 import time
 from pathlib import Path
-from typing import Any, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 try:
     import spacy as spacy  # 显式再导出：processor 等模块按原路径 `processor.spacy` 使用
@@ -171,6 +171,37 @@ def _require_loaded_model() -> Any:
 def get_spacy_load_error() -> str:
     """返回运行期模型加载失败的最新诊断（成功或尚未解析则为空串）。"""
     return _nlp_error
+
+
+def get_nlp_readiness() -> Dict[str, Any]:
+    """只读返回 NLP 就绪状态（**零副作用**：绝不触发加载、绝不下模型）。
+
+    ``state`` 语义（供 `/api/health` 与文章详情快退判定）：
+    - ``ready``：模型已加载，可直接分词；
+    - ``loading``：尚未解析（含后台预热进行中 / 尚未开始预热）—— 此时请求内同步加载
+      会把首开拖到数十秒，必须让调用方选择「返回旧结果」或「503 + Retry-After」；
+    - ``error``：此前尝试加载失败（硬失败，不降级到纯 Python，按红线 1）；
+    - ``unavailable``：运行环境没有 spaCy（导入期判定的纯 Python 平台路径）。
+
+    为什么需要它：Android 首屏在服务 listening 后立刻可进入，但 spaCy 仍在后台预热；
+    没有这个只读探针，`GET /api/articles/{id}` 的惰性迁移只能在请求里硬等模型加载，
+    前端 fetch 超时后把「还没准备好」渲染成「加载失败」（2026-11-10 真机点验）。
+    """
+    if spacy is None:
+        state = "unavailable"
+    elif _nlp_resolved and _nlp_model is not None:
+        state = "ready"
+    elif _nlp_resolved:
+        state = "error"
+    else:
+        state = "loading"
+    return {
+        "state": state,
+        "loaded": state == "ready",
+        "model": SPACY_MODEL_NAME,
+        "prewarm_started": _prewarm_started,
+        "error": _nlp_error if state == "error" else "",
+    }
 
 
 def _resolve_nlp_model() -> Any:

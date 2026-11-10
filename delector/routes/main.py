@@ -59,6 +59,7 @@ from delector.nlp_engine.linguistics import (
     lookup_prep_collocations,
     split_komposita,
 )
+from delector.nlp_engine.model_loader import get_nlp_readiness
 from delector.nlp_engine.processor import (
     PROCESSED_JSON_VERSION as PROCESSED_JSON_VERSION,
 )
@@ -594,6 +595,7 @@ def api_health(request: Request) -> Any:
                     "version": APP_VERSION,
                     "assets_fingerprint": _assets_fingerprint(request),
                     "agent_bridge": _agent_bridge_report(),
+                    "nlp": get_nlp_readiness(),
                 },
                 ensure_ascii=False,
             ),
@@ -616,4 +618,7 @@ def api_health(request: Request) -> Any:
         "assets_fingerprint": _assets_fingerprint(request),
         # 伴学桥如实上报：Go 内核不可用时这里必须是 python（配套启动日志的同一条事实）。
         "agent_bridge": _agent_bridge_report(),
+        # NLP 就绪状态（零副作用探针）：Android 首屏进入后 spaCy 可能仍在后台预热，
+        # 前端据此区分「正在准备分词」与「服务故障」，不再把未就绪渲染成加载错误。
+        "nlp": get_nlp_readiness(),
     }

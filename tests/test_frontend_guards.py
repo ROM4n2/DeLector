@@ -61,7 +61,11 @@ def test_open_reader_body_has_try_catch_and_notify():
 
     assert "try {" in body, "openReader 必须包 try（曾全程静默失败，页面停在列表零提示）"
     assert "catch (" in body, "openReader 必须捕获失败"
-    assert "notify(" in body, "失败必须走既有 notify 通知（不许只 console.error）"
+    # 失败可见的两条合法通路：旧路径走 notify 弹通知；2026-11-10 起详情改用正文区
+    # 常驻错误态（带「重试」按钮），比会消失的 toast 更不容易劝退用户。
+    assert "notify(" in body or "_renderReaderError(" in body, (
+        "失败必须可见：notify 通知或正文区错误态（不许只 console.error）"
+    )
     assert "finally" in body, "加载态必须在 finally 里恢复（不许卡死在占位文案）"
 
 
