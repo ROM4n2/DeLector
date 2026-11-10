@@ -24,6 +24,7 @@ import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -33,6 +34,7 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.webkit.WebViewAssetLoader;
 import com.chaquo.python.PyObject;
 import com.chaquo.python.Python;
 import com.chaquo.python.android.AndroidPlatform;
@@ -70,6 +72,14 @@ public class MainActivity extends AppCompatActivity {
     private static final String PORT_FILE_NAME = "server-port.txt";
     /** 与 start.py 的 PORT_FILE_ENV 保持同一字符串，缺一不可（由 pytest 静态守卫钉住）。 */
     private static final String PORT_FILE_ENV = "DELECTOR_PORT_FILE";
+
+    /**
+     * 静态壳页（S1）：自包含、无外链，直接吃 APK 里的 assets，不等 Python 服务。
+     * 走 WebViewAssetLoader 的虚拟 https origin，而不是 file://（避免不透明 origin）。
+     */
+    private static final String ASSET_DOMAIN = "appassets.androidplatform.net";
+    private static final String SHELL_URL = "https://" + ASSET_DOMAIN + "/assets/shell/boot.html";
+    private WebViewAssetLoader assetLoader;
 
     /**
      * 导出结果的出口。回调发生在 ExportSaver 的单线程池上，所以一律 post 回主线程。
@@ -215,9 +225,24 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
             long ttfdMs = SystemClock.elapsedRealtime() - Process.getStartElapsedRealtime();
+            StartupProbe.markNav("ttfd", pageEpochMs);
             Log.i("DeLector", "TTFD_FIRST_ARTICLE_MS=" + ttfdMs
                     + " TTFD_ROW_EPOCH=" + pageEpochMs);
             mainHandler.post(MainActivity.this::reportFullyDrawn);
+        }
+    }
+
+    /**
+     * 壳页首个内容帧回报（S1）：壳内三帧 rAF 之后才调用，语义是「这一帧已经上屏」，
+     * 不是「DOM 已解析」。撤 splash 只认这个信号，避免 commit 早于首个内容帧导致露底。
+     *
+     * 回收场动作一律 post 到主线程；重复调用由 {@link #revealWebView()} 的幂等判定吸收。
+     */
+    public class ShellBridge {
+        @JavascriptInterface
+        public void onFirstContentFrame() {
+            StartupProbe.markNav("shell_frame", "shell_first_content_frame");
+            mainHandler.post(MainActivity.this::revealWebView);
         }
     }
 
@@ -225,6 +250,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        StartupProbe.mark("activity_create");
 
         // Keep screen on during study & shadowing
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -234,8 +260,14 @@ public class MainActivity extends AppCompatActivity {
         root.setBackgroundColor(Color.parseColor("#FAF8F5"));
 
         // 2. Setup WebView & Native TTS
+        // 壳页走虚拟 origin：/assets/ 前缀映射到 APK 的 assets/，不新增第二份静态镜像。
+        assetLoader = new WebViewAssetLoader.Builder()
+                .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
+                .build();
         webView = new WebView(this);
-        webView.setVisibility(View.GONE);
+        // 注意：加载壳页时这里必须是 VISIBLE。GONE/INVISIBLE 的 WebView 不绘制、rAF 会被节流，
+        // 壳页将永远无法回报「首个内容帧」；视觉上由后加的 splash 整层遮住（同底色）。
+        webView.setVisibility(View.VISIBLE);
 
         // 只让 debug 包可被 `chrome://inspect` 连上：release 必须保持关闭，
         // 否则任何能连 adb 的机器都拿到了页面状态与 JS 执行权。
@@ -247,6 +279,7 @@ public class MainActivity extends AppCompatActivity {
         nativeTTS = new NativeTTSBridge();
         webView.addJavascriptInterface(nativeTTS, "AndroidNativeTTS");
         webView.addJavascriptInterface(new StartupReportBridge(), "DeLectorStartup");
+        webView.addJavascriptInterface(new ShellBridge(), "ShellHost");
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -299,8 +332,24 @@ public class MainActivity extends AppCompatActivity {
                 ExportSaver.start(this, url, userAgent, contentDisposition, mimetype, exportReporter));
 
         webView.setWebViewClient(new WebViewClient() {
+            /**
+             * 只拦 appassets 的请求（壳页及其 assets）；真实页仍是 127.0.0.1 的网络请求，
+             * assetLoader 返回 null 后原样放行。
+             */
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                if (request != null && request.getUrl() != null) {
+                    WebResourceResponse response = assetLoader.shouldInterceptRequest(request.getUrl());
+                    if (response != null) {
+                        return response;
+                    }
+                }
+                return super.shouldInterceptRequest(view, request);
+            }
+
             @Override
             public void onPageFinished(WebView view, String url) {
+                StartupProbe.markNav("page_finished", url);
                 // 兜底：正常路径由 onPageCommitVisible 先撤；这里只防「commit 回调缺失」。
                 if (isServerReady) {
                     revealWebView();
@@ -308,14 +357,14 @@ public class MainActivity extends AppCompatActivity {
             }
 
             /**
-             * 首帧内容已提交：撤 splash 的唯一正常信号。
-             *
+             * 真实页首帧内容已提交：撤 splash 的另一条正常信号（壳页由 ShellHost 回报）。
              * 旧实现是 loadUrl 之后固定 200ms 撤场，慢设备上会在首帧前露出白屏/半成品；
-             * 这里等 WebView 明确告知「新页面第一帧已可绘制」，再延迟到下一个动画帧撤，
-             * 保证撤场时内容帧已经提交。不用定时器猜。
+             * 这里等 WebView 明确告知「新页面第一帧已可绘制」，再延迟到下一个动画帧撤。
+             * 不用定时器猜。
              */
             @Override
             public void onPageCommitVisible(WebView view, String url) {
+                StartupProbe.markNav("commit", url);
                 if (isServerReady && isLocalServerUrl(url)) {
                     view.postOnAnimation(MainActivity.this::revealWebView);
                 }
@@ -352,6 +401,7 @@ public class MainActivity extends AppCompatActivity {
         root.addView(webView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
+        StartupProbe.mark("webview_attached");
 
         // 3. Setup Splash / Loading View
         splashLayout = new LinearLayout(this);
@@ -394,9 +444,22 @@ public class MainActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT));
 
         setContentView(root);
+        StartupProbe.mark("content_view_set");
 
         // 4. Background Initialization (Assets Extraction + Python Server Launch)
+        StartupProbe.mark("server_thread_spawn");
         new Thread(this::initAndStartServer).start();
+    }
+
+    /**
+     * 加载自包含壳页：让 WebView 在 Python 就绪前先有可绘制内容。
+     * 只在 {@link #initAndStartServer()} 里、`python_start_done` 之后 post 到主线程调用一次；
+     * 立即加载会让 WebView 渲染器与 Chaquopy 抢 CPU（实测 TTFD +95.5ms）。
+     */
+    private void loadShell() {
+        StartupProbe.navZero();
+        StartupProbe.markNav("loadurl_shell", SHELL_URL);
+        webView.loadUrl(SHELL_URL);
     }
 
     /**
@@ -420,11 +483,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initAndStartServer() {
+        StartupProbe.mark("init_begin");
         try {
             // A. Copy assets to internal storage if needed
             File dataDir = getFilesDir();
             File staticDir = new File(dataDir, "static");
             syncStaticAssets(dataDir, staticDir);
+            StartupProbe.mark("assets_sync_done");
 
             // B. 清掉上一轮残留的端口文件：否则 8000 被占后可能先读到旧端口再轮询失败。
             File portFile = new File(dataDir, PORT_FILE_NAME);
@@ -433,9 +498,12 @@ public class MainActivity extends AppCompatActivity {
             }
 
             // C. Start Chaquopy Python runtime
+            StartupProbe.mark("python_start_begin");
             if (!Python.isStarted()) {
                 Python.start(new AndroidPlatform(this));
             }
+            StartupProbe.mark("python_start_done");
+            mainHandler.post(this::loadShell);
 
             Python py = Python.getInstance();
             PyObject osModule = py.getModule("os");
@@ -447,6 +515,7 @@ public class MainActivity extends AppCompatActivity {
             // D. Start server in background thread
             new Thread(() -> {
                 try {
+                    StartupProbe.mark("python_main_invoked");
                     py.getModule("start").callAttr("main");
                 } catch (Throwable t) {
                     t.printStackTrace();
@@ -502,11 +571,15 @@ public class MainActivity extends AppCompatActivity {
     /**
      * 撤掉 splash、露出 WebView。只允许 UI 线程调用（WebViewClient 回调 / postOnAnimation）。
      * 用「幂等 + 只改可见性」保证重复调用安全，不引入任何新的计时假设。
+     *
+     * S1 起 WebView 常驻 VISIBLE（GONE 会让壳页停止绘制、rAF 不回调），所以幂等标记
+     * 改看 splash 的可见性。
      */
     private void revealWebView() {
-        if (webView.getVisibility() == View.VISIBLE) {
+        if (splashLayout.getVisibility() != View.VISIBLE) {
             return;
         }
+        StartupProbe.markNav("reveal", "splash_hidden");
         splashLayout.setVisibility(View.GONE);
         webView.setVisibility(View.VISIBLE);
     }
@@ -517,6 +590,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void pollServerReadiness(File dataDir) {
+        StartupProbe.mark("poll_begin");
         for (int i = 0; i < StartupReadinessPolicy.maxAttempts(); i++) {
             if (fatalError != null) {
                 return; // 服务不可能再就绪，别用超时文案盖掉真实错误
@@ -524,6 +598,9 @@ public class MainActivity extends AppCompatActivity {
             // 端口文件由 Python 在选定端口、组好 server 后写入；拿到前只等，不猜 8000。
             if (serverPort <= 0) {
                 serverPort = readServerPort(dataDir);
+                if (serverPort > 0) {
+                    StartupProbe.mark("port_file_read");
+                }
             }
             if (serverPort > 0) {
                 try {
@@ -536,11 +613,14 @@ public class MainActivity extends AppCompatActivity {
                     conn.disconnect();
 
                     if (StartupReadinessPolicy.isReadyStatus(code)) {
+                        StartupProbe.mark("settings_200");
                         isServerReady = true;
                         final int readyPort = serverPort;
                         mainHandler.post(() -> {
                             statusTextView.setText("服务已就绪，正在加载工作台...");
                             // splash 不在这里撤：等 onPageCommitVisible（首帧已提交）再撤。
+                            StartupProbe.navZero();
+                            StartupProbe.markNav("loadurl", serverBaseUrl(readyPort));
                             webView.loadUrl(serverBaseUrl(readyPort));
                         });
                         return;
@@ -566,6 +646,8 @@ public class MainActivity extends AppCompatActivity {
                     ? "服务启动超时（端口 " + timeoutPort + "），正在重试连接..."
                     : "服务启动超时，正在重试连接...");
             if (timeoutPort > 0) {
+                StartupProbe.navZero();
+                StartupProbe.markNav("loadurl_timeout", serverBaseUrl(timeoutPort));
                 webView.loadUrl(serverBaseUrl(timeoutPort));
             }
         });

@@ -47,7 +47,8 @@ def test_commit_callback_only_reveals_the_local_server_page():
 
 def test_reveal_is_idempotent_and_has_no_timer():
     body = _reveal_body()
-    assert "webView.getVisibility() == View.VISIBLE" in body, "重复回调必须安全"
+    # S1 起壳阶段 WebView 恒为 VISIBLE（GONE 会停绘制、rAF 不回调），幂等键改为「splash 是否已撤」。
+    assert "splashLayout.getVisibility() != View.VISIBLE" in body, "重复回调必须安全"
     assert "splashLayout.setVisibility(View.GONE)" in body
     assert "webView.setVisibility(View.VISIBLE)" in body
     assert "postDelayed" not in body
