@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from delector.core.database import get_db, log_study_event
 from delector.core.db.companion import (
@@ -204,10 +204,13 @@ class CompanionProposalService:
         elif not isinstance(cards, list):
             raise ValueError("提议 payload 缺少有效的 'cards' 列表")
 
+        created_events: List[Tuple[int, str]] = []
         with get_db(self.db_path) as conn:
             # Step 1（只堵新增）：身份 = (lemma_key(lemma), word_key(word))，见
             # delector/core/vocab_identity.py。存量重复未知，故**不建 UNIQUE**；
-            # BEGIN IMMEDIATE 把「查重 → 插入」收成一个写事务，收窄并发窗口。
+            # BEGIN IMMEDIATE 把「状态流转 → 查重 → 插入」收成一个写事务：
+            # update_proposal_status 必须传 commit=False，否则内部 conn.commit()
+            # 会在插卡前提前放锁，accepted 也会先于插卡单独落盘而不可重放。
             # 这不等于唯一索引：绕过本函数的写入（直接 SQL / 旧库还原）仍可重复。
             conn.execute("BEGIN IMMEDIATE")
             # 检查提议既有状态，杜绝重放重复插卡
@@ -236,7 +239,7 @@ class CompanionProposalService:
                 raise ValueError("提议中没有可入库的词条")
 
             if row is not None:
-                update_proposal_status(conn, proposal_id, "accepted")
+                update_proposal_status(conn, proposal_id, "accepted", commit=False)
 
             created_count = 0
             for c in cards:
@@ -286,11 +289,16 @@ class CompanionProposalService:
                 created_count += 1
                 card_id = cur.lastrowid
                 if card_id:
-                    try:
-                        log_study_event("add_card", card_id, word, db_path=self.db_path)
-                    except Exception:  # silent-ok: 学习事件埋点写入失败不回滚生词卡真实事务
-                        pass
+                    created_events.append((int(card_id), word))
             conn.commit()
+
+        # 埋点写 progress.db：必须在主库事务提交、写锁释放之后。否则持锁期间做跨库
+        # I/O 会把锁占满 busy_timeout，也可能写出「插入最终回滚」的孤儿学习事件。
+        for card_id, word in created_events:
+            try:
+                log_study_event("add_card", card_id, word, db_path=self.db_path)
+            except Exception:  # silent-ok: 学习事件埋点写入失败不影响已提交的生词卡
+                pass
 
         return {
             "status": "ok",

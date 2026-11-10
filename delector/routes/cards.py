@@ -351,7 +351,7 @@ WITH ranked AS (
             ELSE NULL
         END AS last_signal_day
     FROM vocab_cards
-    WHERE lemma_key(lemma) = ?
+    WHERE card_lemma_key(lemma, word) = ?
 )
 SELECT *, COUNT(*) OVER () AS card_count
 FROM ranked
@@ -377,8 +377,10 @@ def get_vocab_card_ledger(lemma: str) -> Dict[str, Any]:
     if not lemma_norm:
         return {"lemma": "", "card_count": 0, "card": None}
     with db_conn() as conn:
-        # 读侧与写入侧共用同一归一实现（零 DDL：函数注册在连接上，不建列/索引）。
-        # 这样 `Haus` / `haus` / `die Wohnung` / `Wohnung` 不会因原始串不同被认成两批。
+        # 台账是按 lemma_key 聚合的读侧视图（card_count + 代表卡），与写入侧
+        # (lemma_key, word_key) 双列身份不同，别把这里当成「两张合法卡被合并」。
+        # 归一走 vocab_identity 的行级 UDF：零 DDL、不回填存量行，且 `Haus` / `haus` /
+        # `die Wohnung` / `Wohnung` / 旧备份的 lemma='' 行都按同一空值回退命中。
         register_identity_functions(conn)
         row = conn.execute(_LEDGER_SQL, (lemma_key(lemma_norm),)).fetchone()
     if row is None:
