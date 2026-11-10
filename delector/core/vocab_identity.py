@@ -70,17 +70,37 @@ def find_card_id(conn: sqlite3.Connection, lemma: str, word: str) -> Optional[in
     return int(row[0]) if row else None
 
 
-def fill_empty_columns(conn: sqlite3.Connection, card_id: int, values: Mapping[str, Any]) -> None:
-    """对既有卡「只补空」：NULL / 空白串才写入，绝不覆盖用户已有内容。"""
-    sets = []
+def fill_empty_columns(
+    conn: sqlite3.Connection, card_id: int, values: Mapping[str, Any]
+) -> list[str]:
+    """对既有卡「只补空」：NULL / 空白串才写入，绝不覆盖用户已有内容。
+
+    返回被跳过的列名（本次有值、但既有列已非空 ⇒ 未写入），供响应体告知调用方
+    「这次填的内容没有写进去」。判空口径与 UPDATE 的 ``TRIM(col) = ''`` 一致：
+    SQLite 的 TRIM 默认只去 U+0020 空格，故这里也用 ``strip(" ")``，
+    不把「其实已写入」误报成跳过。
+    """
+    sets: list[str] = []
     params: list[Any] = []
+    incoming: list[tuple[str, Any]] = []
     for col in FILLABLE_COLUMNS:
         val = values.get(col)
         if val is None or (isinstance(val, str) and not val.strip()):
             continue
         sets.append(f"{col} = CASE WHEN {col} IS NULL OR TRIM({col}) = '' THEN ? ELSE {col} END")
         params.append(val)
+        incoming.append((col, val))
     if not sets:
-        return
+        return []
+    row = conn.execute(
+        f"SELECT {', '.join(col for col, _ in incoming)} FROM vocab_cards WHERE id = ?",
+        (card_id,),
+    ).fetchone()
+    skipped = [
+        col
+        for (col, _), existing in zip(incoming, tuple(row) if row is not None else ())
+        if existing is not None and str(existing).strip(" ") != ""
+    ]
     params.append(card_id)
     conn.execute(f"UPDATE vocab_cards SET {', '.join(sets)} WHERE id = ?", tuple(params))
+    return skipped
