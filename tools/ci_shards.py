@@ -177,6 +177,7 @@ SHARDS: dict[str, tuple[str, ...]] = {
         "tests/test_reader_continuous_flow.py",
         "tests/test_reader_layer_split.py",
         "tests/test_reader_syntax_sync.py",
+        "tests/test_release_docs_gate.py",
         "tests/test_start_lifecycle.py",
     ),
     "unit-4": (

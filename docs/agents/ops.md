@@ -46,7 +46,7 @@ NLP 模型:  de_core_news_sm（唯一档位；ADR-0027 定案，无 md 候选或
 静态检查:  ruff check .       （全仓零告警门禁，CI 的 ci.yml 已接入；旧的手工 pyflakes 命令已退役）
 ```
 
-⚠️ **真实跑 `python start.py` 会触发数据外置迁移**（ADR-0019；`data_dir_bootstrap.bootstrap_data_dir`）：
+**注意：真实跑 `python start.py` 会触发数据外置迁移**（ADR-0019；`data_dir_bootstrap.bootstrap_data_dir`）：
 它会按桌面默认落点把仓库根的 `delector.db` / `progress.db` **改名**成 `*.bak-<时间戳>` 并复制到
 `%LOCALAPPDATA%\DeLector` —— 原件**永不删除**，但改名足以污染工作区并制造"数据丢了"的假象（已多次
 在任务实跑时发生）。**dev 验证请走两个显式出口之一**：把 `DELECTOR_DATA_DIR` 指向临时目录，或设
@@ -75,7 +75,7 @@ NLP 模型:  de_core_news_sm（唯一档位；ADR-0027 定案，无 md 候选或
 : Docker 部署走 `docker-compose.yml`：挂 `./data` **目录**（WAL 的 `-wal`/`-shm` 旁文件单文件挂载会丢）
   并**无条件**设 `DELECTOR_DATA_DIR=/app/data`。
 
-⚠️ **从旧版单文件挂载（`./delector.db:/app/delector.db`）升级**：旧库在仓库根、程序读 `./data`，
+**注意：从旧版单文件挂载（`./delector.db:/app/delector.db`）升级**：旧库在仓库根、程序读 `./data`，
 直接 `up` 得到「功能正常、数据全空」的**空库**。数据文件**没被删除**，迁移一步即可：
 
 ```bash
@@ -230,12 +230,15 @@ TTS 链路（真机判定层）：`AndroidNativeTTS.speak`（系统 TTS，免网
    历史正主）**：`README.md` 是入口只留 badge 与最近 3 版摘要的指针，完整历史一律指向
    `CHANGELOG.md`，**绝不在 README 复制第二份**（DOC-GOVERNANCE 单一真相源）。不要等发布后再补
    ——README 是仓库门面，滞后会让用户/协作者看到与代码不一致的版本。
-   **GitHub Release 说明**：`build-release.yml` 的正文只放**跨版本稳定**的内容（安装说明 + 能力清单，
-   已与 `FEATURES.md` 对齐）；**「🖥️ 本版重点」与「⚠️ 已知限制」逐版不同，发版后 MUST 用
-   `gh release edit <tag> --notes-file <文件>` 追加**（ADR-0022 R4；2026-10-11 v5.17.0 首次按此执行，
-   当时正文还没有这两段，是人工补的）。
-9. **大改动后**：更新 `WORKMEMORY/PROJECT_OVERVIEW.md` 的「当前状态」「红线速查」「开放待办」；
-   发布类变更在 `CHANGELOG.md` 追加版本条目（**升序：接在最新版本条目之后**，版本历史正主），README 只留最近 3 版摘要与指针。
+   **GitHub Release 说明**：`build-release.yml` 的正文只放**跨版本稳定**的内容（简介 + 四平台安装说明 +
+   指向 `FEATURES.md` 的能力概览），**不放逐版变化的段落**。逐版内容按
+   `.github/release-notes-template.md` 写成一份**完整正文**（本版更新 / 已知限制 / 回滚），发版后 MUST 用
+   `gh release edit <tag> --notes-file <文件>` 整份覆盖（ADR-0022 R4；2026-10-11 v5.17.0 首次按此执行）。
+   正文与模板**一律不使用 emoji**；变更按 `新增 / 修复 / 内部 / 文档` 分类，每条写清「改了什么、影响谁」。
+   9. **大改动后**：更新 `WORKMEMORY/PROJECT_OVERVIEW.md` 的「当前状态」「红线速查」「开放待办」；
+   发布类变更在 `CHANGELOG.md` 追加版本条目（**降序：插在本文件第一个 `## vX.Y.Z` 之前，最新在最上**；
+   每版结构见 `CHANGELOG.md` 顶部 FORMAT RULES 注释，`tests/test_release_docs_gate.py` 机械校验），
+   README 只留最近 3 版摘要与指针（**版本表 MUST ≤ 3 行，旧版只进 `CHANGELOG.md`**）。
 10. **缓存问题**：**不要再用 `?v=X.X.X` 查询串给 CSS/JS 打版本号**（v4.4.5 已退役）。
     它挡不住真正的问题，还制造了安全感：安卓覆盖安装后磁盘上那份文件本身就是旧的，
     请求 URL 与响应内容是一对自洽的旧配对；而 `main.js` 的 ES module import 全是裸路径

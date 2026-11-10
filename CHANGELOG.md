@@ -4,9 +4,18 @@
 > 桌面 / Android 四平台发布资产见 [GitHub Releases](https://github.com/ROM4n2/DeLector/releases)；
 > 开发决策细节见 `docs/plans/archive/` 与 Obsidian Vault `08-Projects/DeLector/01-ADR/`。
 
-**最新版本：v5.22.1（2026-11-09）**
+<!--
+格式规则（agent 与人类均 MUST 遵守；tests/test_release_docs_gate.py 机械校验 1-3 条）：
+1. 降序排列：最新版本在最上。新条目插在本注释块之后、当前第一个 `## vX.Y.Z` 之前。
+2. 每版固定结构：`## vX.Y.Z - YYYY-MM-DD` → `### 新增` / `### 修复` / `### 内部` / `### 文档`
+   （按需，至少一个）→ `### 已知限制（Known Limitations）` → `### 回滚（Rollback）`；
+   版本之间用一行 `---` 分隔。
+3. 不使用 emoji；不写相对表述（如「上一版之后累积」），只写本版做了什么。
+4. v5.22.1 及更早版本的小节标题保留历史格式，不要为了统一而重写历史正文。
+5. README.md 的「版本历史」表只保留最近 3 版，旧版只进本文件。
+-->
 
-**v5.22.1（2026-11-09）**
+## v5.22.1 - 2026-11-09
 
 ### 文章详情响应体去重（-57%）
 
@@ -37,7 +46,7 @@
 - **跨平台运行说明**：README / FEATURES / 发布说明模板按 tar 包实际结构改写 macOS / Linux 说明（解压后进入对应目录运行 `./DeLector`；权限丢失先 `chmod +x`），删去「0ms」「全发行版通用」等无证据表述，P2P 同步明确标注真机双端尚未验证。
 - **全仓去 emoji**：FEATURES / SECURITY / CONTRIBUTING / CHANGELOG 与发布说明模板清理完毕，README 复查为 0 命中；CHANGELOG 版本头统一为 `**vX.Y.Z（YYYY-MM-DD）**`。
 
-**已知限制（Known Limitations）**
+### 已知限制（Known Limitations）
 - **arm64 真机未覆盖**：本版仅完成 x86_64 模拟器（API 37）覆盖安装与 `versionCode` 检查，未启动点检；arm64-v8a 真机未安装、未启动、未点检。真机不是本版的发版前置，但不得把模拟器结果当作真机结论。
 - **低端机 OOM 未覆盖**：无低端机设备，内存峰值未测量；Android 存量文章惰性重算在低内存设备上的 OOM 风险无证据、无结论。
 - **iOS 键盘态未覆盖**：无 iOS 设备与 Safari 环境；软键盘弹起后的 `visualViewport`、选区手柄与桌宠避让行为均未验证。
@@ -45,12 +54,13 @@
 - **大文章首次打开的重算可能阻塞**：`PROCESSED_JSON_VERSION` 3.6.0 的惰性重算在单篇 GET 内同步执行（未下放线程池），10 万字符上限级文章约 4–5s，期间该篇请求等待；已评估为可接受，本版不改。
 - **Android 启动改动未真机验证**：TTFD 口径、就绪轮询节奏与 splash 撤场修复均未在设备上点检。
 
-**回滚（Rollback）**
+### 回滚（Rollback）
 - **代码 / 产物**：桌面可回退至 `v5.22.0` 发布包；Android `versionCode` 由 `52200` 升至 `52201`，只能卸载重装旧 APK（会清应用私有数据，须先备份）。`versionCode` 不可回滚，不得复用或回拨。
 - **数据位置 / 格式**：本版未搬移数据目录、未改变数据文件格式与 Schema，回滚代码不影响既有学习资产。
 - **配置 / 发布通道**：无新增必需配置；git 可 revert 本版提交。
+---
 
-**v5.22.0（2026-11-08）**
+## v5.22.0 - 2026-11-08
 
 ### 发布收口：v5.21.1 之后累积的用户可见修复
 
@@ -78,7 +88,7 @@
 - **Debug 构建可被 `chrome://inspect` 连接**：`MainActivity` 仅在 `BuildConfig.DEBUG` 分支调用 `WebView.setWebContentsDebuggingEnabled(true)`，release 保持关闭；`tests/test_android_webview_policy.py` 用静态断言锁住"必须被 DEBUG 守卫、只允许一次"，裸调 `true` 会立即变红。**已修复，真机与模拟器均未点检**：`chrome://inspect` 的实际连接未验证。
 - **更新 chip 外链点击无响应已修复**：此前 `WebViewClient` 未覆写 `shouldOverrideUrlLoading`，`target="_blank"` 的 GitHub Releases 链接被 WebView 自己吞掉。现覆写两个重载并统一委派给 `handleExternalNavigation`：站内回环（`127.0.0.1` / `localhost` / `::1` / `0.0.0.0`）、相对路径、`file://` 留在 WebView；其它 `http(s)` 与 `mailto:` 交系统 App；无可用 App 时静默吞掉并记日志，不崩、不把工作台替换成错误页。判定抽为零 Android 依赖纯函数 `WebUrlPolicy.shouldOpenExternally(url)`，`tests/test_android_webview_policy.py` 以 javac 直编直跑 25 条行为断言，另含静态守卫。**已修复，真机与模拟器均未点检**：外链是否真的唤起系统浏览器未验证。
 
-**已知限制（Known Limitations）**
+### 已知限制（Known Limitations）
 - **arm64 真机未覆盖**：本版仅完成 x86_64 模拟器（API 37）覆盖安装与 `versionCode` 检查，未启动点检；arm64-v8a 真机未安装、未启动、未点检。真机不是本版的发版前置，但不得把模拟器结果当作真机结论。
 - **低端机 OOM 未覆盖**：无低端机设备，内存峰值未测量；Android 存量文章惰性重算在低内存设备上的 OOM 风险无证据、无结论。
 - **iOS 键盘态未覆盖**：无 iOS 设备与 Safari 环境；软键盘弹起后的 `visualViewport`、选区手柄与桌宠避让行为均未验证。
@@ -86,13 +96,14 @@
 - **大文章首次打开的重算可能阻塞**：`PROCESSED_JSON_VERSION` 3.6.0 的惰性重算在单篇 GET 内同步执行（未下放线程池），10 万字符上限级文章约 4–5s，期间该篇请求等待；其余文章不受影响。
 - **Android 外链与 `chrome://inspect` 未真机点检**：修复已落地并有静态/行为断言，但「是否真的唤起系统浏览器」「调试连接是否成功」均未在设备上验证。
 
-**回滚（Rollback）**
+### 回滚（Rollback）
 - **代码 / 产物**：桌面可回退至 `v5.21.1` 发布包；Android `versionCode` 由 `52101` 升至 `52200`，只能卸载重装旧 APK（会清应用私有数据，须先备份）。
 - **数据位置 / 格式**：本版未搬移数据目录、未改变数据文件格式，回滚代码不影响既有学习资产。
 - **Schema / 处理结果**：仅新增 `processed_json_backup` 表，无删列或重命名，旧版可继续读取同一 SQLite 数据库；`PROCESSED_JSON_VERSION` 已推进到 3.6.0，回退代码后旧文章会再次按旧口径读取既有结果，必要时用 `python tools/recompute_processed.py --restore` 逐字恢复。
 - **配置 / 发布通道**：无新增必需配置；git 可 revert 本版提交，Android 版本计数不得复用或回拨。
+---
 
-**v5.21.1（2026-11-03）**
+## v5.21.1 - 2026-11-03
 
 ### 伴学 SSE 跨 chunk 分帧修复（PR #199）
 
@@ -106,11 +117,11 @@
 - **`submitPrompt` 事件控制器**：在同文件收敛七类事件、异常中断与 `finally` 清理，函数从 197 行降至 147 行；公开签名、请求字段、DOM/消息状态和事件顺序均不变，未为拆文件而拆出 `cp-turn.js`。
 - **探针先行与变异验证**：重构前先在旧 `submitPrompt` 上取得 252 checks / 34 场景全绿，补齐 `tool_end` 错误分支反例后最终为 **274 checks / 34 场景**；删除 `done` 的 assistant 入史语句、反转 `isError` 两类变异均实测变红，还原后复绿。全部 **35/35** 前端探针、七事件契约、`go test ./...` 与 race 检查通过。
 
-**已知限制（Known Limitations）**
+### 已知限制（Known Limitations）
 - **Android 真机点检未做**：本版包含伴学前端与版本面改动，不得视为 Android 已完成实机验收；覆盖安装、更新 chip 与 WebView 行为仍需真机复核。
 - **`live-selection` 未在真实浏览器验证**：实时选区上下文已有 Node 沙盒探针与 Go/Python 契约测试，但尚未在真实浏览器完成选取 → 伴学链路验收。
 
-**回滚（Rollback）**
+### 回滚（Rollback）
 - **代码 / 产物**：桌面可回退至 `v5.21.0` 发布包；Android `versionCode` 由 `52100` 升至 `52101`，只能卸载重装旧 APK（会清应用私有数据，须先备份）。
 - **数据位置 / 格式**：本版未搬移数据目录、未改变数据文件格式，回滚代码不影响既有学习资产。
 - **Schema**：本版无数据库 Schema 迁移，旧版可继续读取同一 SQLite 数据库。
@@ -118,7 +129,7 @@
 
 ---
 
-**v5.21.0（2026-11-03）**
+## v5.21.0 - 2026-11-03
 
 ### 伴学 Agent 页面级能力分区、HITL 生词提议闭环与跨页历史恢复
 
@@ -149,11 +160,11 @@
 - **修复**：改用 `transform-box: view-box`，围绕既有眼球中心缩放并保留眨眼动效；修复后同帧中心误差约 `0.000006px`，桌面四角色与窄屏 10 组检查最大误差 `0.0000171px`。
 - **截图**：README 首页与 B1 阅读器图片按原路径替换为 1440×857 JPEG，均在 `charBlink currentTime=0` 睁眼帧暂停后截取，无气泡或导航/播放条遮挡。
 
-**已知限制（Known Limitations）**
+### 已知限制（Known Limitations）
 - **Android 真机点检未做**：本版包含 `static/`、PWA 与伴学跨页改动，不得视为 Android 已完成实机验收；安装提示、更新 chip 与 WebView 行为仍需真机复核。
 - **`live-selection` 未在真实浏览器验证**：实时选区上下文已有 Node 沙盒探针与 Go/Python 契约测试，但尚未在真实浏览器完成选取 → 伴学链路验收。
 
-**回滚（Rollback）**
+### 回滚（Rollback）
 - **代码 / 产物**：桌面可回退至 `v5.20.2` 发布包；Android `versionCode` 由 `52002` 升至 `52100`，只能卸载重装旧 APK（会清应用私有数据，须先备份）。
 - **数据位置 / 格式**：本版未搬移数据目录、未改变数据文件格式，回滚代码不影响既有学习资产。
 - **Schema**：`companion_sessions.scope_key` 与对应索引均为加法式迁移，存量会话回填 `view:global`，无破坏性删列或重命名；旧版仍可读取同一 SQLite 数据库。
@@ -161,7 +172,7 @@
 
 ---
 
-**v5.20.2（2026-11-01）**
+## v5.20.2 - 2026-11-01
 
 ### 自然段排版重塑 + CEFR 视力透视胶囊 + 句法抽屉实时联动同步与 CI 极限加速
 
@@ -179,7 +190,7 @@
 
 ---
 
-**v5.20.1（2026-11-01）**
+## v5.20.1 - 2026-11-01
 
 ### Android 桌宠拖拽手势修复 + 句法默认显示清除 + CI Pytest Matrix 矩阵提速
 
@@ -191,7 +202,7 @@
 
 ---
 
-**v5.20.0（2026-11-01）**
+## v5.20.0 - 2026-11-01
 
 ### 伴学导学 Agent 运行时 + SQLite 业务持久化 + 洋葱中间件与安卓可调工作台（PR #179）
 
@@ -224,7 +235,7 @@
 
 ---
 
-**v5.19.0（2026-10-22）**
+## v5.19.0 - 2026-10-22
 
 ### 桌面单实例锁 + 端口顺延 + 前端继续解耦（PR #172 · #164~#166）
 
@@ -246,8 +257,9 @@
 - 本批真正的产出是挖出两条**与重构无关的既有静默失效**：`ia_dom_mount_probe.mjs` 有 4 条守卫一直恒真（切片锚点只到函数名）；探针静态层已红时仍跑 `node:vm`，空源撞出的 `ReferenceError` 排在真实问题后面。纪律已写进 `docs/agents/architecture.md`「前端模块分层契约」。
 
 **回滚**：单实例锁可用 `DELECTOR_DATA_DIR` 指到临时目录隔离验证；如遇异常启动问题，删除 `%LOCALAPPDATA%\DeLector\instance.lock` 无效（锁随进程退出自动释放），应确认是否有残留 `DeLector.exe`。
+---
 
-**v5.18.0（2026-10-19）**
+## v5.18.0 - 2026-10-19
 
 ### 架构与前端单体彻底解耦 + 交互式智能体闭环 + 六道自动化机械闸（PR #131~#161）
 
@@ -277,7 +289,7 @@
 - **前端 API 契约闸（`check_frontend_api_contract.py`）**：校验前端请求路径与后端路由定义的双向匹配。
 - **模板同步闸（`check_index_html_sync.py`）**：保证分块模板与最终单文件 HTML 强一致。
 
-**已知限制（Known Limitations）**
+### 已知限制（Known Limitations）
 - **冷启动与端口探测延迟**：~2s 端口/身份校验（Win10/11 TCP 探测机制）属显式安全保障，冷启动耗时维持约 2~3s。
 - **Android 端暂缓实机点检（C4）**：SSE 流式交互与模块化多文件在部分老旧 Android WebView 运行时的兼容性需真机安装验证（用户已指示暂缓，底层保留纯标准回退机制）。
 - **Android 不可回滚**：`versionCode` 由 `51700` 升级至 `51800`，只升不降。
@@ -289,7 +301,7 @@
 
 ---
 
-**v5.17.0（2026-10-11）**
+## v5.17.0 - 2026-10-11
 
 ### 首个原生桌面壳 + 首次数据落点外置 + 发版门（PR #111~#129）
 
@@ -324,8 +336,9 @@
 - **数据**：**不要**删 `%LOCALAPPDATA%\DeLector`（学习数据在那里）。旧版不认识外置落点 ⇒ 会回到"数据随程序目录"，需把 `delector.db` 手工拷回程序目录；迁移首迁留的 `.bak` 可整库回退。
 - **DB**：本版对 schema 只做**加列**（`articles.stats_json`）与 3 个 `CREATE INDEX IF NOT EXISTS`（`idx_exam_lm` / `idx_vocab_queue` / `idx_grammar_queue`），无破坏性变更 ⇒ 旧版代码可继续读同一个库。
 - **Android**：见上「不可回滚」——只能卸载重装（会清应用私有数据，请先导出备份）。
+---
 
-**v5.16.0（2026-10-06）**
+## v5.16.0 - 2026-10-06
 
 ### 修掉一个长期潜伏的性能缺陷 + 三处守卫加固（PR #108/#109/#110）
 
@@ -369,8 +382,9 @@ allowlist **20 条逐字未动**（只改「怎么发现」，不改「发现什
 发版守护 **30 passed**；`test_ci_hardening.py` **21 passed**；`test_localhost_guard.py` 与
 `test_get_endpoints_with_writes.py` 各 **7 passed**。
 **无 `static/` 改动** ⇒ 桌面端刷新即生效；Android APK 仍会随 tag 重新构建（versionCode `51600`，可覆盖安装）。
+---
 
-**v5.15.0（2026-10-05）**
+## v5.15.0 - 2026-10-05
 
 ### 登记项收口第二轮：三条新守卫 + 降级串味修复 + LAN posture 裁决（PR #103~#107）
 
@@ -391,8 +405,9 @@ allowlist **20 条逐字未动**（只改「怎么发现」，不改「发现什
 门禁：**1299 passed + 1 skipped**（分半：非 server **1035** + `test_server` **264**）；`tools/*.mjs` 探针 **28/28** 零漂移；`ruff` 0；`mypy` 两道（**70** + **92** files）零错误；发版守护 **30 passed**；三条新守卫（防漏接线 / 契约冻结 / localhost 集合）全绿。
 **本轮防漏接线守卫第三次当场抓出漏接线**（新探针落地即被顶出，补 wrapper 后转绿）。
 含 `static/` 改动（`cards.js` +16/−6、`encounter.js` +87/−31）⇒ **Android 需覆盖安装生效**。
+---
 
-**v5.14.0（2026-10-05）**
+## v5.14.0 - 2026-10-05
 
 ### 韧性 / 前端竞态 / KARTEI 去复习化（swarm 审计 5 子计划 + 清债轮，PR #93~#102）
 
@@ -447,8 +462,9 @@ filesort 仅占端点 **8.9%**（20k 档 70.2ms / 790ms），远低于 30% 否�
 `mypy` 两道（`delector`+`tools` **70** files、`tests` **88** files）零错误；`tools/*.mjs` 探针 **27/27** 零漂移；
 `test_writer_mobile.py`（发版守护：版本一致性 / README 下载表 / Android 重打包）**30 passed**。
 **Android 需覆盖安装 v5.14.0 生效**（改动含 `static/`：`cards.js` +59 / `encounter.js` +237 / `reader.js` +10 / `style.css` +53）。
+---
 
-**v5.13.0（2026-10-03）**
+## v5.13.0 - 2026-10-03
 
 ### 统一词库池（ADR-0016）+ P0 数据真相修复（PR #73/#74/#75/#88）
 
@@ -513,7 +529,7 @@ filesort 仅占端点 **8.9%**（20k 档 70.2ms / 790ms），远低于 30% 否�
 
 ---
 
-**v5.12.1（2026-09-26）**
+## v5.12.1 - 2026-09-26
 
 ### 已发版内容（供参考）：Docker 数据目录迁移闸（fail-loud）
 
