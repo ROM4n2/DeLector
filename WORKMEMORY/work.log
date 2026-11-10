@@ -744,3 +744,11 @@ ADR-0033 S2 开 PR #331（`feat/android-first-paint-static-intercept` → master
 - 本地全量：3006 passed / 1 failed / 5 skipped / 1 xfailed（9m10s）。唯一失败 `test_nlp_prewarm.py::test_import_does_not_load_or_prewarm` 是环境性的：仓库根有本机 `delector.db`（`.gitignore` 的 `*.db`），子进程把 DATA_DIR 指到 pytest 临时目录后 preflight 拒绝启动；本 PR 未改任何 Python 代码（`git diff master -- '*.py'` 只有该测试文件）。
 - CI（run 42761268812）全绿：unit-1/2/3/4、cost-cold-start、cost-guards、integration-heavy、Go Gates、Go↔Python Integration、Detect packaging-surface、Secret Scan、Static Invariants、Windows Portable Smoke 均 pass；Master Direct-Push Scope Gate 按设计 skipping。
 - 收尾：模拟器与 adb 已清（`adb emu kill` / `forward --remove-all` / `kill-server`），临时 A/B APK 与 `results*.jsonl` 已删；`android/app/build` 保留（clean 重建产物，未跟踪）。
+
+### 2026-11-10 13:40 | deepseek-v4.1-flash__trae | NOTE
+Caps: git, gh, filesystem-read/write
+PR #331 已合并进 master：merge commit `67a2924`（未 force、未跳 hook）。
+- 最终形态：应用 origin 静态拦截（`/`、`/style.css`、`/js/*` 从 APK `assets/static` 交付，`/api/*` 一个字节不拦）+ 就绪信号重试（`/api/settings` 200 → `notifyServerReady()` → `retryIfWaiting()`）+ SW 就绪补注册；壳页 `boot.html` 及 `loadShell`/`ShellBridge`/`WebViewAssetLoader`/`androidx.webkit` 依赖已删。
+- 收尾同步：ADR-0033 状态 Proposed → **Accepted**（生效状态同）；INDEX 备注补 PR #331 / merge sha / 最终形态；S1、S2 plan 状态改「已合入 master」。
+- 分支：`feat/android-first-paint-static-intercept` 保留（远程既有 `feat/android-local-shell`、`feat/android-ttfd` 等历史分支同样保留，仓库无自动删分支惯例）。
+- 未覆盖（继续挂着）：arm64 真机、低端机 CPU 争用、8000 端口顺延、首次点词/分析/编辑回退判据、桌面 B2 基线。

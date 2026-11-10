@@ -1,6 +1,6 @@
 # ADR-0033: 把 Python 从首屏关键路径上彻底拿掉——宿主原生静态承载 + 快照首屏、后端只做数据接管
 
-- **状态**：Proposed（待批准，未实施）
+- **状态**：Accepted（已采纳，2026-11-10；S1+S2 已由 [PR #331](https://github.com/ROM4n2/DeLector/pull/331) 合入 master，merge `67a2924`）
 - **日期**：2026-11-10
 - **决策者**：席皓宇 (Haoyu Xi)
 - **关联 ADR**：

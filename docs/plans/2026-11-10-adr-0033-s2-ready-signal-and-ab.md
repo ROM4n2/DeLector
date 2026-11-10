@@ -1,7 +1,7 @@
 # ADR-0033 S2 测量切片：就绪信号驱动重试 (b) + 同构建 TTFD A/B (a)
 
 - **日期**：2026-11-10
-- **状态**：已测；[PR #331](https://github.com/ROM4n2/DeLector/pull/331) CI 全绿，**未合并**，等合并指令
+- **状态**：已测；**已合入 master**（PR #331，merge `67a2924`）
 - **上游**：[[ADR-0033]](../adr/2026-11-10-adr-0033-python-out-of-first-screen-completely.md) §6/§7
 - **前序**：`docs/plans/2026-11-10-adr-0033-s1-static-intercept.md`（S1 已测）
 
