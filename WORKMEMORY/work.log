@@ -640,5 +640,13 @@ Caps: filesystem-read, filesystem-write, shell-exec
 口径核算：早前 721ms 的零点是 Edge 进程启动（plan 原文），85ms 是 performance.mark 的导航起点零点，且 3 次导航复用同一 Edge 进程（81/85 为暖渲染，首轮 347）。两者不可比，85ms 已作废。
 同口径复测（每轮新 Edge 进程 + 新 profile，5 次，快速 503 路径）：进程零点首帧 615ms（610–709）、接管 4161ms（3738–4310）；导航零点首帧 223ms（215–328）、接管 3767ms（3346–3930）。旧挂起路径同为零点：721（626–738）/ 3320（3306–3460）；导航零点 353/2959。快速拒绝比挂起放行晚约 0.8s 接管（等退避窗口），收益是不用刷新/切页而非更早接管。持续失败冷进程：6898ms 进「未连接」+ 按钮，重试后 6ms 接管。
 已写回 plan 与 ADR-0032 §5/§9，并在 PR #329 留评论；未合并，等指令。
+### 2026-11-10 08:55 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+PR #329 已按 merge commit 合并，master 头 63d8e91；master CI（run 42730850868）全绿，含 Master Direct-Push Scope Gate。
+安卓侧双账（无真机连接，用 Medium_Phone_API_37.0 x86_64 模拟器，真机未测）：sync_android_sources + assembleEmulatorDebug，装机后每轮 force-stop + pm clear（清 WebView/SW/应用数据），am start -W，2 轮 × 3 次，0 弃跑。
+结果：快照首帧 3234.5ms（进程零点 3137–3442）/ 469ms（导航零点 452–515）；真实数据接管 3258.5ms（3161–3467）/ 499.5ms（476–539）；提前量仅 24.5ms（22–39），导航零点 run-to-run 极差 63ms 即噪声下限。6 次冷启 /api/articles 均 1 条 200、navCount=1：MainActivity 在 loadUrl 前轮询 /api/settings（L530-540），安卓冷启天然不触发就绪重试；桌面 615ms 级首帧收益在安卓不成立，属桌面专属。
+重试/耗尽用 CDP 拦截 /api/articles 人为验证（非冷启证据）：解除后 4 次请求自动接管 navCount=1；持续拦截超预算 6 次请求落「未连接，显示本地快照」+「重试」按钮，首帧 4 行仍在，点按钮接管。
+文档：plan 新增「安卓侧双账」小节，ADR-0032 §9 同步；android-local-runtime 登记行已置「已关闭」（adb emu kill，devices 空）。临时测量脚本/数据目录已清理。
+
 
 

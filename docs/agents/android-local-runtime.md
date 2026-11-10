@@ -129,6 +129,7 @@ Get-Process qemu-system-x86_64 -ErrorAction SilentlyContinue
 | 2026-11-07 | deepseek-v4.1-flash__trae | 动效版前端（`1790f70`）整包刷新 + CDP/真实触摸动效实测（沿用已在跑的 `emulator-5554`，未由本会话启动） | 运行中，待用户自行关闭 |
 | 2026-11-07 | deepseek-v4.1-flash__trae | 托盘 B 方案（`766a98c` 基线）：刷新装机 + adb 真触摸切音色/播放/切倍速（沿用已在跑的 `emulator-5554`，未由本会话启动） | 运行中，待用户自行关闭 |
 | 2026-11-07 | deepseek-v4.1-flash__trae | 端口握手修复（`fix/runtime-port-handoff`）：8000 被 `adb reverse` 占住后装机启动，验 Python 顺延到 8002 且 WebView 指向 8002 | 已关闭（`adb emu kill`，`adb devices` 已空） |
+| 2026-11-10 | deepseek-v4.1-flash__trae | 就绪重试合入后安卓双账冷启测量（缓存首帧 vs 真实数据接管，`Medium_Phone_API_37.0`） | 已关闭（`adb emu kill`，`adb devices` 已空） |
 
 ---
 
