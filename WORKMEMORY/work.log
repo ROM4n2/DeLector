@@ -784,3 +784,13 @@ PR #333 已以 merge commit `96369ec` 合入 master（2026-11-10 11:30Z），未
 - 定性已写入 ADR-0033 §15.8 与 B2 plan §13.1：`private_mode=True` 是 pywebview 默认值，导致 ADR-0032 桌面缓存「从未生效」，按缺陷修，不属性能调优，已加机械闸 `test_webview_start_persists_storage_under_the_data_dir`。
 - ADR-0033 §15 头部标注「已实施并合入 master（PR #333 / 96369ec）」；§9 行、§15.6/15.7、INDEX 备注同步；B2 plan §13.4 记录合入；未测项照旧挂账。
 - 清理：`%TEMP%\del-b2` 已删（实施轮结束后）；8000/8002 与 9350–9400 无监听；无 DeLector 残留进程（其他 msedgewebview2 属 Cortana/clash-verge，未动）。worktree：主仓 D:/Code/DeLector 在 master；另有 5 个与本次无关的既有 worktree，仅报告不删。
+
+### 2026-11-10 19:52 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read/write, shell-exec, git
+worktree/分支清理（逐项判定，未 --force、未删远程、未 push）：
+- 删 `DeLector-adr0031`（`perf/adr-0031-plan-b`@2ebaefb）：未合入，但 ADR-0031 方案 B 判负、实现与两平台实测/结论已在 ADR-0032 §3.2 + work.log 留痕 ⇒ 规则 3。
+- 删 `DeLector-adr0031-base`（detached@0889b7a，clean）：纯基线 worktree ⇒ 规则 4。
+- 删 `DeLector-dupplan2`（`docs/vocab-card-duplicate-plan`@b680835，clean）：PR #324 merged，HEAD 是 master 祖先 ⇒ 规则 2。
+- 删 `DeLector-readme-shots`（`docs/readme-screenshot-refresh`@a4f5957，clean，无 upstream、无独占提交）：HEAD 是 master 祖先 ⇒ 规则 2。
+- 保留 `vocab-feedback`（PR #335 open）、`vocab-fix`（PR #332 open）、`vocab-response`（PR #334 open）：未合入且各有未合并独占提交 ⇒ 规则 1/5。
+- 删除的仅是本地 worktree 与 3 个本地分支；远程分支与 master 均未动。清理记录同步写入 `docs/agents/ops.md`「worktree 清理记录」。

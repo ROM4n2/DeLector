@@ -158,6 +158,19 @@ TTS 链路（真机判定层）：`AndroidNativeTTS.speak`（系统 TTS，免网
 - **APK 不随 master 自动更新**：`static/` 在构建期打包进 APK。worktree 若没有 `gradlew` / 全局 `gradle`，无法重建 APK 做真机验证；此时以浏览器 393/360 实测为准，并在回报中显式标注 Android 未验。
 - 窄屏双列表单（≤360）标签换行会让两列基线错位：在 `≤380px` 断点降为单列，393 保留双列以避免无谓增高。
 
+### worktree 清理记录（2026-11-10）
+
+逐个按「已合入 / 未合入但有文档留痕的负结果 / 纯 detached 基线 / 判不准」判定后删除 4 个（均 clean，未 `--force`、未删远程分支、未 push）：
+
+| worktree | 分支 / HEAD | 判定依据 |
+| --- | --- | --- |
+| `DeLector-adr0031` | `perf/adr-0031-plan-b` / `2ebaefb` | ADR-0031 方案 B 判负、不合入；实现方式、两平台 seed 与 TTFD 实测、结论均已在 ADR-0032 §3.2 与 work.log 留痕 ⇒ 属已归档负结果 |
+| `DeLector-adr0031-base` | detached / `0889b7a` | 纯 detached 基线，无分支可留 |
+| `DeLector-dupplan2` | `docs/vocab-card-duplicate-plan` / `b680835` | PR #324 已 merge，HEAD 是 master 祖先 |
+| `DeLector-readme-shots` | `docs/readme-screenshot-refresh` / `a4f5957` | HEAD 是 master 祖先（已合入），无未推送独占提交 |
+
+保留：`vocab-feedback`（PR #335 open）、`vocab-fix`（PR #332 open）、`vocab-response`（PR #334 open）——均未合入 master，各有未合并的独占提交，按规则 1/5 不删。
+
 ---
 
 ## Agent 工作惯例
