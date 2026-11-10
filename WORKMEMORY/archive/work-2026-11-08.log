@@ -51,3 +51,379 @@ PR #287 CI 修复（f3b0515 unit-1 红 → 751076d 全绿）。
 - bubble 探针 DOM 桩补齐 classList / setAttribute / getAttribute / dispatchEvent / CustomEvent（真实 DOM 必有），断言 0 改动。
 - 本地：两个 .py 5 passed；`ci_shards.py unit-1` 687 passed / 6 skipped；CI 全 job pass（unit-1 1m22s）。
 
+### 2026-11-08 00:46 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, emulator-run
+「斩」中档反馈落地（feat/master-seal-feedback，基于 bf0110a，开 PR 不合并）。
+- 范围：按压 100ms（--motion-press）+ 牌盒卡面 180ms「已掌握」朱印（--motion-enter）+ 计数 520ms countUp（--motion-count，复用 motion.js 既有实现，未新写）。只引用既有 token，未新增时长 token。
+- cards.js：loadCards(animateCounts=false)，仅「斩」后 loadCards(true) 播计数；三处斩按钮加 data-master-key；pointerdown→.is-pressed（触屏 WebView 的 :active 实测不生效）；toggleMaster 补最短印章展示时长、toast、失败回滚。
+- style.css：.card-master-btn 的 transition: all 改为 transform/background/border/color + token；末尾独立分区追加 ::before 热区（上下各 0.7rem）、:active/.is-pressed、@keyframes dl-master-seal、reduce 降级。未重排既有规则。
+- AndroidManifest 仅 +1 行 VIBRATE；android/ 其余未动。
+- 验证（真触摸，非合成 click）：桌面 CDP touch 按下→首帧 5.4–5.7ms，click→印章动画 9.7–11.5ms，click→toast 30.6–32.3ms；命中区实测 46px 高，deltaCard/deltaFooter/deltaBody 全 0（七行高度不变）。
+- Android 模拟器 API37：WebView 411×866 dpr=2.625；touchstart→is-pressed 22.7ms，→is-mastering 190.9ms（含 90ms 主动按住），→toast 240.1ms；截图见「已掌握」朱印。
+- 振动取证（不是「加了权限所以应该好了」）：navigator.vibrate(15) 返回 true；dumpsys vibrator_manager 新增 org.delector.app.emulator (uid=10238) ... played: Step=15ms(amplitude=1.00)，每次点斩 +1 条。
+- 门禁：build_index_html.py 成功；check_index_html_sync.py PASS。
+- 不做：重档斩击退场、音效、逐卡庆祝、斩前确认、背词流程改造。
+- 遗留：网格卡无朱印（只按压 + toast）；振动仅模拟器取证，真机未验。
+### 2026-11-08 04:01 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+P4 状态复核 + 全站视觉换皮只读调研。
+- P4：worktree D:\Code\DeLector-companion-p4（feat/companion-p4-free-move，5917f95 + dc2817e）干净无未提交改动；基线 master@240d38f 已含 #290；PR #291 OPEN/mergeable。本轮未改任何 P4 代码。跨 session 传来「代码还没写」为过期信息，已用分支日志与 PR 状态证伪。
+- 调研产物：docs/reviews/2026-11-08-full-site-visual-reskin-research.md（唯一新增文件；未改 static/、android/、docs/adr/）。
+- 核心量化 [S]：style.css 13492 行 / 1589 去重选择器 / 3 个 :root(87 vars) vs tokens.css 73；规则体 582 hex(145 种)+118 种 rgba，颜色声明 33.4%(748/2239) 写字面量；非 var font-family 311；!important 186；重复选择器 131(多 162 次)；inline style：index 117 / workbench 116 / drawer 35；JS 颜色字面量 79；workbench.css 另立 17 vars(3 个硬编码浅色) 且 iframe 不继承父 :root。
+- 对比度 [T]：coral/paper 2.82:1、白字/coral 2.99:1、mustard/paper 1.72:1、muted/paper 3.49:1 ⇒ 换色必须带对比度闸。
+- 约束确认：ADR-0030 的 7 处 infinite 白名单未变；无视觉回归测试；sw CACHE_NAME=v5.21.1、Android static.version 需发版才刷新；manifest/head theme-color 硬编码 #faf8f5；无暗色主题基础。
+- 建议：P0 截图矩阵+computed-style 基线+字面量预算闸 → P1 token-only → P2 组件族 → P3 workbench/边界 → P4 文档发版；布局重排单独立项。待用户拍板：目标风格、是否含暗色、是否先建视觉基建。
+- 边界：本轮 [A] 运行时证据缺失（Edge headless 截图退出 0 但目录为空），已写入报告 §7；未做任何实现。
+
+### 2026-11-08 08:46 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, web-search, web-fetch
+全站视觉换皮调研补横向章节（仍只读，未改代码/样式/模板）。
+- 产物：docs/reviews/2026-11-08-full-site-visual-reskin-research.md 追加 §8 横向调研 + §9 来源；同类文档不另开。
+- 样本：语言学习/阅读 5（LingQ/Readlang/Beelinguapp/Duolingo/Language Reactor）；写作与知识管理 4（iA Writer/Obsidian/Notion/Ulysses）；官方设计系统 5（M3/HIG/Fluent2/Carbon/Primer）。每条含「解决的问题/可抄做法(数字)/陷阱/移动端」。
+- 关键数字来源为官方文档：M3 字阶 57/64 起、15+15 样式、Major Second 1.125/基准14；动效 200/300/400/500ms、桌面150-200；暗色非纯黑 #121212/#1C1B1F。HIG 正文17pt/LargeTitle34pt/最小11pt、对比度4.5:1、自定义小字争取7:1。Fluent2 10/14→68/92、4.5:1与3:1大字、4px网格。Carbon productive14/expressive16、间距2-160。Obsidian 16px/1.5行高/UI 12-15。Duolingo 标题100-110%行高、≥30px、≤10词，正文140%、≥14px。
+- 三判断：值得抄=字号行距独立可调/句级对齐/展示与正文分工/限宽≤80字符/4px刻度/语义不只靠色；慎抄=颜色承载5级状态/真并排双语/双层字幕/隐藏控件/全宽正文/15×2字阶/10px辅助字；移动端不可用=Language Reactor(桌面扩展)、393px 真并排双语。
+- 收束：①材质先行+仅三个密度点(阅读器760→约700px、抽屉间距4/8/12/16/24、触达≥44px)，不重排布局；②暗色不进本轮，仅把 token 拆语义层留插槽，避免零基础双主题QA；③P0=12面×3宽=36张/轮 + 12控件computed-style JSON + 三条闸(hex≤582/rgba≤118、4.5:1、infinite=7)，先本地后CI，基线放_artifacts不入库。
+- 边界：仍无 [A] 运行时取证；未改任何实现文件。
+
+### 2026-11-08 08:55 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+全站换皮调研追加 §9「结构拆分与解耦评估」（仍只读，未改代码）。
+- CSS 三方案：A 构建期拼接+@layer=能做(先零差异再分层)；B 单文件 @layer=有条件(需 P0，且 !important 层序反转、未分层普通声明压过层内)；C 多 <link>=现在别做。现状约束：index 只加载 /style.css，workbench 独立加载 fonts+tokens+workbench；多测试直接读 static/style.css，拆分必须仍产出该路径；已有 index 片段+build+sync 先例可复用。
+- CSS 拆法：按 8 段切 src/css → build_css.py 输出 static/style.css，阶段1 sha256 字节一致(可先于 P0)；阶段2 包 layer 后截图 diff=0；阶段3 逐段迁 components；不做批量去重/删 !important。
+- JS 量化：46 文件/1,049,468 B；core 被 22 文件导入、companion 10、player 9、main 出度 19；main.js Object.assign(window) 193 名；静态 HTML 内联事件 526 处/102 入口(show 42、ShadowPlayer 34、setExamModule 14)；cp-drawer 1475 行；companion:statechange 0 监听(死事件)、settle-end 1。
+- 真缝：cp-state/motion/wr-format/rd-syntax/companion-obstacles 纯层；CompanionDrawer 双写者(main facade + cp-drawer merge)需单写者化；假缝：window-bridge.js 搬家、按文件大小切 cp-drawer、DOM 读写分离但仍读 window.state。
+- 已确认缺陷：window.showUndoToast 被 if 守卫 6 次但全仓无定义→静默空操作。
+- 顺序结论：零差异拆分可先于 P0；@layer/顺序调整/组件迁移必须 P0 之后；JS 纯逻辑迁移可与 P0 并行，DOM 重切等 P0。
+- 下一步动作：build_css/check_css_sync 单源跑通 sha256 → 8 段拆分 → P0 基线 → 加 layer → 分视图迁内联事件(show/ShadowPlayer/setExamModule 先) → 修双写者与死守卫。
+- 边界：未改任何实现文件；仍无 [A] 运行时截图取证。
+### 2026-11-08 09:05 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：static/style.css 零差异拆分（P0 视觉基建前置）+ 源码/产物同步闸 + window.showUndoToast 死守卫修复；顺手补齐 CI packaging 触发面。
+不做：换皮/加 @layer/合并选择器/去重/删 !important；不碰 android/ 与 docs/adr；不跑全量 pytest；不开自动合并。
+分支：feat/css-zero-diff-split，基于 origin/master a7f1b40（#291 已入）；style.css 冲突只在末尾追加分区，不重排既有内容。
+
+### 2026-11-08 09:13 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+- 拆分：static/style.css 13,560 行 → src/css/ 9 片（tokens/base、home/views、reader、drawer/wordcard、cards/player、deck/exam、progress/quiz、settings/writer、a1/encounter/overrides），纯行切片，零规则改动。
+- 构建/闸：tools/build_css.py（固定清单顺序、逐字节拼接、未登记/缺失分片直接失败）+ tools/check_css_sync.py（原始字节比对 + unified diff），接入 ci.yml unit-2 与 ci_shards/ci_shard_weights。
+- 哈希证据：拆分后重建 sha256=5d4261009b947d0a2c0d7b7f1f5e5305908c934a9c024eeeccd3beea3e88508f，与 origin/master 基线一致；git diff static/style.css 为空（硬哈希验收，不靠截图）。
+- 缺陷：companion.js 7 处 `if (window.showUndoToast)` 守卫从未命中（真实现只在 cards.js 导出，未挂 window）。选「补真实现」：main.js window bridge 登记 cards.js 唯一实现；理由=这些是真实用户反馈（非法/超限 SVG、解析失败、导入成功、发声开关、设置保存），删守卫等于主动砍反馈，另写实现则重复。
+- packaging：ci.yml 过滤清单补 static/**、android/**、tools/sync_android_sources.py、delector/core/assets_manifest.py，并同步 test_ci_hardening_workflow_wiring.py 的 PACKAGING_SURFACE_PATHS；命中时才多跑一台 windows runner（完整 PyInstaller 构建+真启验包，job 上限 30min），未命中零开销。
+- 验证：定向 pytest 84 passed（check_css_sync/check_index_html_sync/ci_governance/ci_wiring/source_hygiene/frontend_module_graph/frontend_guards）；ruff + mypy --strict 新文件全绿；build_css --check 与 check_css_sync 均 PASS。
+- 提交：ad29712（CSS 拆分+同步闸）/ 8fb44ee（packaging 触发面）/ 0fa1aa8（showUndoToast），分支未推送、PR 未开（按用户规则等确认后推送）。
+- 边界：无 @layer、无视觉/布局改动、无截图；android/ 与 docs/adr 未碰；全量 pytest 未跑（按约束只跑定向）。
+
+### 2026-11-08 09:30 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+P0 视觉回归基建第一版（独立 worktree `D:\Code\DeLector-visual-p0`，分支 `feat/visual-regression-p0`，基线 origin/master）。
+- 目标：12 界面 × 3 宽度截图矩阵、12 控件 computed-style 基线、三条闸（hex≤582 / rgba≤118 / 对比度 / infinite=7）、一页用法文档。
+- 不做：不碰 `.github/workflows/ci.yml`、`tools/ci_shards*`、`src/css/`；不改样式与页面；不接 CI；不跑全量 pytest。
+- 产物：工具/测试/基线/文档入库；截图与当前导出落 `_artifacts/` 不入库。
+
+### 2026-11-08 09:55 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+P0 视觉回归基建完成（本地跑通，未接 CI）。
+- 新增：`tools/visual_matrix.py`（一键编排：临时数据目录+预置文章+6 张种子卡+启停服务）、`tools/visual_matrix.mjs`（零 npm 依赖 CDP：12 界面 × 393/360/1280 截图 + 12 控件 20 属性导出）、`tools/visual_baseline.py`（compare/update，逐控件逐属性打印 from→to）、`tools/visual_gates.py`（颜色字面量/对比度/infinite 现算）、`tests/test_visual_gates.py`、`tests/fixtures/visual/computed_style_baseline.json`、`docs/agents/visual-regression.md`。
+- 验证 [A]：矩阵两次 36/36 张、约 50.6s、失败 0/控件缺失 0；第二次 computed-style 12 控件基线一致。定向测试 `pytest tests/test_visual_gates.py` 8 passed。
+- 闸门实测：hex 581≤582、rgba 118≤118、infinite 7==7、闸内对比度最低 4.63（正文 4.5/大字图形 3.0）。已演示红绿：改 `--ink:#e8e2d8` → contrast 1.22 红、恢复绿；追加 2 个规则体 hex → 583 红；追加 rgba+infinite → 119/8 红；均恢复后绿。
+- 已知欠账（P0 只报告不阻断）：muted/paper 3.49、ink-faint/paper 3.43、coral/paper 2.82、white/coral 2.99、mustard/paper 1.72，P1 换皮必须清零后移入闸门。
+- 回写检查：稳定结论已写入 `docs/agents/visual-regression.md` 并从 AGENTS.md 路由；截图、当前导出、server.log 均不入库；未改样式/页面/CI。
+- 待办：推送分支并开 PR（不自动合并）。
+
+### 2026-11-08 10:02 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+P0 视觉回归基建已提交并开 PR：commit `05e2c0e`（feat/visual-regression-p0，基线 origin/master a7f1b40），PR #293 https://github.com/ROM4n2/DeLector/pull/293（OPEN，未合并）。worktree `D:\Code\DeLector-visual-p0` 保留供后续 P1 复用。
+
+### 2026-11-08 10:40 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+P1 只动 token 清 5 处对比度欠账（独立 worktree `D:\Code\DeLector-visual-p1`，分支 `feat/token-contrast-p1`，基线 origin/master `0ec6dfd`）。
+- 目标：coral / mustard / muted / ink-faint 四组 token 达标；token 拆值层+语义层（暗色只留插槽）；用 P0 闸与基线证明「颜色变了、结构没变」。
+- 不做：不碰布局/结构/动画；不新增规则体 hex/rgba 字面量；不实现暗色；不跑全量 pytest；不自动合并。
+- 方法：先跑一次改前矩阵留档 → 改 tokens.css 与 01-tokens-base.css 双镜像 + workbench 映射 → build_css → 闸门升级 → 改后矩阵与 computed-style 比对。
+
+### 2026-11-08 11:05 | deepseek-v4.1-flash__trae | WORK_END
+Status: DONE —— P1 只动 token 清 5 处对比度欠账；commit `a72bc63`，PR #294（OPEN，未合并）。
+- 实测（paper #faf8f5 / white #ffffff）：coral 2.82→5.26、white/coral 2.99→5.58、muted 3.49→4.76、ink-faint 3.43→4.98；mustard 保持 1.72 仅装饰，新 `--mustard-ink: #825c00` 5.69。
+- 决策：coral 单值重选 `#b44322` 不拆——所有 coral 底色都压白色小字，底色自身须对白 ≥4.5，拆分只会得到两个同亮度值；mustard 拆装饰/文字两 token，workbench `--hard` 改指 `--mustard-ink`，新增 mustard decorative-only 闸。
+- 分层：值层 `--color-*` → 语义层 `--color-accent-* / --text-*` → 兼容层 `--coral / --mustard / --muted / --ink-faint`；`src/css/01-tokens-base.css` 与 `static/css/tokens.css` 双镜像，测试逐 token 比对。
+- 矩阵：36/36 × 改前/改后/噪声基线；35/36 可判定变化，`15-drawer-360` 全落噪声区；差异仅 coral/muted/ink-faint 三族色值及抗锯齿混合。
+- computed-style 只更新 3 条（mobile-nav-active.border-top-color、stat-ring-coral.border-top-color、stat-ring-coral.color），其余控件 20 属性不变 ⇒ 结构未动。
+- 闸门：hex 581≤582、rgba 118≤118、infinite 7==7、闸内对比度最低 4.63、mustard 文字声明 0；pytest 39 passed、Ruff/Mypy strict、check_css_sync 全绿。
+
+### 2026-11-08 11:35 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+P1 PR #294 追加「抬高字面量硬顶」提交（未转任何现有字面量为 token）。
+- 新预算：hex 700 / rgba 150（原 582 / 118）；实测仍 581 / 118，占用 83.0% / 78.7%，余量 119 / 32。
+- 余量预分：P2 组件族 ≤48/14、P3 收口 ≤24/8、T3–T9 动效阴影 ≤12/6、并行合并机动 ≤35/4。
+- 逼近告警：达预算 90%（hex 630 / rgba 135）打印 `[WARN] ... 新增字面量应优先改成 token`，不阻断；选 90% 是为了留一轮 PR 的改 token 提前量。
+- 验证：`visual_gates.py` 全 PASS（581/118）；pytest 41 passed；Ruff / Mypy strict 全绿；文档新增 §3.2 记录理由与实测。
+
+### 2026-11-08 11:36 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+P2 形态三点（独立 worktree `D:\Code\DeLector-visual-p2`，分支 `feat/form-p2`，基线 origin/master `da48c38`）。
+- 范围：阅读器限宽 760→700；抽屉第一层间距归 4/8/12/16/24；触摸目标 ≥44px。
+- 不做：材质/阴影/纹理另开一轮；不重排三处之外布局；不改字号；不自动合并。
+- 方法：CDP 实测改前 → 改 CSS 分片 → build_css → 改后实测 → 36 张矩阵对基线 + 噪声复跑 → 开 PR 报里程碑。
+
+### 2026-11-08 11:58 | deepseek-v4.1-flash__trae | WORK_END
+Status: PR_OPEN —— P2 形态三点，commit `bad67b0`，PR #295（未合并）。
+- 阅读器：`#view-reader` clientWidth 760→700、正文列 708→648（@1280）；393/360 仍受视口约束不变。
+- 抽屉间距（桌面）：header 16/20/12/20→16/24/12/24；body 20/24/80/24→16/24/80/24、gap 20→16；actions gap 6→8；chat 16/20→16/24、gap 13.6→12；移动 header 5.6/13.6/8/13.6→4/12/8/12。
+- 触摸目标：移动 `.btn` 36 / `.btn-xs` 26 视觉不变，命中区实测 49；`#drawer` tab 28→44、close 26→44。例外：writer 工具栏两行按钮重叠 1px，第一行命中区 42，补 44 需重排，留组件族轮次。
+- 矩阵：36/36；仅 03-drawer-393、15-drawer-360、26-reader-1280、27-drawer-1280 变化，其余落噪声；computed-style 12 控件全一致；闸门 581/118 PASS；pytest 41 passed；check_css_sync PASS。
+- 未做：材质/阴影/纹理另开一轮；未自动合并。临时 base worktree 已清理。
+
+### 2026-11-08 12:03 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+P3 workbench token 收口（独立 worktree `D:\Code\DeLector-workbench-p3`，分支 `feat/workbench-token-closeout`，基线 origin/master `6004b96`）。
+- 范围：盘 17 个 workbench 局部变量 → 共享 tokens.css 直用 + 8 个 `--wb-*` 独有语义；暗色块重绑同名共享 token；补按压/焦点环回归守卫。
+- 不做：不改 `src/css/`、主应用 `style.css` 组件规则、`android/`；不跑全量 pytest；不自动合并。
+
+### 2026-11-08 12:06 | deepseek-v4.1-flash__trae | WORK_END
+Status: PR_OPEN —— workbench iframe token 收口，commit `22d32a9`，PR #297（未合并）。
+- 根因（CDP 实测 iframe 内 computed token）：旧 `--accent: var(--accent, #c14a2b)` 自引用 → guaranteed-invalid，`--accent` 计算值为空，所有无 fallback 的 `var(--accent)` 整条失效（`.tabs active` 下划线 0px、`.progress > i` 透明、`.btn.ghost` 失去珊瑚色）；`--muted` 被同名覆盖成 `--pencil #5c554b`（主应用 `--muted #756e61`）；`--line` 同名覆盖成 `--rule #d8d0c2`（全局 `--line` 是 rgba 叠色）。
+- 落地：17 → 8 个局部变量；`--bg/--panel/--text/--accent-soft` → `--paper/--paper-card/--ink/--paper-tint`；`--card/--accent2` 0 引用删除；SRS 收敛 `--wb-good/--wb-hard/--wb-again(+soft)` 并映射 `--moss/--mustard-ink/--cherry/--note-*`；`--shadow/--radius` → `--wb-shadow/--wb-radius`。
+- 方案选定：workbench 独立 link 同一份 tokens.css（iframe 不继承父 :root，但这是同源独立消费者），拒绝父级注入（值二次复制、首帧闪烁、独立打开失效、主题桥接与 CSP 风险）。
+- 实测（改前→改后）：`--accent` ""→#c14a2b、`.tabs active` border 0→2px coral、`.progress > i` 透明→coral、`--muted` #5c554b→#756e61；`.face` 边框 #d8d0c2 不变、SRS 三档色值不变、暗色 body/face 实绘色完全一致。
+- 真机 headless（CDP 真实输入）：iframe 内 `.btn` focus-visible=true、outline 2px solid rgb(21,20,15)、offset 2px；按住时 `:active`=true、transform matrix(0.98,0,0,0.98,0,0)、transition 0.1s（`--motion-press`）。
+- 矩阵：36/36 改前/改后；computed-style 12 控件全一致；闸门 581/700、118/150、infinite 7、最低 4.63 全 PASS。噪声复跑确认 home/drawer/cards/search/encounter/settings/german 的内容差异来自随机词/相对时间；german 可解释差异 = accent 装饰恢复 + muted 对齐。
+- 定向测试：156 passed（workbench_tokens / visual_gates / german_workbench / frontend_guards / assets_manifest / static_cache_fingerprint / check_css_sync）。
+- 仅报告未改：`#fff` on-accent、`rgba(21,20,15,.05/.08)`（同值但属阴影语义）、`rgba(0,0,0,.06)`、`rgba(15,18,25,.45)`、`rgba(0,0,0,.25)`、`--wb-shadow` 冷色 rgba；workbench.html `--fg` 无定义（既有死引用）。
+
+### 2026-11-08 12:40 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+P3 材质轮里程碑（PR #296，feat/material-p3，未合并）。
+- 方案：值层 --shadow-tint-1..4 + 语义层 --elevation-1..4 / -drawer / -sheet / -sheet-quiet + --ring-*（含 --ring-paper-lip）+ --sticker-1/2/3/4/6/8 / -card / -card-hover；旧 --shadow-sm/card/hard 保留给 JS 内联。
+- 落地：抽屉/底部弹层/底栏/toast/设置模态/选中工具条/阅读器高亮环全部改走 token；.memo-card 加顶沿 1px 受光边作纸感。旧硬偏移 1.5/2.5/3.5/5 归并到 2/3/4/6。
+- 噪点否决（实测）：0.06 alpha 全屏暗噪点使 muted-on-paper 4.76→4.40、ink-faint 4.98→4.59；0.02 仍只剩 4.64；且 fixed+mix-blend-mode 每帧整屏混合、暗色需换混合模式。
+- 验证：build+sync PASS；gates hex 566/700、rgba 115/150、对比度 4.63、infinite 7、mustard 0；pytest 64 passed；36 张改前/改后矩阵各 36/36；computed-style 12 控件一致（含 box-shadow/尺寸/字体）；同代码二次矩阵作噪声基线（drawer-360 9.2%、home-393 6.9%），确定性变化仅阴影边。writer 工具栏区（08 ≥1000 行）未动。
+
+### 2026-11-08 12:45 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+P2 组件族换肤第一轮：阅读器 + 词卡抽屉。worktree D:\\Code\\DeLector-visual-p4，分支 feat/reader-wordcard-skin；基线取 origin/feat/material-p3 c40ab2b（master 尚无 P3 材质 token）。
+- 范围：03-reader.css / 04-drawer-wordcard.css 字面量收敛、elevation 复用、非颜色状态线索；reader.js 仅接 is-saved 态。
+- 不做：android/、visual_gates.py 阈值、writer 工具栏 44px 命中区、其他组件族；字号/行高/行宽/段距经实测无需改。
+
+### 2026-11-08 12:45 | deepseek-v4.1-flash__trae | WORK_END
+Status: PR_OPEN —— 组件族 P2（阅读器 + 词卡抽屉），分支 feat/reader-wordcard-skin（未合并）。
+- 字面量：03/04 两片 hex 归零；全站 hex 566→550、唯一 rgba 115→109（配额 ≤48/≤14，实际 −16/−6）。infinite 7 未动，闸内最低对比 4.63。
+- elevation：阅读纸面 4px 5px → var(--sticker-4)（4px 4px）；抽屉保持 --elevation-drawer；卡片 #ffffff → var(--paper-card)（同值零视觉变化）。
+- 阅读指标未改（有数）：18px / 33.3px(1.85) / 版心 648 / 文字栏 576（≈51 字符）/ 段距 24（基线距 57.3 = 1.72×，超 WCAG 1.4.8 AAA 1.5×）。
+- 非颜色状态：选中词元 ink 底+paper 字+ring+2px 下划线；tab 激活加 2px 纸色下沿；已收录 = ✓ + 2px outline + 700（对比 17.40）。性别徽章换 --hl-A1/A2/B2(-ink)，对比 5.03/4.88/4.56 → 6.67/6.74/5.59。
+- 基线：仅 tok-selected 4 项（bg/color/border-radius 2→3/border-top-color），其余 12 控件 × 20 属性不变。
+- 矩阵：36 张，受控同源数据 + base-vs-base 噪声对照；真实变化仅 02/14/26-reader 与 03/15/27-drawer。german 随机词、cards 卡数、底栏计数、drawer-360 9px 位移在两次同代码运行中复现 ⇒ 噪声。
+- 交互：elementFromPoint 命中选中词元；抽屉 z=1100 命中抽屉、1280 下与阅读区右缘距 96px；393 全宽 + backdrop z=89。reduced-motion 无新增过渡。
+- 缺口：「复习状态」在本族无 UI，未凭空新增，需另立项。
+- PR base 待裁决：feat/material-p3（依赖 P3 token）或待 #296 合入后 rebase master。
+
+### 2026-11-08 12:45 | deepseek-v4.1-flash__trae | PITFALL
+Caps: filesystem-read, filesystem-write, shell-exec
+tok.sel 选中样式被静默覆盖：05-cards-player.css 的 .tok.reading-active 同特异性且位置更后、同为 !important，压过 03 片 .tok.sel；且 #reader-content .tok 的 2px 圆角覆盖 .tok.sel 的 3px。解法：选择器提升为 #reader-content .tok.sel。另：CDP 探针须在 sel 出现后等 ≥260ms 再读 computed style，否则命中 120ms 过渡首帧得到透明背景。
+
+### 2026-11-08 12:52 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+上条 WORK_END 已落地：commit 3517201，PR #298（base feat/material-p3，未合并）；#296 合入后改基 master 即可。
+
+
+### 2026-11-08 13:07 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+Status: DONE —— 组件族 P2（阅读器 + 词卡抽屉）PR #298 已合并 master，最终 master `16a00fd`。
+- 改基：feat/reader-wordcard-skin rebase 到 origin/master `a012aeb`（含 #296/#297），无 merge commit；唯一冲突在 work.log，双方事件全保留。
+- rebase 后复验：build_css + check_css_sync PASS；闸门 hex 550 / rgba 109 / infinite 7 / 最低对比 4.63，与改基前一致未被旧值污染；pytest 视觉+前端守卫 127 passed。
+- 矩阵改前/改后各 36/36（同源数据）：信号组仅 02/14/26-reader 与 03/15/27-drawer 可解释；同代码两次噪声基线 29/36 有差异且幅度更大 ⇒ 其余为噪声；computed 基线仅 tok-selected 4 项。
+- CI（PR #298）：13 job 全 pass，1 job（Master Direct-Push Scope Gate）按设计 skipped；mergeable=CLEAN 后 merge commit。
+- CI（master `16a00fd` push）：13 job 全 success（含 Windows Portable Smoke）。
+- 临时 base worktree `D:\Code\DeLector-visual-before` 已清理；`D:\Code\DeLector-visual-p4` 保留待回收。
+
+
+### 2026-11-08 16:56 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+P2 组件族换肤第二轮：卡盒 + 闪卡。worktree D:\Code\DeLector-visual-p4，分支 feat/cards-flash-skin，基线 origin/master c2e9e60。
+- 范围：05 卡区(1-190)、06 卡控/牌盒/已掌握(1-120,491-1000)、07 测验闪卡(994-1490)。
+- 不做：06 exam 区(121-490)、08 设置/写作、android/、visual_gates 阈值、抽屉复习状态入口。
+
+### 2026-11-08 16:56 | deepseek-v4.1-flash__trae | WORK_END
+Status: PR_OPEN —— P2 组件族第二轮（卡盒 + 闪卡），分支 feat/cards-flash-skin。
+- 字面量：hex 550→528（−22/配额32）、唯一 rgba 109→108（−1/配额8）；infinite 7；闸内最低对比 4.63 不变。
+- token 收敛：卡面/背面/已掌握底/删除 hover/掌握按钮文字/闪卡/听写/选项/正误底色全部换语义 token；语法卡阴影 tint-1→tint-2 与词汇卡同档。
+- 非颜色状态：掌握态 = ↺ 文案 + 3px 苔绿左轨 + opacity .75（实测命中高 48.4px 未改）；选项正误 = ✓/✗ 图标 + 700 字重 + 1px 语义边框。
+- 对比度：掌握 5.68；正确 5.48（旧 5.50）；错误 5.72（旧 5.40）；纸色 on coral 4.63（旧 #fff 4.90）。
+- 矩阵：受控同源数据（33 卡/0 已掌握）三次运行；噪声组与信号组均 6/36 且 bbox 重合（drawer tab/german 随机词/抽屉计数），**本族矩阵信号为 0**——改动集中在 hover/掌握/作答态，静态矩阵不覆盖。computed 基线 0 项更新（基线不覆盖这些态），已逐项确认无漂移。
+- 交互 CDP：卡盒点击掌握后文案变「↺ 重返待复习」、moss 底/纸字/3px 左轨；选项点击后 ✓/✗ + 700；闪卡翻面背面与作答按钮同时出现。
+- 材质例外 2 处：ink 底计数薄纱 rgba(255,255,255,.2)、测验遮罩 rgba(246,245,240,.96)，无同义 token。
+- 修复（单独 commit，可回滚）：cards.js 内联 onclick 的 submitChoice 改为已暴露的 selectChoiceOption，见 PITFALL。
+
+### 2026-11-08 16:56 | deepseek-v4.1-flash__trae | PITFALL
+Caps: filesystem-read, filesystem-write, shell-exec
+内联 onclick 取不到 ES module 作用域：cards.js 渲染 onclick="submitChoice(...)"，但 main.js 只把同函数以 window.selectChoiceOption 暴露，点击抛 ReferenceError，正误反馈样式从未生效且无报错。这是「代码看着在、其实没接线」的第二例（前一例 window.showUndoToast）。排查手段：CDP 里 typeof window.<handler> + 真实 click 后看 class 是否落地。修复：改用桥名并就地注释；check_frontend_api_contract.py / check_silent_degradation.py 只扫 py，不覆盖此入口。
+
+### 2026-11-08 17:24 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+#299 已按 merge commit 合并（base master，未 squash），最终 master `c2d1422`；master push run 42466000302 逐 job 全 success，含 Windows Portable Smoke 真跑与 Master Direct-Push Scope Gate 真跑，无 failure / cancelled / skipped。无簿记直推需求。
+
+### 2026-11-08 17:24 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+P2 组件族换肤第三轮：备考（exam）族。worktree D:\Code\DeLector-visual-p4，分支 feat/exam-skin，基线 origin/master `c2d1422`。
+- 范围：06-deck-exam.css exam 区（七模块单列目录 / 激活态 / 计数）、模块内入口页签 `.exam-panel-tab`（原零规则）、模块内空态 `.listen-empty` / `.hs-empty`。
+- 不做：05/07 的 cards 与 quiz、08 设置/写作、android/、visual_gates 阈值、07 写作面板内容区、审计出的 16 个存量零规则类。
+- 预算调整：本族 ≤12 hex / ≤4 rgba；P2 总配额上限 48/14 → 60/14。理由：前两族共用 −38 hex / −7 rgba，按原口径只剩 10/7；本族以补缺失规则为主、预期字面量增量为 0，上调只放宽总上限，硬顶 700/150 与既有闸门阈值不动。
+
+### 2026-11-08 17:24 | deepseek-v4.1-flash__trae | PITFALL
+Caps: filesystem-read, filesystem-write, shell-exec
+「JS 在切、CSS 零规则」同病根第 4 次复发（exam-module-card.active → .tok.sel 同特异性被压 → submitChoice 死绑定 → .exam-panel-tab 零规则）。可复用识别法（纯静态，不必跑起来）：
+1) 列切换点：rg "classList\.(add|remove|toggle|contains)\(\s*['\"]([\w-]+)" static/js
+2) 查规则命中：对每个类名在「CSS 源全集」= src/css + static/css + HTML 内联 <style> + JS 内联 <style> 里搜 (^|[^\w-])\.类名([^\w-]|$)；命中 0 即候选。
+3) 三桶判定：A 纯 hook（只被 querySelector/contains 读取，无视觉意图）；B 视觉由内联 style 或同节点 co-class / 子节点承担（必须指名承担者）；C 真缺样式（类名存在但界面无任何区别）。
+本轮结果：149 个被切类名中 16 个零规则；本轮范围类名零命中（唯一 `.exam-panel-tab` 已补）。C 桶 2 个：`.has-hint`（cloze 首字母提示无任何视觉标记）、`.companion-resume-notice`（断点恢复提示与正文同形）；留作下一轮，本轮不修。
+
+### 2026-11-08 17:24 | deepseek-v4.1-flash__trae | WORK_END
+Status: PR_OPEN —— P2 组件族第三轮（备考 exam），分支 feat/exam-skin。
+- 字面量：hex 528→528（+0 / 配额12）、唯一 rgba 108→108（+0 / 配额4）；P2 累计 −38 hex / −7 rgba；infinite 7；闸内最低对比 4.63 不变。
+- 改动：激活态序号补 700；计数加 1px 账线 + tabular-nums；新增 `.exam-panel-tabs` / `.exam-panel-tab`（token-only，44px 命中区、2px 珊瑚底线 + 700）；`.listen-empty` / `.hs-empty` 加 3px 左线。
+- 实测 1280：页签高 24→44px；计数宽 34.6→45.6px；对比 计数 4.98 / 页签 idle 4.76 / active 17.40 / 底线 5.26 / 空态 6.94。
+- 393/360 实测：横向溢出 0；页签在 353/320px 容器内单行不折、高 44px、距目录末行 16px，不与模块标题同行。
+- 矩阵（同源数据三跑 36/36）：signal 仅 exam 393/360/1280（3.9% / 4.0% / 3.5%）；cards/quiz/reader 全 0（前两族无回归）；drawer-1280 0.219% 与 german 三档均 ≤ 噪声（噪声 8.1% / 1.4% / 1.3% / 0.5%）；computed 基线 0 项更新（控件集未采样子节点，已用定向探针替代）。
+- reduced-motion 模拟：tab / card / ::before 过渡 1e-05s（全局 0.01ms + 本族显式 none）。
+
+### 2026-11-08 17:58 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+P2 组件族换肤第四轮：设置（settings）族。worktree D:\Code\DeLector-visual-p4，分支 feat/settings-skin，基线 origin/master `b9563e8`（#300 merge）。
+- 范围：08 设置段 1-199（模态容器/头部/分组/说明文字/preset chip/动作区）、09 设置 reasoning 分区（分段控件与状态行）、main.js 设置状态内联色改 data-state。
+- 不做：08 的 companion 段 200-943、writer 段 944+（写作族下一轮）、android/、visual_gates 阈值、IA 重排（只做视觉材质与状态表达）。
+- 已知边界：设置模态内无 on/off 开关、无危险操作区（“还原备份”在卡盒页），故“开关开/关、危险区”只按真实存在控件（折叠、分段、状态行、禁用态）落实非颜色状态。
+
+### 2026-11-08 17:58 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+状态审计（回应用户质疑）：上一轮报告后工作并未消失——改动一直以未提交形式落在 D:\Code\DeLector-visual-p4（HEAD b9563e8，分支 feat/settings-skin），`git status` 显示 M 08-settings-writer.css / 09-a1-encounter-companion-overrides.css / static/js/main.js / static/style.css。改后数值来自该 worktree 的 8782 服务（DELECTOR_DATA_DIR=data-after），不是别处副本。visual-before 为 b9563e8 detached 干净；8781/8782 各有一对 uvicorn 父/子进程，已在本轮收尾时杀掉。教训：后台矩阵启动后不得当作阶段完成，必须取回结果再收口。
+
+### 2026-11-08 17:58 | deepseek-v4.1-flash__trae | WORK_END
+Status: PR_OPEN —— P2 组件族第四轮（设置 settings），分支 feat/settings-skin。
+- 字面量：hex 528→519（−9 / 配额12）、唯一 rgba 108→108（删除 1 处 rgba(21,20,15,.06) 但该值他处仍存）；新增 hex/rgba = 0，全部新规则 token-only。infinite 7；闸内最低对比 4.63。
+- 材质/层级：模态头与动作区各加 1px --line；分组折叠行补 hover 底色 + 2px ink focus-visible；分段容器 1.5px ink → 1px --muted（对 paper-deep 3.75:1），内部分隔 1px --ink → --line；hover 由 rgba 改 --paper-tint；preset hover 蓝色三连改为 paper-tint/ink/accent。
+- 命中区（393 实测）：关闭 26×26→44×44（补 flex:0 0 auto 防挤压）、btn 36→44、密钥显隐 44×43→44×44、preset 20→44、分段 ≤420px 42→44、输入 43→44；360 同；横向溢出 0。
+- 状态非颜色通道：字段/反馈/推理状态行加 2px 左竖线 + data-state（warn=accent / ok=moss / pending=pencil），文字本身带语义；分段 aria-checked + 600 + 2px 珊瑚底线；禁用态 2px dashed pencil 外框 + 去 sticker 阴影 + not-allowed。main.js 三处内联 hex 改 data-state（#ca8a04 2.77→4.63、#16a34a 3.11→5.68、#dc2626→4.63）。
+- 审计：149 个 JS 切换类名 / 16 个零规则，本轮设置范围零命中；另发现静态 `.hint-text` 在设置内零规则（16px 正文压过 12px 说明），已补 `.settings-modal-box .hint-text`。
+- 矩阵（同源数据，清空音频缓存后重跑；36/36 × before3/after3）：settings 393 23.04% / 360 23.54% / 1280 7.97% 为唯一信号；cards 三档 0（首次 0.4% 系缓存 0→0.02MB 数据漂移，清缓存后归零）；drawer-393 7.9% 只在 before 首跑出现、before2 与 after 均为 0，判为首次运行态；drawer-1280 0.219% 为猫头鹰眨眼动画；german 三档为随机格言噪声。
+- computed 基线：仅 settings-input.height 43→44px（命中区提升），已 update 并复核 compare 12/12 一致；其余 11 控件 0 漂移。
+- 校验：build_css + check_css_sync PASS；visual_gates 519/108/7/4.63 全 PASS；check_frontend_api_contract PASS；check_silent_degradation 0 未豁免。
+
+### 2026-11-08 18:26 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+P2 组件族换肤第五轮（最后一族）：写作 writer。worktree D:\Code\DeLector-visual-p4，分支 feat/writer-skin，基线 origin/master `82e2650`（#301 merge；master push run 42469828001 全 success）。
+- 范围：08 writer 段 1037+（容器/头部/标题/动作区/布局/左栏/侧栏/卡片/输入/IDE/inlay/句导航/工具栏/诊断框/句块/错误下划线/CEFR 与详情/AI 笔记/作文历史/响应式）+ 09 触摸命中块（仅 `.writer-actions-top .btn::after`）。
+- 唯一布局改动：动作区两行命中区 42→44px、行距 6→8px 消除重叠；其余不重排。
+- 不做：08 ≤1036 设置段、09 设置规则、卡盒/闪卡/阅读器/词卡/备考、android/、visual_gates 阈值、全面 IA 重排。
+- 审计：writer.js 14 个 classList 切换类名，CSS 源全集零缺失（无 C 桶）。
+
+### 2026-11-08 18:31 | deepseek-v4.1-flash__trae | WORK_END
+Status: PR_OPEN —— P2 组件族第五轮（写作 writer，最后一族），分支 feat/writer-skin。
+- 命中区：393 第一行 42→44px（4 按钮全部），行2 命中顶边 220.06→224.06，行1 底边 226.06→224.06，重叠 6→0（相切）；360 同样 42→44，2 对重叠→0；1280 单行无触控伪元素，0 变化。
+- 布局：行距 6→8px，动作区 78→80px，header 171.06→173.06，编辑区 y 528.44→530.44，首屏可见 160 不变，横向溢出 0。
+- 字面量：hex 519→505（−14/配额13）、唯一 rgba 108→99（−9/配额5）；infinite 7；闸内最低对比 4.63；新增组合 5.05–8.68 全部 ≥4.5。
+- 状态非颜色：pill 实线✓/虚线!；句导航徽章方角!/圆角✓；问题徽章实线/虚线；作文正误条方角虚线!/圆角实线✓；输入框与 IDE 聚焦 2px outline；四类错误下划线四种线型。
+- 矩阵（同源三份数据、清音频缓存、36/36 × before/after/after2）：信号仅 writer-393 7.23% / 360 7.83%；设置三档与 cards/reader/quiz/exam 全 0；drawer-393 4.362%、home、german、drawer-1280、cards 音频体积 0→0.02→0.03MB 均复现为噪声。
+- computed 基线 12/12 一致，0 项更新（控件集不含 writer 动作区，改用定向探针）。
+- 校验：build_css + check_css_sync PASS；visual_gates 505/99/7/4.63 全 PASS；reduced-motion 下新元素 1e-05s、无动画。
+- PR #302 已开（base master，不自动合并）；PR CI 13 pass / 0 failure / 0 cancelled / 1 skipped（Master Direct-Push Scope Gate 按设计在 PR 上 skipping）。
+- 收尾：8781–8785 服务已停；临时 worktree D:\Code\DeLector-visual-before 已移除。
+
+### 2026-11-08 18:55 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+#302 已 merge（master `00b6e58`，merge commit，未 squash）。本分支 fix/legacy-debt 从该 master 起，worktree D:\Code\DeLector-visual-p4（起分支前确认干净）。
+- 老账范围：`.has-hint` 可见非颜色状态、`.companion-resume-notice` 恢复提示样式、workbench.html `--fg` 死引用、on-accent `#fff` 与挂账 rgba、暗色未重绑 token、cards.js `🎴` 注释残留。
+- 约束：六族已收口规则不动；闸门 hex/rgba 只降不升、infinite=7、对比 ≥4.63；不碰 android/ 与 visual_gates 阈值。
+- 并行线：同仓另有文档线在写 docs/知识库，work.log 若撞车两边事件都保留。
+
+### 2026-11-08 19:52 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+#302 → master `00b6e58666a0263aaffe5772a9f4747ecd03903f`（merge commit）。master push run `42472574386` 首跑被 #303 新 push 以并发优先级取消（Windows Portable Smoke cancelled），rerun `--failed` 后 **14/14 success**：0 failure / 0 cancelled / 0 skipped（含 Windows Portable Smoke、Master Direct-Push Scope Gate）。
+老账（分支 fix/legacy-debt，PR #304，不自动合并）：
+- `.cloze-input.has-hint`：dashed 2px 底线 + 135° 斜纹底（rgba(21,20,15,.08)），computed：solid/none → dashed/repeating-linear-gradient；截图 _artifacts/legacy-debt/legacy-light.png。
+- `.companion-resume-notice`：3px `--amber` 左线 + `↺` 图标 + `--note-yellow` 底 + 12.48px（正文 14.72px）；图标对比 3.06，正文 7.2。
+- workbench.html `--fg` → `--ink`：改前 `--fg` 计算值空、color 回退继承 rgb(21,20,15)；改后命中 `--ink #15140f`。
+- 新增 `--wb-on-accent`（亮 #fff / 暗 #241512）：暗色按钮对比 2.99 → 5.90；六处阴影 rgba 收进 `--elevation-*`/`--wb-shadow`，modal 遮罩保留并记账。
+- 暗色重绑 `--line-soft`=rgba(237,231,218,.14)、`--shadow-tint-1..4`=纯黑；header/progress 实测同值，face/panel 阴影 rgba(0,0,0,.35)。
+- 删 cards.js 两处 `🎴` 注释（可见标题 `3D 扑克翻牌盒 · POKER FLIP STACK` 未依赖字形）。
+- 去重复 var() fallback（sans/serif/mono/paper-tint/paper-card/line-soft/motion-press/serif-text）、内联 Consolas→`--mono`、`#b8860b/#ccc/rgba(0,0,0,.06)`→令牌。
+P3：iframe 边界维持现状（父级 --paper 改 rgb(1,2,3) 后 iframe 仍 #faf8f5；iframe 自带 tokens.css；主 JS 零 contentDocument 引用），结论写入 docs/agents/visual-regression.md；#297 残留 10 项已修，例外 5 项入文档清单（modal 遮罩、暗色纯黑影、console 颜色、PWA 品牌色、写作族 08 的 3 处 rgba）。
+校验：build_css + check_css_sync + index_html_sync PASS；visual_gates 505/99/7/4.63 持平；相关 pytest PASS。
+PR #304 CI `42473484282`：13 success / 0 failure / 0 cancelled / 1 skipped（Scope Gate 按设计跳过）；Windows Portable Smoke success。
+收尾：本轮起在 8000 的服务已停；未新建临时 worktree。
+
+### 2026-11-08 18:48 | deepseek-v4-1-flash__traecode | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+目标：全站换皮 P2 五族的文档定稿与经验沉淀（docs/design-system.md 定稿、五族收口记录、Obsidian 草稿续写）。
+不做：不改任何 CSS/JS/HTML/Python/测试，不发版本号，不动闸门阈值，不合并 PR。
+并行声明：在独立 worktree D:\Code\DeLector-docs-reskin + 分支 docs/reskin-finalization 上进行，不占主工作树；work.log 若与代码线冲突，两边事件都保留。
+
+### 2026-11-08 18:48 | deepseek-v4-1-flash__traecode | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+产出：
+- docs/design-system.md 定稿：§4.1 token 分层与双份镜像、§4.2 状态不得只靠颜色（含 9 个正例）、§4.3 命中区（44px + 伪元素/行距互斥）、§4.4 字面量预算与闸门、§4.5 动效分层与禁用；§8.1/8.2 标注历史稿并指向 ADR-0030，§8.3 改为真实判定；文首与文末 SSoT 改为双源镜像。
+- docs/reviews/2026-11-08-full-site-visual-reskin-closeout.md：五族文件/解决/刻意不做/遗留 + 跨族清单 + 数字来源。
+- Obsidian 99-Inbox：更新《44px 热区不能靠撑大行高》补充伪元素+行距实测；新增 5 篇（类名零规则三桶、同特异性静默覆盖、视觉回归假差异四源、var() 自引用、合成数值≠像素判据）。
+数字（实跑）：origin/master 00b6e58 上 python tools/visual_gates.py → hex 505 / rgba 99 / infinite 7 / 最低对比 4.63 / mustard 0；P2 消耗 hex −61、rgba −16。五族各自 36 张矩阵未在合并后复跑，closeout 已标待回填。
+验证：docs 标题结构与代码围栏配对检查通过；未跑构建（本任务无代码改动）。
+
+### 2026-11-08 20:10 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec, network
+目标：#304 合并后给 workbench iframe 补独立视觉闸（字面量 / 亮暗对比度 / 无定义引用 / var() 自引用），纯静态、进 CI；先报首次实测与例外。
+分支：feat/workbench-gate，worktree D:\Code\DeLector-visual-p4，基于 origin/master 70409af（#304 merge commit）。
+不做：不改主站 src/css 与 style.css、不动 visual_gates 阈值、不碰 android/、不碰六族已收口规则。
+合并：#304 mergeable=CLEAN，merge commit 合并；master 70409af 的 run 42477301259 = 14/14 success（含 Windows Portable Smoke、Master Direct-Push Scope Gate），0 failure/cancelled/skipped。
+
+### 2026-11-08 20:10 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+产出：
+- tools/workbench_gates.py：扫 tokens.css + workbench.css + workbench.html；字面量上限钉实测 hex 0 / rgba 1；亮暗各 22 对对比度（正文 4.5 / 图形 3.0），暗色按 workbench 自身 [data-theme] 解析；无定义 var() 与自引用扫描。
+- tests/test_workbench_gates.py（12 用例）进 unit-4，ci_shard_weights 0.1；本地 pytest 相关 156 项 PASS，governance PASS。
+- 首次实测 9 项不达标：亮 muted-on-tint 4.29 / accent-on-tint 4.17；暗 muted-on-tint 4.02 / pencil-on-paper 2.47 / pencil-on-tint 2.02 / ink-faint-on-paper 3.45 / on-accent-on-again 3.60 / good-on-good-soft 3.77 / again-on-again-soft 3.38。
+- 修复：暗色补重绑 --pencil/--ink-faint/--paper-warm 并提亮 --muted；--wb-good 5.79、--wb-again 5.29、on-accent-on-again 5.64；新增 --wb-accent-on-tint（亮 coral 4.74 / 暗 accent 4.97）；带正文的 hover/选中面改 --paper-warm。
+- 例外：--rule 装饰边界不套 3:1；modal 遮罩、暗色纯黑 --wb-shadow 按材质保留；console/PWA 品牌色沿用既有例外。
+校验：workbench_gates 全 PASS（44/44 对比度，最低 3.02 图形）；visual_gates 505/99/7/4.63 持平；check_css_sync PASS。
+
+### 2026-11-08 20:53 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec, web-fetch
+任务：词卡抽屉「复习状态」UI 立项调研（只读）。基线 origin/master 85cf99e，独立 worktree `D:\Code\DeLector-reviewstate`，分支 docs/wordcard-review-state-research。
+不做：不改 static/src/delector/tests/配置；不启动服务；不做真实 App 截图。
+
+### 2026-11-08 20:53 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, web-fetch
+产出：docs/reviews/2026-11-08-wordcard-review-state-research.md。
+结论：vocab_cards 已有 11 个复习列（mastered/due_date/interval_days/repetition_count/correct_count/wrong_count/ease_factor/fsrs_s/d/lapses），但抽屉 lookup 与 scope=reader 的 12 字段契约都不返回；显式四态、last_reviewed_at、原始 grade 完全不存在（quiz_log 只存 correct 0/1）。
+外部：10 个官方来源文档实测（Anki/RemNote/Mochi/Quizlet/Memrise/Duolingo/SuperMemo + M3/HIG/WCAG），无截图；M3 chips 非状态组件、WCAG 1.4.1/1.4.11 已核。
+方案：A 入卡状态章 / B 单行复习台账（推荐）/ C 四态章+间隔预览（暂缓）。前置：只读状态端点 + 一词多卡匹配口径裁决。
+验证：仅静态取证与 WCAG 对比度计算（--line 在白底 1.43:1 不达标，状态边框须 currentColor）；未跑测试、未渲染。
+回写检查：无临时产物入库；无代码改动。
+
+### 2026-11-08 21:15 | deepseek-v4.1-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
+目标：合并 #306（已：merge commit，master 64428d7，push run 42483927972 全 success，Windows Portable Smoke skipped 属 docs-only）后，先写计划再做方案 B「词卡抽屉单行复习台账」。
+分支：feat/wordcard-review-ledger，worktree D:\Code\DeLector-ledger，基线 64428d7。
+不做：不加 UNIQUE、不改写入路径、不扩 scope=reader 12 字段契约、不做四态/间隔预览/评分、不做可点击台账。
+
+### 2026-11-08 21:47 | deepseek-v4.1-flash__trae | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec
+计划：docs/plans/2026-11-08-wordcard-review-state-ledger.md。读侧去重取数 = 单条 SQL：last_signal_day := COALESCE(mastered_at 日期, date(due_date,'-interval_days days'))，ORDER BY last_signal_day DESC, created_at DESC, id DESC LIMIT 1；why：前者是写入公式 due_date=复习日+interval 的精确逆运算，后两级收口保证同输入永远同一行。数据通路选新端点 GET /api/cards/vocab/ledger/{lemma}；why：扩 12 字段会被 test_vocab_contract_uniform 的 set(keys)==CONTRACT_FIELDS 钉死，规矩不许放松断言。lemma 走路径参数；why：check_frontend_layers 要求 api() 路径可静态归一。重复卡文案用「共N张」纯文本。
+
+### 2026-11-08 21:47 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
+产出：
+- delector/routes/cards.py：GET /api/cards/vocab/ledger/{lemma}（只读，COUNT(*) OVER() 一次给出代表卡+卡数，is_workbench 与 known-lemmas 同为 fsrs_s>0）。
+- static/js/rd-api.js + reader.js：抽屉台账渲染（textContent，无 innerHTML）；查词与 saveVocab 后刷新，竞态守卫同查词。
+- static/modals/drawer.html + index.html（build_index_html.py 重建）、src/css/04-drawer-wordcard.css + style.css（build_css.py）。
+- tests/test_wordcard_ledger.py（13 用例：空态/去重跨插入顺序稳定/并列收口/已掌握与复习日比较/工作台/12 字段不漂移/前端接线/currentColor）。
+实测（headless Edge + CDP，临时 DB 副本，不碰真实库）：台账 offsetHeight=24；1440/393/360 均单行，393 内容宽 295、360 内容宽 262，rowScrollWidth==clientWidth 且 drawerScrollWidth==drawerClientWidth（无溢出）；前景 rgb(90,84,72)、边框同色、白底，实算 7.51:1。带空格写法实测 325.6px 会在 393 折行，故定稿无空格分隔（220px）。
+验证：pytest 上述 13 + contract_uniform + server_cards_vocab + frontend_module_graph 全 PASS；check_frontend_layers / check_css_sync / build_index_html --check / layer_invariants 全 PASS。
+已知问题（未修，已记计划 §7）：vocab_cards 裸 INSERT 无唯一约束。
+回写检查：临时脚本/截图/DB 副本均在 %TEMP%，未入库；服务已停。
+### 2026-11-08 22:12 | deepseek-v4.1-flash__trae | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec
+分支补记：tests/test_reader_api_split.py 的 EXPECTED_ENDPOINTS 是「rd-api 导出面精确清单」，新增端点的登记属于清单维护，断言仍是 
+untime == EXPECTED_ENDPOINTS，未放松为子集。同步把 tests/test_wordcard_ledger.py 登记进 tools/ci_shards.py unit-4 并在 ci_shard_weights.json 记 4.0s（漏登记会被 test_ci_shards_partition_every_test_file_exactly_once 拦下）。
+
+### 2026-11-08 22:12 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
+交付：PR #307（feat/reader: 词卡抽屉单行复习台账，按 lemma 去重），不自动合并。
+CI（run 42488246132，head c16e5ce）逐 job：Detect packaging-surface changes / Go Gates / Go↔Python Integration / cost-cold-start / cost-guards / integration-heavy / unit-1..4 / Secret Scan / Static Invariants / Windows Portable Smoke 全 pass；Master Direct-Push Scope Gate skipping（PR 场景按设计不跑）。此前两轮红分别为 ruff E501/I001、mypy arg-type、漏登记 ci_shards、rd-api 导出面清单，均已修。
+清理：验证服务已停；临时 DB 副本/截图/CDP 脚本均在 %TEMP%（未入库）；已移除合并后的旧 worktree D:\Code\DeLector-reviewstate；本 worktree D:\Code\DeLector-ledger 在推送后移除，分支保留。

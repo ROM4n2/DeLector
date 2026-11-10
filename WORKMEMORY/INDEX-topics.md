@@ -33,8 +33,9 @@
 | `static/index.html` 拆分与同步门禁（Task 1~6）+ Windows CI 编码红灯修复（2026-10-18） | `archive/work-2026-10-18.log` · 计划 `docs/plans/archive/2026-10-18-index-html-split-and-modularization.md` · PR #159 |
 | 非在途面专家评估（5 报告）+ 未决项 18 项 + 审计修正 A/B 两批 + ADR-0024 + `database.py` 切分（2026-10-16） | `work.log`（10-16 段）· `docs/reviews/2026-10-16-open-items-backlog.md` · `docs/plans/archive/2026-10-16-audit-fixes-a-series.md` · `docs/plans/archive/2026-10-16-audit-fixes-b-series.md` · `docs/plans/archive/2026-10-16-database-split.md` |
 | 2026-10-18 13:12 ~ 2026-11-01 00:35 发版周期与伴学/运行时决策链 | `archive/work-2026-10-18.log` · `archive/work-2026-10-19.log` · `archive/work-2026-10-20.log` · `archive/work-2026-10-21.log` · `archive/work-2026-10-22.log` · `archive/work-2026-10-31.log` · `archive/work-2026-11-01.log`（2026-11-03 轮转 WARM 化） |
-| 2026-11-01 01:15 ~ 2026-11-08 01:25 发版推进与伴学/动效/换皮工程 | `archive/work-2026-11-01.log` · `archive/work-2026-11-03.log` · `archive/work-2026-11-04.log` · `archive/work-2026-11-05.log` · `archive/work-2026-11-06.log` · `archive/work-2026-11-07.log` · `archive/work-2026-11-08.log`（2026-11-09 轮转 WARM 化） |
-| 2026-11-08 00:46 起（v5.22.0 发版与收尾：桌宠 P1–P4、复习台账、全站视觉闸门、3.6.0 存量重算） | `work.log`（HOT；2026-11-09 轮转后保留 50 事件） |
+| 2026-11-01 01:15 ~ 2026-11-08 01:25 发版推进与伴学/动效/换皮工程 | `archive/work-2026-11-01.log` · `archive/work-2026-11-03.log` · `archive/work-2026-11-04.log` · `archive/work-2026-11-05.log` · `archive/work-2026-11-06.log` · `archive/work-2026-11-07.log` · `archive/work-2026-11-08.log`（2026-11-09 轮转 WARM 化；11-08 分片 2026-11-10 又追加 47 事件，共 52） |
+| 2026-11-08 00:46 ~ 23:16（v5.22.0 发版与收尾：桌宠 P1–P4、复习台账、全站视觉闸门、3.6.0 存量重算、Android 启动与 ADR-0031/0032 判负） | `archive/work-2026-11-08.log`（2026-11-10 轮转 WARM 化，追加 47 事件；事件集合守恒已按协议 §5.1 对账） |
+| 2026-11-08 23:16 ~ 2026-11-10 20:25（v5.22.1 二次发版 / ADR-0033 桌面 B2 / 词卡写入幂等审计批次与 #332~#335 / 远端分支清理） | `work.log`（HOT；2026-11-10 轮转后保留 50 事件。首条为并发乱序的历史 WORK_START，配对 WORK_END 在同层，非未闭合） |
 
 
 ## 蒸馏登记（WORKMEMORY → vault）
