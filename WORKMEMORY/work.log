@@ -539,6 +539,15 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 - 验证证据：模拟器截图证明首页/文章列表/阅读页均正常渲染，顶栏 V5.23.3、`/api/health` 返回 `nlp.state=ready`；本地全量 3037 passed / 3044 executed（5 skipped + 1 xfailed + 1 failed=GBK 环境）。
 - 另外：`test_android_packaging.py` 会扫 `android/app/build/outputs/apk/{device,emulator}/debug/*.apk`，本地 debug 包未做 zipalign ⇒ 报「本地头不连续」17 处死区。发版前删掉本地 debug 产物即可（不是产品缺陷，但别把这条红当成回归）。
 
+### 2026-11-11 04:10 | deepseek-v4.1-flash | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+v5.23.3 发版收尾（模拟器点验后的修复版）。
+- 合并：PR #343 → `a6b1e45`；tag annotated `v5.23.3` 触发 `build-release.yml` run 42863417452 **success**（四平台 job + Publish 全绿）。
+- 资产（实测非零）：APK 62,283,662 B / Linux 128,340,417 B / macOS 61,663,993 B / Windows 90,740,915 B。
+- Release 正文按模板整份写入；**v5.23.1 与 v5.23.2 的正文顶部各加警示并指向 v5.23.3**（v5.23.1=白屏、v5.23.2=阅读页不可用），两者资产保留仅作追溯。
+- 工作区注意：`git add -A` 曾把**另一条并行工作线**（`fix/wb-export-real-write`：backup.py / workbench.css / workbench.html / ci_shards.py / wb_export_probe.mjs / test_wb_export_save.py 与其 work.log 条目）的未提交改动卷进发版提交。已 `git reset --soft` 撤回、只提交本任务 13 个文件，并 `--force-with-lease` 覆盖尚未合并的远端分支。教训：多 agent 共用同一工作区时禁止 `git add -A`，必须逐文件 add。
+- 遗留：arm64 真机仍未点检（模拟器为 x86_64 debug 包）；SW 缓存在冷启动瞬间可能短暂遮蔽新静态文件（实测旧 reader.js 被复用，`pm clear` 后才换新），未修，已写进 CHANGELOG 已知限制。
+
 ### 2026-11-11 11:40 | deepseek-v4.1-flash | PITFALL
 Caps: filesystem-read, filesystem-write, shell-exec
 桌面壳导出「假成功」：文件不写盘，前端仍弹「已导出」。
@@ -547,4 +556,4 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 解法（DECISION）：不翻开关。新增 `POST /api/wb/backup/save` 由 Python 显式落盘并返回真实 path/bytes（`delector/routes/backup.py:163`）；前端 `download()` 返回结果对象，`exportAndReport()` 只在拿到 path 时报成功（`workbench.html:2561/2605`）；失败 toast 用「⚠ + 8px 左边框 + 方角」满足 I1；Android 保持 501 回退系统下载。why：WebView 放行只会落默认下载目录且无完成回调，前端仍拿不到成功证据，等于换个地方假成功。
 - 闸：`tools/wb_export_probe.mjs`（6 场景，精确定义「无 path 不报成功」）+ `tests/test_wb_export_save.py`（8 用例）+ `tools/ci_shards.py` 登记。
 - 落盘目录：自动创建 `Path.home()/Downloads`；建不出来才退回主目录，并在返回体带 `fallback_dir/warning`，前端文案显式说明位置。
-- 验证：desktop.py 实跑，toast `已导出轻量同步文件：C:\Users\Haoyu\wb-sync-2026-11-11.json（134 字节）`，`Get-Item` Length=134。未测：冻结 exe、桌面 UI 真实磁盘写失败、macOS/Linux。
+- 验证：desktop.py 实跑，toast `已导出轻量同步文件：C:\Users\Haoyu\Downloads\wb-sync-2026-11-11.json（134 字节）`，`Get-Item` Length=134（Downloads 由本修复自动创建）。未测：冻结 exe 内的导出点击、桌面 UI 真实磁盘写失败、macOS/Linux。
