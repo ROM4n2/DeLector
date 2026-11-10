@@ -66,8 +66,11 @@ def test_failure_path_keeps_splash_and_visible_error():
 def test_page_finished_is_only_an_event_based_fallback():
     src = _src()
     assert "onPageFinished" in src
-    # 兜底也必须是事件驱动、且只在服务就绪后；不能重新引入计时器。
+    # 兜底也必须是事件驱动；S1 起页面先于 Python 加载，撤场条件是「服务就绪或应用 origin 页」。
     finished = src.split("public void onPageFinished", 1)[1].split("\n            }", 1)[0]
-    assert "if (isServerReady)" in finished
+    assert "if (isServerReady || isAppOriginUrl(url))" in finished
     assert "revealWebView();" in finished
     assert "postDelayed" not in finished
+    # 就绪钩子只能注入到「已就绪 + 应用 origin」的页面，不能对着错误页/壳页兜底。
+    assert "if (isServerReady && isAppOriginUrl(url))" in finished
+    assert "notifyServerReadyInPage();" in finished

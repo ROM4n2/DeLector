@@ -192,6 +192,8 @@ ADR-0033 §7 原文口径：
 - **grep 无残留证明**：`loadShell|SHELL_URL|ASSET_DOMAIN|assetLoader|ShellBridge|ShellHost|shell_frame|loadurl_shell|boot\.html|assets/shell|WebViewAssetLoader` 在 `android/`、`static/`、`tests/`、`tools/` 中零命中（仅历史文档与 `work.log` 保留记录）。
 - **打包面**：`assets/static` 同步产物不变（指纹一致），只少了 `assets/shell` 一个文件；APK 少 3.3 KB 资产 + 一个未使用依赖。
 - **测量开关**：`LEGACY_READY_GATE` 已不存在于最终代码，全仓 grep 零命中。
+- **测试同步**：`tests/test_android_splash_commit.py::test_page_finished_is_only_an_event_based_fallback` 原断言 `if (isServerReady)` 与 S1 新语义冲突（撤场改为「就绪或应用 origin 页」，并新增就绪钩子），改为断言两条实际门条件，保留「事件驱动、无计时器」的原意。
+- **本地打包闸**：`test_android_packaging.py::test_local_headers_are_contiguous` 只查本机 APK；增量打包会在被替换条目后留死区，验证前须 `gradle clean assembleEmulatorDebug`（CI 无 Android 构建 job，该用例在 CI 自动 skip）。
 
 ## 8. 回滚锚点
 
