@@ -2,6 +2,7 @@
 "use strict";
 
 import { api, esc, jsAttr, notify } from "./core.js";
+import { vocabSaveOutcome, vocabSaveNotice } from "./rd-api.js";
 import { playGermanAudio } from "./player.js";
 import { refreshCardCounters } from "./reader.js";
 import { Companion } from "./companion.js";
@@ -544,7 +545,7 @@ export async function saveVocabChip(word, meaning, el) {
     el.classList.add("saving");
   }
   try {
-    await api("/api/cards/vocab", {
+    const res = await api("/api/cards/vocab", {
       method: "POST",
       body: JSON.stringify({
         article_id: null,
@@ -558,13 +559,18 @@ export async function saveVocabChip(word, meaning, el) {
         sentence_context: `Goethe A1 听力考点词: ${word} (${meaning})`,
       }),
     });
+    const outcome = vocabSaveOutcome(res);
     if (el) {
       el.innerHTML = `<strong>${esc(word)}</strong>: ${esc(meaning)} 已收录`;
       el.classList.remove("saving");
       el.classList.add("saved");
     }
     refreshCardCounters();
-    Companion.celebrate("card_vocab");
+    if (outcome.created) {
+      Companion.celebrate("card_vocab");
+    } else {
+      notify(vocabSaveNotice(outcome));
+    }
   } catch (e) {
     if (el) {
       el.style.pointerEvents = "auto";

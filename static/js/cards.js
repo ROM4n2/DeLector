@@ -7,7 +7,7 @@ import {
   fetchAudioCache, purgeAudioCache, prepareBackup, restoreBackup,
   fetchPrepMatrix, fetchPrepSaved, savePrepSaved,
 } from "./data-client.js";
-import { saveVocabCard } from "./rd-api.js";
+import { saveVocabCard, vocabSaveOutcome, vocabSaveNotice } from "./rd-api.js";
 import { playGermanAudio } from "./player.js";
 import { Companion } from "./companion.js";
 import { refreshCardCounters } from "./reader.js";
@@ -1400,7 +1400,7 @@ export async function savePrepCardFromMatrix(btn) {
   const def = `${zh} (+${kasus})`;
   btn.disabled = true;
   try {
-    await saveVocabCard({
+    const res = await saveVocabCard({
       // article_id 为空：矩阵是脱离文章的词库视图，没有来源文章可挂。
       // pos 只能留空：prep_dict.py 没有词性列，所以同一条搭配从抽屉入卡
       // 显示 "freuen · VERB"、从矩阵入卡显示 "freuen · WORT"（cards.js:189
@@ -1414,13 +1414,18 @@ export async function savePrepCardFromMatrix(btn) {
       definition_zh: def,
       sentence_context: beispiel || "",
     });
+    const outcome = vocabSaveOutcome(res);
     _prepSavedKeys.add(_prepKey(lemma, praep, kasus));
     // 异步写入服务端，不阻塞 UI
     savePrepSaved({ lemma, praep, kasus }).catch(() => {});
     btn.textContent = "已存";
     btn.classList.add("saved");
     refreshCardCounters();
-    Companion.celebrate("card_vocab");
+    if (outcome.created) {
+      Companion.celebrate("card_vocab");
+    } else {
+      notify(vocabSaveNotice(outcome));
+    }
   } catch {
     btn.disabled = false;
     alert("保存搭配卡失败");
