@@ -9,7 +9,7 @@
 # fastapi 0.162 省略布尔表单字段不再默认 False —— 本仓库 delector/ 无 Form() 用法，不适用；
 # starlette 1.10 QueryParams 相等性顺序变更 —— 本仓库无 query_params 相等比较，不适用；
 # 唯一风险面为 starlette 1.9 TestClient 流式响应，由 companion 测试的 client.stream 覆盖，待 CI 全量验证）。
-fastapi==0.162.0
+fastapi==0.162.2
 starlette==1.10.0
 uvicorn>=0.54.0
 spacy>=3.8.18
