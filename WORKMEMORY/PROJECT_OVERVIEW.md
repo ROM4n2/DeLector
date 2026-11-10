@@ -23,11 +23,11 @@
 
 ## 当前状态
 
-- **最新发布 v5.22.0（2026-11-08）** —— **v5.21.1 之后累积的用户可见修复收口 + 存量文章按需重算 3.6.0 + NLP sm 定案**。
-  - 体验层：视觉材质与对比度收敛、桌宠 P1–P4 与状态机、写作区选区 agent 操作条、设置分段式 IA、Python/Go 端口握手、备考计数单位、播放器托盘、生词卡复习台账（读侧去重）。
-  - 数据层：`PROCESSED_JSON_VERSION` 3.5.0→3.6.0，首次打开单篇惰性重算并回写，失败保留旧结果，旧值快照在 `processed_json_backup`，可 `python tools/recompute_processed.py --restore` 回退。
-  - 验证：全量 pytest 2962 passed / 4 skipped / 1 xfailed（2967 collected）；ruff/mypy x3/gofmt/go vet/go test -race 全绿；九道机械闸 exit 0；PR #308 CI 13 success + 1 skipped；Android 模拟器覆盖安装 versionCode 52200。
-- **历史里程碑归档**：v5.21.1（伴学 SSE 跨 chunk 分帧修复）、v5.21.0（伴学页面级能力与 HITL 闭环）、v5.20.2（阅读排版与 CEFR 透视）、v5.20.1（Android 拖拽与 Apache 2.0）、v5.20.0（伴学 Agent 运行时）、v5.19.0 及更早版本演进详见 `CHANGELOG.md` 与 `WORKMEMORY/cold/digest-2026-10.md`。
+- **最新发布 v5.23.0（2026-11-10）** —— **词卡写入幂等修复链收口 + Android 冷启动静态壳 + 桌面 B2 提前加载 + App 内已知限制**。
+  - 体验层：存卡反馈区分新增与幂等命中（`created` / `skipped_fields`）、设置页本地「已知限制」说明、Android 首屏静态骨架先行、桌面静态层提前加载与 WebView2 持久化缓存修复。
+  - 数据层：零 DDL、零迁移；词卡身份走行级 UDF（`card_identity` / `card_lemma_key`），空 lemma 与旧库行同源回退；存量重复仍未合并（只堵新增）。
+  - 验证：本版**未**在本地重跑全量 pytest（约束：只跑定向），完整门禁以 CI 的 master push run 为准；四平台资产见 GitHub Releases。
+- **历史里程碑归档**：v5.22.1（文章响应体去重 / Android TTFD 口径）、v5.22.0（视觉材质、桌宠 P1–P4、复习台账、存量重算 3.6.0）、v5.21.1（伴学 SSE 跨 chunk 分帧修复）、v5.21.0（伴学页面级能力与 HITL 闭环）、v5.20.2（阅读排版与 CEFR 透视）、v5.20.1（Android 拖拽与 Apache 2.0）、v5.20.0（伴学 Agent 运行时）、v5.19.0 及更早版本演进详见 `CHANGELOG.md` 与 `WORKMEMORY/cold/digest-2026-10.md`。
 
 ## 红线速查（详情见 `docs/agents/architecture.md` / `ops.md`）
 

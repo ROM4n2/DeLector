@@ -1,7 +1,7 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v5.22.1-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v5.23.0-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
@@ -11,10 +11,11 @@
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License" />
 </p>
 
-<!-- Tests 徽章口径（可复算，非推算）：v5.22.1 发布提交（2026-11-09 本地全量，基线含 #325）。
+<!-- Tests 徽章口径（可复算，非推算）：**数字仍是 v5.22.1 发布提交（2026-11-09 本地全量）的基线**。
      分子 = `python -m pytest tests` 的 3006 passed；分母 = `python -m pytest tests --collect-only -q` 的 3009 collected；
      差集 2 skipped + 1 xfailed。环境：Windows 11 / Python 3.11（.venv），仓库根 gitignored 的本地 DB 残留临时移开。
-     换提交后两条命令都需重跑，不得沿用旧数。 -->
+     v5.23.0 发布提交**未**在本地重跑全量 pytest（本轮约束：只跑定向），故本数字不代表 v5.23.0 的用例数；
+     该版的完整门禁以 CI 的 master push run 为准。下一次本地全量重跑后 MUST 同时更新分子与分母。 -->
 
 <p align="center">
   <b>专为德语学习者与歌德（A1–C1）/ 德福（TestDaF）/ DSH 备考打造的学术级伴读与句法剖析系统。</b><br/>
@@ -53,22 +54,22 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 
 ## 多平台下载发布包
 
-> **v5.22.1 最新版本亮点（2026-11-09）**：
-> - **文章详情响应体去重**：`processed_json` 不再与展开字段重复回传，100 字与 10 万字样本响应体均缩小约 57%。
-> - **词卡写入幂等（部分修复）**：同词重复提交不再产生新卡（身份归一 + `BEGIN IMMEDIATE` 先查后写）；存量重复仍在库中，读侧按「共 N 张」去重显示。
-> - **Android 启动系列**：建立 TTFD 口径并接入 `reportFullyDrawn()`，就绪轮询前 50 次收紧为 120ms，splash 改为首帧提交后撤场（不再用 200ms 定时器猜）。均未在真机点检。
-> - **制度闸**：docs 归置检查、CI 卡死可识别为 failure、PR 模板新增根因 / 遮盖必答项。
-> - **文档与跨平台说明**：macOS / Linux 运行说明按 tar 包实际结构改写，清理全仓 emoji 与无证据表述。
+> **v5.23.0 最新版本亮点（2026-11-10）**：
+> - **词卡写入幂等修复链收口**：伴学落卡收回同一 `BEGIN IMMEDIATE`（状态不再先于插卡落盘）、空 lemma 走行级 UDF 同源回退、存卡响应新增 `created` / `skipped_fields`，5 个入口在幂等命中时改显示「已在词卡中」且不再庆祝，字段被跳过时提示「本次填写未覆盖原有释义」。
+> - **Android 冷启动静态壳**：首屏静态骨架先行、数据就绪后接管；提交记录的本机实测 TTFD 3410.5 ms → 1034 ms（arm64 真机未点检）。
+> - **桌面页面提前加载（ADR-0033 B2）**：静态层先起、socket 交接、就绪钩子复位，并修复 WebView2 持久化存储缺失导致的启动缓存空转。
+> - **App 内「已知限制」本地说明**：设置页新增随包发布的静态说明，解释存量重复卡与「共 N 张」口径、幂等命中反馈与「只补空不覆盖」，脱网可见。
+> - **发布文档规范化**：CHANGELOG 统一降序与固定结构、README 版本表钉住 3 行、Release 文案改为按模板写完整正文（无 emoji），并新增机械守卫。
 
 > **Android 用户注意**：含 `static/` 改动的版本需**覆盖安装**才生效。
 > 完整版本变更细节见 [CHANGELOG.md](CHANGELOG.md)。
 
 | 平台               | 版本                   | 说明                                                                                                                                                                                                                                                       | 下载通道                                                                                    |
 | ------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| **Windows x64** | `v5.22.1` | 原生桌面窗口 + 系统托盘，免装 Python，解压双击 `DeLector.exe`；需 Win10+ 与 WebView2 运行时（Win11 自带；Win10 缺运行时的表现见[已知限制](#已知限制)）；首次启动把数据放到 `%LOCALAPPDATA%\DeLector`                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.22.1)     |
-| **macOS**       | `v5.22.1` | 解压后进入 `DeLector-v5.22.1-macOS/`，运行其中的裸可执行文件 `./DeLector`（不是 `.app` 包）。正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`。包未做代码签名与公证，若被 Gatekeeper 拦截请右键「打开」，或在终端执行 `xattr -d com.apple.quarantine DeLector`。 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.22.1)  |
-| **Linux x64**   | `v5.22.1` | 解压后进入 `DeLector-v5.22.1-Linux-x64/`，运行 `./DeLector`（正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`）。包在 CI 的 Ubuntu 环境构建，未在其他发行版验证。 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.22.1)  |
-| **Android**     | `v5.22.1` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；正式包只出 **arm64-v8a**，CI 用 `keytool` 校验 APK 与 keystore 的 SHA256 证书指纹一致。**arm64 真机未验证**（仅 x86_64 模拟器）。 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.22.1) |
+| **Windows x64** | `v5.23.0` | 原生桌面窗口 + 系统托盘，免装 Python，解压双击 `DeLector.exe`；需 Win10+ 与 WebView2 运行时（Win11 自带；Win10 缺运行时的表现见[已知限制](#已知限制)）；首次启动把数据放到 `%LOCALAPPDATA%\DeLector`                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.23.0)     |
+| **macOS**       | `v5.23.0` | 解压后进入 `DeLector-v5.23.0-macOS/`，运行其中的裸可执行文件 `./DeLector`（不是 `.app` 包）。正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`。包未做代码签名与公证，若被 Gatekeeper 拦截请右键「打开」，或在终端执行 `xattr -d com.apple.quarantine DeLector`。 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.23.0)  |
+| **Linux x64**   | `v5.23.0` | 解压后进入 `DeLector-v5.23.0-Linux-x64/`，运行 `./DeLector`（正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`）。包在 CI 的 Ubuntu 环境构建，未在其他发行版验证。 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.23.0)  |
+| **Android**     | `v5.23.0` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；正式包只出 **arm64-v8a**，CI 用 `keytool` 校验 APK 与 keystore 的 SHA256 证书指纹一致。**arm64 真机未验证**（仅 x86_64 模拟器）。 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.23.0) |
 
 ---
 
@@ -193,11 +194,11 @@ DeLector/
 
 | 版本 | 发布日期 | 里程碑概要 |
 | :--- | :--- | :--- |
+| **v5.23.0** | 2026-11-10 | 词卡写入幂等修复链收口（伴学事务边界 / 空 lemma 同源归一 / 存卡反馈语义）· Android 冷启动静态壳 · 桌面 B2 提前加载与 WebView2 缓存修复 · App 内已知限制说明 · 发布文档规范化 |
 | **v5.22.1** | 2026-11-09 | 文章详情响应体去重（-57%）· Android TTFD 口径 / 就绪检测 / splash 根因修复 · 三条制度闸 · 跨平台说明与全仓去 emoji |
 | **v5.22.0** | 2026-11-08 | 发布收口：视觉材质与对比度收敛 · 桌宠 P1–P4 与状态机 · 写作区选区 agent 操作条 · 设置 IA · 端口握手 · 生词卡复习台账 · 存量文章按需重算（3.6.0）· NLP sm 定案 · Android WebView 修复 |
-| **v5.21.1** | 2026-11-03 | 伴学 SSE 跨 chunk 分帧修复 · Go RunLoop 与 submitPrompt 行为不变重构 · 274 checks / 34 场景 |
 
-> 更早的版本（v5.14.0–v5.20.2 等）已完整迁入 [CHANGELOG.md](CHANGELOG.md)，本页只保留最近三版。
+> 更早的版本（v5.14.0–v5.21.1 等）已完整迁入 [CHANGELOG.md](CHANGELOG.md)，本页只保留最近三版。
 
 ## 已知限制
 
