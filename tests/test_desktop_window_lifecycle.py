@@ -694,6 +694,7 @@ def _install_recording_webview(
 
         def evaluate_js(self, _script: str) -> None:
             order.append(f"{self.name}.evaluate_js")
+            record.setdefault("scripts", []).append(_script)
 
         def load_url(self, _url: str) -> None:
             order.append(f"{self.name}.load_url")
@@ -818,7 +819,10 @@ def test_webview_start_persists_storage_under_the_data_dir(
 
 
 def test_final_ui_is_the_main_window_shown_after_ready(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """最终呈现给用户的必须**不是** splash：就绪后 show 主窗口 + 销毁 splash，且 show 在就绪之后。
+    """**回退路径**（早期静态层不可用）：就绪后 show 主窗口 + 销毁 splash，且 show 在就绪之后。
+
+    这是 `start_early_static` 返回 None（找不到静态目录 / 端口被占）时的旧路径；默认的提前加载
+    路径由 `test_early_load_navigates_before_ready_and_hands_socket_to_uvicorn` 覆盖。
 
     同时钉住顺序：先亮主窗口再销毁 splash —— 否则销毁瞬间零窗口会让 pywebview 的 GUI 循环提前退出。
     """
@@ -843,6 +847,58 @@ def test_final_ui_is_the_main_window_shown_after_ready(tmp_path: Path, monkeypat
     start_index = order.index("start")
     for op in ("main.show", "main.load_url", "splash.destroy", "splash.evaluate_js"):
         assert order.index(op) > start_index, f"{op} 早于 webview.start()（P0 死锁形状）：order={order}"
+
+
+def test_early_load_navigates_before_ready_and_hands_socket_to_uvicorn(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """B2 提前加载（默认路径）：就绪前 show + load_url，静态层监听 socket 原样交给 uvicorn。
+
+    这是 ADR-0033 §15 判据的机械形状：① 页面不等 `/api/*` 就绪（导航早于 `await_ready`）；
+    ② splash 在导航后立即收掉（不留双窗）；③ 交接**不关 socket**（`hand_off()` 的返回值原样
+    传给 `serve_in_thread`，杜绝「关→重新 bind」的 ECONNREFUSED 空窗）；④ 就绪后调一次
+    `window.notifyServerReady()`（复用 S2 的重试机制，不建第二套）。
+    """
+    mod = _mod()
+    order: List[str] = []
+    record: Dict[str, Any] = {}
+    _stub_server_build(monkeypatch, mod, order)
+    _install_recording_webview(monkeypatch, mod, order, record)
+
+    sentinel = object()
+    seen: Dict[str, Any] = {}
+
+    class _Early:
+        def hand_off(self):
+            order.append("early.hand_off")
+            return sentinel
+
+    monkeypatch.setattr(mod, "start_early_static", lambda *_a, **_k: _Early())
+
+    def _serve(_server: Any, sockets: Any = None) -> str:
+        order.append("serve_in_thread")
+        seen["sockets"] = sockets
+        return "FAKE_THREAD"
+
+    monkeypatch.setattr(mod, "serve_in_thread", _serve)
+
+    code = mod._show_window(object(), 8000, str(tmp_path / "launch.log"))
+
+    assert code == 0
+    assert order.index("main.show") < order.index("await_ready"), "主窗口必须在后端就绪前显示"
+    assert order.index("main.load_url") < order.index("await_ready"), (
+        "页面必须在后端就绪前开始加载（B2 的全部收益都来自这一步）"
+    )
+    assert order.index("splash.destroy") < order.index("await_ready"), "导航后应尽快收掉 splash"
+    assert order.index("main.load_url") < order.index("early.hand_off"), "先导航、后交接 socket"
+    assert seen.get("sockets") == [sentinel], (
+        "监听 socket 必须原样交给 uvicorn；传 None 意味着 uvicorn 重新 bind（空窗回归）"
+    )
+    scripts = record.get("scripts", [])
+    assert any("notifyServerReady" in script for script in scripts), (
+        f"就绪后必须调用 window.notifyServerReady()，实际脚本：{scripts!r}"
+    )
+    assert order.index("main.evaluate_js") > order.index("await_ready"), "就绪钩子必须晚于 await_ready"
 
 
 def test_main_window_close_requests_quit_and_reaps_splash(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

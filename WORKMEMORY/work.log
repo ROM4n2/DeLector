@@ -752,3 +752,27 @@ PR #331 已合并进 master：merge commit `67a2924`（未 force、未跳 hook�
 - 收尾同步：ADR-0033 状态 Proposed → **Accepted**（生效状态同）；INDEX 备注补 PR #331 / merge sha / 最终形态；S1、S2 plan 状态改「已合入 master」。
 - 分支：`feat/android-first-paint-static-intercept` 保留（远程既有 `feat/android-local-shell`、`feat/android-ttfd` 等历史分支同样保留，仓库无自动删分支惯例）。
 - 未覆盖（继续挂着）：arm64 真机、低端机 CPU 争用、8000 端口顺延、首次点词/分析/编辑回退判据、桌面 B2 基线。
+
+### 2026-11-10 16:10 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read/write, shell-exec, cdp
+ADR-0033 桌面 B2 生产基线测量完成（**只测不改**：未写产品代码、未改桌面壳、未开 PR、未碰安卓）。
+- 口径：入口 `.venv\Scripts\python.exe desktop.py`（打包同源；`start.py` 是浏览器启动器）；零点=OS 进程创建（`GetProcessTimes`，同 `desktop._ms_since_process_create`）；终点=主文档 `first-contentful-paint`（亚毫秒），辅以首条 `.article-row` 双 rAF（≤1 帧）；观测用 WebView2 CDP（`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port` + `Page.addScriptToEvaluateOnNewDocument` 只读注入），仓库零改动；明确不用「窗口出现」或 `load_url` 返回冒充首帧。
+- 样本：2 轮×5=10 次真实冷启，每次新进程 + 全新 `DELECTOR_DATA_DIR`，0 弃跑；1 次试跑离群（FCP 8393.6）单列不纳入。
+- 结果（中位，范围）：FCP **6126.0**（6025.6–6336.4）；首条 `.article-row` **6454.0**（6398.3–6541.7）；服务就绪 **5437.9**（5364.4–5657.3）；导航 **5574.2**；WebView2 最早可承载文档 E **3367.4**（3285.1–3396.0）；导航→FCP 554.0、导航→首行 873.9。噪声下限：首行极差 143.3、FCP 310.8，判 300ms 取 300ms。
+- 反事实：`收益 = nav − E` = **2202.9ms**（2127.8–2371.7；FCP 口径 2204.6）；页段膨胀 Δ<1902.9ms 时仍 ≥300ms。真实行接管估算 5.5–5.7s，收益约 0.6–0.8s（需就绪钩子）。未套安卓 2376ms。
+- 归因：10 次首条行全是 4 条 `.article-row--seed`；pywebview 默认 `private_mode=True` ⇒ WebView2 临时数据目录 ⇒ `localStorage` 不跨启动，ADR-0032 的列表快照在桌面退化为内置 4 篇。暖目录诊断 nav−E 1889.5，说明 ~5s ready 主因是 WebView2 启动与 import 并发，非 DB 初始化。
+- 判定：**≥300ms → 建议做 B2**，前置①桌面快照持久化（private_mode/storage_path）②桌面就绪钩子（`await_ready` → `retryIfWaiting()`，复用 S2，不加第二套）。改动轮廓见 plan §9，仅轮廓未实施。
+- 落盘：`docs/adr/2026-11-10-adr-0033-...md` §2.2/§9/§10/§11 + 新增 §15；`docs/plans/2026-11-10-adr-0033-b2-desktop-baseline.md`（新）；`docs/adr/INDEX.md`。环境：Win11 26200 / R9 8945HX / Py3.11.8 / pywebview 6.2.1 / WebView2 157.0.4341.42（Chromium 157）。
+- 未测：B2 未实现（反事实非 A/B）、冻结 exe、静态服务/反代/SSE/下载、端口顺延、低核/机械盘/杀软、首次交互回退、返回用户多行真实快照、mac/Linux、CDP 无观测对照。
+- 清理：`%TEMP%\del-b2` 已删；8000/8002 空闲；无残留 DeLector 进程；工作树仅文档改动（ADR-0033 修改、plan 新增、INDEX、work.log），**未提交**。
+
+### 2026-11-10 19:40 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read/write, shell-exec, cdp, git
+ADR-0033 桌面 B2 落地：提交 A（缓存持久化）已提交 `ac2e0b4`；提交 B（页面提前加载）已实现并判定通过，待提交。
+- A：`webview.start(private_mode=False, storage_path=<DELECTOR_DATA_DIR>/webview)`；机械闸 `test_webview_start_persists_storage_under_the_data_dir`。同一构建同数据目录两次冷启：第 1 次 4 条 seed 行（seed4/真实0），第 2 次 4 条真实行（seed0/真实4），磁盘生成 `<data>\webview\EBWebView`。
+- B：新增 `delector/core/early_static.py`（stdlib 静态层，`/api/*` 503，MIME 显式）；`hand_off()` 把仍 listen 的 socket 交给 `uvicorn.Server.run(sockets=...)`（`server_lifecycle.serve_in_thread(server, sockets=None)`）；就绪后 `window.notifyServerReady()`。首版「stop→重新 bind」实测有 ~1s ECONNREFUSED 空窗，导致 1/10 早加载样本页面 boot 中断；改 socket 交接后 25/25 成功。
+- 同构建逐样本交替 A/B（2 轮×5 对，全新进程+全新数据目录，进程零点/CDP/FCP+双 rAF）：FCP 6231.9→4107.9（**−2124.0**）；真实行 6535.9→5949.1（**−586.8**）；seed 行 6483.9→4106.9；health 200 5530.8→5767.1（+236，退避档位所致）；首次分析 347.9→34.6；首次点词 44.5→9.4；**首次编辑 61.8→62.3（+0.5ms/+0.8%）**。噪声极差：FCP 314.4/69.9，真实行 188.3/100.3。两轮方向一致。四项判负均未触发 ⇒ **通过**。
+- 测量开关 `DELECTOR_DESKTOP_EARLY_LOAD` 已删；`_after_start` 内联 try 上收到 `_notify_server_ready()`（守住「每个 try 异常出口置 result[0]=1」的 AST 不变量）。旧桌面用例补 `start_early_static → None` 替身（不绑真端口）。
+- 测试：desktop 相关 154 passed / 2 skipped；docs 闸 + CI 分片闸 39 passed；`ruff check .` 全绿。`tools/ci_shards.py` unit-2 加入新测试文件。
+- 落盘：ADR-0033 §15.7–15.9、`docs/plans/2026-11-10-adr-0033-b2-desktop-baseline.md` §13、ADR INDEX。
+- 未测：冻结 exe、低核 CPU、节能、机械盘、杀软、8000 顺延、macOS/Linux；交接窗口内 SSE/大下载未单独构造。

@@ -147,8 +147,12 @@ def _stub_server_chain(monkeypatch: pytest.MonkeyPatch, mod: Any, events: List[A
         return object()
 
     monkeypatch.setattr(mod, "build_server", trap_build_server)
-    monkeypatch.setattr(mod, "serve_in_thread", lambda server: object())
+    monkeypatch.setattr(mod, "serve_in_thread", lambda server, **_kwargs: object())
     monkeypatch.setattr(mod, "coordinated_shutdown", lambda *args: None)
+    # B2（ADR-0033）：`_after_start` 默认先起早期静态层（绑真实端口）并走 socket 交接。
+    # 本文件的断言只关心端口校验与建服可达性，故让静态层不可用 ⇒ 走「等就绪」旧路径；
+    # 含交接的默认路径由 test_desktop_window_lifecycle.py 的两条 B2 用例覆盖。
+    monkeypatch.setattr(mod, "start_early_static", lambda *_args, **_kwargs: None)
 
 
 def _install_fake_webview(monkeypatch: pytest.MonkeyPatch, mod: Any) -> None:
@@ -534,7 +538,7 @@ def test_server_handoff_reaps_the_fake_server_after_start_returns(
         return fake_server
 
     monkeypatch.setattr(mod, "build_server", _sentinel_build_server)
-    monkeypatch.setattr(mod, "serve_in_thread", lambda *_a: fake_thread)
+    monkeypatch.setattr(mod, "serve_in_thread", lambda *_a, **_k: fake_thread)
 
     def _reap(server: Any, thread: Any, log_path: str) -> None:
         reaped.append((server, thread))
