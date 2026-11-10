@@ -538,3 +538,12 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 - 顺带发现（未修，记在 CHANGELOG 已知限制）：启动瞬间服务未就绪时 SW 会回落上一轮缓存，可能短暂遮蔽新静态文件（本次实测旧 reader.js 被缓存复用，`pm clear` 后才换新）。
 - 验证证据：模拟器截图证明首页/文章列表/阅读页均正常渲染，顶栏 V5.23.3、`/api/health` 返回 `nlp.state=ready`；本地全量 3037 passed / 3044 executed（5 skipped + 1 xfailed + 1 failed=GBK 环境）。
 - 另外：`test_android_packaging.py` 会扫 `android/app/build/outputs/apk/{device,emulator}/debug/*.apk`，本地 debug 包未做 zipalign ⇒ 报「本地头不连续」17 处死区。发版前删掉本地 debug 产物即可（不是产品缺陷，但别把这条红当成回归）。
+
+### 2026-11-11 04:10 | deepseek-v4.1-flash | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+v5.23.3 发版收尾（模拟器点验后的修复版）。
+- 合并：PR #343 → `a6b1e45`；tag annotated `v5.23.3` 触发 `build-release.yml` run 42863417452 **success**（四平台 job + Publish 全绿）。
+- 资产（实测非零）：APK 62,283,662 B / Linux 128,340,417 B / macOS 61,663,993 B / Windows 90,740,915 B。
+- Release 正文按模板整份写入；**v5.23.1 与 v5.23.2 的正文顶部各加警示并指向 v5.23.3**（v5.23.1=白屏、v5.23.2=阅读页不可用），两者资产保留仅作追溯。
+- 工作区注意：`git add -A` 曾把**另一条并行工作线**（`fix/wb-export-real-write`：backup.py / workbench.css / workbench.html / ci_shards.py / wb_export_probe.mjs / test_wb_export_save.py 与其 work.log 条目）的未提交改动卷进发版提交。已 `git reset --soft` 撤回、只提交本任务 13 个文件，并 `--force-with-lease` 覆盖尚未合并的远端分支。教训：多 agent 共用同一工作区时禁止 `git add -A`，必须逐文件 add。
+- 遗留：arm64 真机仍未点检（模拟器为 x86_64 debug 包）；SW 缓存在冷启动瞬间可能短暂遮蔽新静态文件（实测旧 reader.js 被复用，`pm clear` 后才换新），未修，已写进 CHANGELOG 已知限制。
