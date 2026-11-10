@@ -335,9 +335,14 @@ def get_proposals(
 
 
 def update_proposal_status(
-    conn: sqlite3.Connection, proposal_id: str, status: str
+    conn: sqlite3.Connection, proposal_id: str, status: str, commit: bool = True
 ) -> bool:
-    """原子更新提议状态（pending -> accepted/rejected）。"""
+    """原子更新提议状态（pending -> accepted/rejected）。
+
+    ``commit=False`` 供调用方自行管理事务边界：伴学落卡把「状态流转 + 查重 + 插入」
+    放在同一个 ``BEGIN IMMEDIATE`` 里。若这里照常 ``conn.commit()``，写锁会在插卡前
+    被提前释放，且 ``accepted`` 会先于插卡单独落盘 —— 插入失败后重放会被幂等早退挡住。
+    """
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     cursor = conn.cursor()
     cursor.execute(
@@ -348,5 +353,6 @@ def update_proposal_status(
         """,
         (status, now, proposal_id),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
     return cursor.rowcount > 0

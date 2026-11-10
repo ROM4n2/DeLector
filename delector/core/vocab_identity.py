@@ -10,6 +10,13 @@
 为什么不是 ``lemma`` 单列：介词搭配 ``bestehen auf/aus/in`` 同 lemma 不同 word，
 听力 ``die Wohnung`` 与正文 ``Wohnung`` 也同 lemma 不同 word —— 单列会把合法多卡判成重复。
 
+空值回退：``vocab_identity`` 在参数侧把空 ``lemma`` / 空 ``word`` 回退到另一列（兼容老
+前端传空串与旧备份还原出的 ``lemma=''`` 行）。SQL 侧**不**再对单列直接套归一函数，而是
+注册 ``card_identity(lemma, word)`` / ``card_lemma_key(lemma, word)`` 两个行级 UDF ——
+它们内部调用同一个 :func:`vocab_identity`，让「参数侧回退」与「存储列回退」完全同源。
+零 DDL、不回填存量行；若只在 Python 侧回退，存储列为空的旧行会永远查不中，每次提交
+都长一张新卡。
+
 为什么 Step 1 不建 UNIQUE：存量重复规模未知，``CREATE UNIQUE INDEX`` 会失败或要求先删
 用户数据。本模块只提供「先查后写」；并发窗口靠 ``BEGIN IMMEDIATE`` 收窄，**不等价于唯一
 索引**：绕过本模块的写入（旧客户端、直接 SQL、备份还原）仍可产生重复。
@@ -23,6 +30,9 @@ from delector.data.lexicon_merge import lemma_key, word_key
 # upsert 时允许「只补空、不覆盖」的列（用户已填的内容一律保留）。
 FILLABLE_COLUMNS = ("pos", "gender", "plural", "cefr_level", "definition_zh", "sentence_context")
 
+# 身份键里两列的分隔符：归一后的 lemma/word 不会含控制字符。
+_IDENTITY_SEP = "\x1f"
+
 
 def vocab_identity(lemma: str, word: str) -> Tuple[str, str]:
     """返回 ``(lemma_key, word_key)``；lemma 为空时回退到 word（兼容老前端传空串）。"""
@@ -30,10 +40,21 @@ def vocab_identity(lemma: str, word: str) -> Tuple[str, str]:
     return lemma_key(lem), word_key(word or lem)
 
 
+def identity_key(lemma: str, word: str) -> str:
+    """把一行的 ``(lemma, word)`` 折成与 :func:`vocab_identity` 同源的可比较字符串键。"""
+    lk, wk = vocab_identity(lemma, word)
+    return f"{lk}{_IDENTITY_SEP}{wk}"
+
+
+def identity_lemma_key(lemma: str, word: str) -> str:
+    """台账按 ``lemma_key`` 聚合时用：同样复用 :func:`vocab_identity` 的空值回退。"""
+    return vocab_identity(lemma, word)[0]
+
+
 def register_identity_functions(conn: sqlite3.Connection) -> None:
-    """把归一函数注册进 SQLite 连接（零 DDL；读侧 SQL 复用同一实现）。"""
-    conn.create_function("lemma_key", 1, lemma_key, deterministic=True)
-    conn.create_function("word_key", 1, word_key, deterministic=True)
+    """把行级归一 UDF 注册进 SQLite 连接（零 DDL；读侧 SQL 复用同一实现）。"""
+    conn.create_function("card_identity", 2, identity_key, deterministic=True)
+    conn.create_function("card_lemma_key", 2, identity_lemma_key, deterministic=True)
 
 
 def find_card_id(conn: sqlite3.Connection, lemma: str, word: str) -> Optional[int]:
@@ -43,8 +64,8 @@ def find_card_id(conn: sqlite3.Connection, lemma: str, word: str) -> Optional[in
         return None
     register_identity_functions(conn)
     row = conn.execute(
-        "SELECT id FROM vocab_cards WHERE lemma_key(lemma) = ? AND word_key(word) = ? ORDER BY id LIMIT 1",
-        (lk, wk),
+        "SELECT id FROM vocab_cards WHERE card_identity(lemma, word) = ? ORDER BY id LIMIT 1",
+        (identity_key(lemma, word),),
     ).fetchone()
     return int(row[0]) if row else None
 
