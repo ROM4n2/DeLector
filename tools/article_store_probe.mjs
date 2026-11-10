@@ -318,6 +318,48 @@ async function scenarioRetryBudgetExhausted() {
   await retry;
 }
 
+async function scenarioRetryOnReadySignal() {
+  const ctx = loadSandbox();
+  const clock = makeClock();
+  let calls = 0;
+  ctx.fetchArticles = () => {
+    calls += 1;
+    return Promise.reject(networkError());
+  };
+
+  const store = ctx.__store.createArticleStore({
+    setTimer: clock.setTimer,
+    clearTimer: clock.clearTimer,
+    now: clock.now,
+  });
+  const pending = store.loadArticles();
+  await flushMicrotasks();
+
+  const waitingDelays = clock.pending();
+  const fired = store.retryIfWaiting();
+  // 同步判定：此刻第二次请求在途，不应再被打断一次
+  const firedAgain = store.retryIfWaiting();
+  await flushMicrotasks();
+
+  check(
+    "R11-就绪信号只打断等待中的退避（立即多一次请求）",
+    fired === true && calls === 2 && JSON.stringify(waitingDelays) === JSON.stringify([200]),
+    `fired=${fired} calls=${calls} waiting=${JSON.stringify(waitingDelays)}`,
+  );
+  check(
+    "R12-请求在途时再发信号不产生请求（无第二套机制）",
+    firedAgain === false && calls === 2,
+    `firedAgain=${firedAgain} calls=${calls}`,
+  );
+  check(
+    "R13-打断后仍按原退避序列继续（下一档 400ms）",
+    JSON.stringify(clock.pending()) === JSON.stringify([400]),
+    JSON.stringify(clock.pending()),
+  );
+  // 不 await pending：假时钟不推进时这一轮会停在退避里，await 会让 node 静默退出。
+}
+
+
 async function scenarioNonRetryable4xx() {
   const ctx = loadSandbox();
   const clock = makeClock();
@@ -410,6 +452,7 @@ function scenarioContractGuard() {
   await scenarioFailureKeepsOldData();
   await scenarioAutoResumeAfterRefusal();
   await scenarioRetryBudgetExhausted();
+  await scenarioRetryOnReadySignal();
   await scenarioNonRetryable4xx();
   scenarioRetryClassifier();
   await scenarioWriteBypassesCache();

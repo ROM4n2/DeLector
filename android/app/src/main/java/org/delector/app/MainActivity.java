@@ -34,7 +34,6 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.webkit.WebViewAssetLoader;
 import com.chaquo.python.PyObject;
 import com.chaquo.python.Python;
 import com.chaquo.python.android.AndroidPlatform;
@@ -47,7 +46,9 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import android.speech.tts.Voice;
@@ -74,12 +75,19 @@ public class MainActivity extends AppCompatActivity {
     private static final String PORT_FILE_ENV = "DELECTOR_PORT_FILE";
 
     /**
-     * 静态壳页（S1）：自包含、无外链，直接吃 APK 里的 assets，不等 Python 服务。
-     * 走 WebViewAssetLoader 的虚拟 https origin，而不是 file://（避免不透明 origin）。
+     * 页面在 Python 起来之前先以 8000 为 origin 加载。
+     * 静态资源由 {@link #maybeServeAppStatic} 从 APK 的 assets/static 直接交付，
+     * `/api/*` 一律不拦、走真实网络，交给 article-store 的退避重试接管。
+     *
+     * 端口被占时 start.py 会顺延（8002+）；此时就绪轮询会导航到真实端口，
+     * 该场景是二次导航，不计入 navCount==1 的样本。
      */
-    private static final String ASSET_DOMAIN = "appassets.androidplatform.net";
-    private static final String SHELL_URL = "https://" + ASSET_DOMAIN + "/assets/shell/boot.html";
-    private WebViewAssetLoader assetLoader;
+    private static final int APP_PORT = 8000;
+    private static final String APP_ORIGIN = "http://127.0.0.1:" + APP_PORT;
+    /** 首个内容帧只报一次（commit 可能重复回调）。 */
+    private final AtomicBoolean appContentFrameReported = new AtomicBoolean(false);
+    /** 就绪钩子只注入一次，避免 onPageFinished 与轮询重复 evaluateJavascript。 */
+    private final AtomicBoolean readyHookInjected = new AtomicBoolean(false);
 
     /**
      * 导出结果的出口。回调发生在 ExportSaver 的单线程池上，所以一律 post 回主线程。
@@ -232,20 +240,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * 壳页首个内容帧回报（S1）：壳内三帧 rAF 之后才调用，语义是「这一帧已经上屏」，
-     * 不是「DOM 已解析」。撤 splash 只认这个信号，避免 commit 早于首个内容帧导致露底。
-     *
-     * 回收场动作一律 post 到主线程；重复调用由 {@link #revealWebView()} 的幂等判定吸收。
-     */
-    public class ShellBridge {
-        @JavascriptInterface
-        public void onFirstContentFrame() {
-            StartupProbe.markNav("shell_frame", "shell_first_content_frame");
-            mainHandler.post(MainActivity.this::revealWebView);
-        }
-    }
-
     @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -260,13 +254,9 @@ public class MainActivity extends AppCompatActivity {
         root.setBackgroundColor(Color.parseColor("#FAF8F5"));
 
         // 2. Setup WebView & Native TTS
-        // 壳页走虚拟 origin：/assets/ 前缀映射到 APK 的 assets/，不新增第二份静态镜像。
-        assetLoader = new WebViewAssetLoader.Builder()
-                .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
-                .build();
         webView = new WebView(this);
-        // 注意：加载壳页时这里必须是 VISIBLE。GONE/INVISIBLE 的 WebView 不绘制、rAF 会被节流，
-        // 壳页将永远无法回报「首个内容帧」；视觉上由后加的 splash 整层遮住（同底色）。
+        // 注意：这里必须保持 VISIBLE。GONE/INVISIBLE 的 WebView 不绘制、rAF 会被节流，
+        // 首帧回调会被推迟；视觉上由后加的 splash 整层遮住（同底色）。
         webView.setVisibility(View.VISIBLE);
 
         // 只让 debug 包可被 `chrome://inspect` 连上：release 必须保持关闭，
@@ -279,7 +269,6 @@ public class MainActivity extends AppCompatActivity {
         nativeTTS = new NativeTTSBridge();
         webView.addJavascriptInterface(nativeTTS, "AndroidNativeTTS");
         webView.addJavascriptInterface(new StartupReportBridge(), "DeLectorStartup");
-        webView.addJavascriptInterface(new ShellBridge(), "ShellHost");
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -333,13 +322,13 @@ public class MainActivity extends AppCompatActivity {
 
         webView.setWebViewClient(new WebViewClient() {
             /**
-             * 只拦 appassets 的请求（壳页及其 assets）；真实页仍是 127.0.0.1 的网络请求，
-             * assetLoader 返回 null 后原样放行。
+             * 只拦应用 origin 上的静态骨架（{@link #maybeServeAppStatic}）；
+             * 返回 null 的请求（尤其 `/api/*`）原样放行给真实网络。
              */
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 if (request != null && request.getUrl() != null) {
-                    WebResourceResponse response = assetLoader.shouldInterceptRequest(request.getUrl());
+                    WebResourceResponse response = maybeServeAppStatic(request.getUrl());
                     if (response != null) {
                         return response;
                     }
@@ -351,20 +340,35 @@ public class MainActivity extends AppCompatActivity {
             public void onPageFinished(WebView view, String url) {
                 StartupProbe.markNav("page_finished", url);
                 // 兜底：正常路径由 onPageCommitVisible 先撤；这里只防「commit 回调缺失」。
-                if (isServerReady) {
+                if (isServerReady || isAppOriginUrl(url)) {
                     revealWebView();
+                }
+                // 兜底：服务在页面 JS 就绪前就已 ready（冷启极快时），就绪轮询那次注入会
+                // 因为函数还不存在而落空，这里补一次。
+                if (isServerReady && isAppOriginUrl(url)) {
+                    notifyServerReadyInPage();
                 }
             }
 
             /**
-             * 真实页首帧内容已提交：撤 splash 的另一条正常信号（壳页由 ShellHost 回报）。
-             * 旧实现是 loadUrl 之后固定 200ms 撤场，慢设备上会在首帧前露出白屏/半成品；
-             * 这里等 WebView 明确告知「新页面第一帧已可绘制」，再延迟到下一个动画帧撤。
-             * 不用定时器猜。
+             * 真实页首帧内容已提交：撤 splash 的正常信号。
+             *
+             * S1 起真实页在 Python 就绪前就加载，因此不能再用 isServerReady 当撤场条件；
+             * 应用 origin 的第一次 commit 后再等一个动画帧，即「可绘制的首帧」。
+             * 旧实现是 loadUrl 之后固定 200ms 撤场，慢设备上会在首帧前露出白屏/半成品。
              */
             @Override
             public void onPageCommitVisible(WebView view, String url) {
                 StartupProbe.markNav("commit", url);
+                if (isAppOriginUrl(url)) {
+                    if (appContentFrameReported.compareAndSet(false, true)) {
+                        view.postOnAnimation(() -> {
+                            StartupProbe.markNav("content_frame", "app_first_content_frame");
+                            revealWebView();
+                        });
+                    }
+                    return;
+                }
                 if (isServerReady && isLocalServerUrl(url)) {
                     view.postOnAnimation(MainActivity.this::revealWebView);
                 }
@@ -446,20 +450,16 @@ public class MainActivity extends AppCompatActivity {
         setContentView(root);
         StartupProbe.mark("content_view_set");
 
+        // 不等 Python：先用应用 origin 加载真实页。
+        // 静态资源由拦截层从 APK assets/static 交付；/api/* 走真实网络，
+        // 首个请求被拒后由 article-store 的退避重试接管（navCount 保持 1）。
+        StartupProbe.navZero();
+        StartupProbe.markNav("loadurl_first_paint", APP_ORIGIN + "/");
+        webView.loadUrl(APP_ORIGIN + "/");
+
         // 4. Background Initialization (Assets Extraction + Python Server Launch)
         StartupProbe.mark("server_thread_spawn");
         new Thread(this::initAndStartServer).start();
-    }
-
-    /**
-     * 加载自包含壳页：让 WebView 在 Python 就绪前先有可绘制内容。
-     * 只在 {@link #initAndStartServer()} 里、`python_start_done` 之后 post 到主线程调用一次；
-     * 立即加载会让 WebView 渲染器与 Chaquopy 抢 CPU（实测 TTFD +95.5ms）。
-     */
-    private void loadShell() {
-        StartupProbe.navZero();
-        StartupProbe.markNav("loadurl_shell", SHELL_URL);
-        webView.loadUrl(SHELL_URL);
     }
 
     /**
@@ -503,7 +503,6 @@ public class MainActivity extends AppCompatActivity {
                 Python.start(new AndroidPlatform(this));
             }
             StartupProbe.mark("python_start_done");
-            mainHandler.post(this::loadShell);
 
             Python py = Python.getInstance();
             PyObject osModule = py.getModule("os");
@@ -568,11 +567,91 @@ public class MainActivity extends AppCompatActivity {
         return "http://127.0.0.1:" + port;
     }
 
+    /** 是否应用自身 origin（S1 的静态承载路径）。 */
+    private boolean isAppOriginUrl(String url) {
+        return url != null && url.startsWith(APP_ORIGIN + "/");
+    }
+
+    /**
+     * 把应用 origin 上的页面骨架从 APK 的 assets/static 直接交付。
+     *
+     * 只认 `/`、`/style.css`、`/js/*` 三类静态请求；其余（尤其 `/api/*`）
+     * 一律返回 null 交给真实网络，绝不在本地伪造接口响应。
+     * 返回的响应带 `Cache-Control: no-cache`，避免 WebView 的 HTTP 缓存
+     * 把上一版 APK 的静态资源冒充成本次结果（SW 侧另有 network-first 兜底）。
+     */
+    private WebResourceResponse maybeServeAppStatic(Uri uri) {
+        if (uri == null || !"http".equals(uri.getScheme())) {
+            return null;
+        }
+        if (!"127.0.0.1".equals(uri.getHost()) || uri.getPort() != APP_PORT) {
+            return null;
+        }
+        String path = uri.getPath();
+        if (path == null) {
+            return null;
+        }
+        String assetPath;
+        if ("/".equals(path) || "/index.html".equals(path)) {
+            assetPath = "static/index.html";
+        } else if ("/style.css".equals(path)) {
+            assetPath = "static/style.css";
+        } else if (path.startsWith("/js/")) {
+            assetPath = "static" + path;
+        } else {
+            return null; // /api/* 与其余请求必须走真实网络
+        }
+        try {
+            InputStream stream = getAssets().open(assetPath);
+            WebResourceResponse response = new WebResourceResponse(
+                    mimeTypeFor(assetPath), "UTF-8", stream);
+            Map<String, String> headers = new HashMap<>();
+            headers.put("Cache-Control", "no-cache");
+            response.setResponseHeaders(headers);
+            return response;
+        } catch (IOException e) {
+            // 资产缺失时退回真实网络，让页面明确失败，而不是拿到空响应。
+            return null;
+        }
+    }
+
+    private static String mimeTypeFor(String assetPath) {
+        if (assetPath.endsWith(".html")) {
+            return "text/html";
+        }
+        if (assetPath.endsWith(".css")) {
+            return "text/css";
+        }
+        return "text/javascript";
+    }
+
+    /**
+     * 把「服务已就绪」告诉页面（仅新路径）。页面侧只做两件事：
+     * ① 打断退避等待、立刻重试一次（复用 store.retryIfWaiting，不是第二套重试）；
+     * ② 补注册 Service Worker（页面在 Python 就绪前加载，load 时的注册必然失败）。
+     *
+     * 必须在 UI 线程调用。函数还不存在（页面 JS 尚未执行）时把幂等标记复位，
+     * 交给 onPageFinished 的兜底再补一次，不在这里写轮询。
+     */
+    private void notifyServerReadyInPage() {
+        if (!readyHookInjected.compareAndSet(false, true)) {
+            return;
+        }
+        final String js = "(function(){try{return window.notifyServerReady"
+                + " ? String(window.notifyServerReady()) : 'missing';}catch(e){return 'err';}})()";
+        webView.evaluateJavascript(js, value -> {
+            StartupProbe.markNav("ready_notify", value);
+            if ("\"missing\"".equals(value)) {
+                readyHookInjected.set(false);
+            }
+        });
+    }
+
     /**
      * 撤掉 splash、露出 WebView。只允许 UI 线程调用（WebViewClient 回调 / postOnAnimation）。
      * 用「幂等 + 只改可见性」保证重复调用安全，不引入任何新的计时假设。
      *
-     * S1 起 WebView 常驻 VISIBLE（GONE 会让壳页停止绘制、rAF 不回调），所以幂等标记
+     * WebView 常驻 VISIBLE（GONE/INVISIBLE 不绘制、rAF 被节流，首帧会推迟），所以幂等标记
      * 改看 splash 的可见性。
      */
     private void revealWebView() {
@@ -617,8 +696,19 @@ public class MainActivity extends AppCompatActivity {
                         isServerReady = true;
                         final int readyPort = serverPort;
                         mainHandler.post(() -> {
+                            if (readyPort == APP_PORT) {
+                                // 页面已在应用 origin 上加载：不再导航，接管交给 store 的重试。
+                                // 这里只补一次状态（splash 通常已被首个内容帧撤掉）。
+                                StartupProbe.markNav("skip_reload", "app_origin_ready");
+                                statusTextView.setText("服务已就绪");
+                                revealWebView();
+                                // 就绪信号驱动：打断退避等待里的下一次重试，别让末档 1600ms
+                                // 把接管拖到就绪点之后 ~0.7s；顺带补注册 SW（页面加载时注册已失败）。
+                                notifyServerReadyInPage();
+                                return;
+                            }
                             statusTextView.setText("服务已就绪，正在加载工作台...");
-                            // splash 不在这里撤：等 onPageCommitVisible（首帧已提交）再撤。
+                            // 端口顺延（8000 被占）时才导航；该场景是二次导航，不计入 navCount==1。
                             StartupProbe.navZero();
                             StartupProbe.markNav("loadurl", serverBaseUrl(readyPort));
                             webView.loadUrl(serverBaseUrl(readyPort));
@@ -645,7 +735,8 @@ public class MainActivity extends AppCompatActivity {
             statusTextView.setText(timeoutPort > 0
                     ? "服务启动超时（端口 " + timeoutPort + "），正在重试连接..."
                     : "服务启动超时，正在重试连接...");
-            if (timeoutPort > 0) {
+            if (timeoutPort > 0 && timeoutPort != APP_PORT) {
+                // 页面已在 8000 上加载时不再二次导航：留在快照 + 重试 UI 上。
                 StartupProbe.navZero();
                 StartupProbe.markNav("loadurl_timeout", serverBaseUrl(timeoutPort));
                 webView.loadUrl(serverBaseUrl(timeoutPort));

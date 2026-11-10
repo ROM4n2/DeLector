@@ -688,3 +688,49 @@ S1 已合并：**PR #330 → merge commit `6d38ddf`**（`--merge`，未 force、
 - 文档索引补齐（master 直推，`docs/` 在 `MASTER_DIRECT_ALLOWLIST` 内）：ADR-0032 §9 增「静态壳落地」条目（正结果 M1 4053→1361.5ms；负结果 TTFD +196ms、双 rAF 7/10 露底判负；限制同上）；`docs/adr/INDEX.md` 0032 行补落地备注；plan §8C 标注 PR #330 / 6d38ddf。
 - 分支与 worktree：`feat/android-local-shell` 已合入，删除本地分支与 `d:\Code\DeLector-s0` worktree（主树其它线未动；主树仅 `WORKMEMORY/work.log` 追加）。
 - 环境：模拟器、adb server、`D:\temp` 临时脚本/抽帧、`android/app/build` 均已在合并前清理并复核无残留进程。
+
+### 2026-11-10 11:33 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+立 ADR-0033（Proposed，未实施，纯文档）：把 Python 从首屏关键路径彻底拿掉。
+- 首屏最小集：/api/articles 每行 5 键（id/title/created_at/char_count/stats），stats 在 ingest 落 stats_json，列表路径零 NLP，无必须实时算的字段。
+- 选项：A 构建期导出（仅修正确性，TTFD 收益≈0）；B0 Go 核实为伴学 runtime（仅 /api/companion，Python 之后启动，安卓无 Go）→ 不采用；B1 安卓 WebView 静态拦截（assets/static 已在 APK、保持 origin、无网关，理论上界≈2.9s）→ 推荐；B2 桌面 stdlib 静态+反代 → 待生产基线；B3 Java 网关/C 常驻 → 不选。
+- 判据：安卓 TTFD 中位数改善≥1000ms（≥5 冷启×2 轮，force-stop+pm clear），桌面生产壳首次可用≥300ms（基线未测）；首次交互回退 >50ms 且 >5% 判负；origin 不可变（保 localStorage）。
+- 产出：docs/adr/2026-11-10-adr-0033-python-out-of-first-screen-completely.md + INDEX 登记。停下等批准。
+
+### 2026-11-10 15:40 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, emulator-run
+ADR-0033 S1 测量切片执行完毕（**未提交/未开 PR/未合并**，等用户决定是否进 S2）。
+- 代码（仅 MainActivity.java）：shouldInterceptRequest 在 127.0.0.1:8000 上交付 `/`、`/style.css`、`/js/*`（来自 assets/static，Cache-Control: no-cache），`/api/*` 一律 super 走真实网络；解除「等就绪再 loadUrl」gate（onCreate 直接 navZero+loadUrl）；就绪轮询 readyPort==8000 时 skip_reload 不二次导航；onPageCommitVisible 应用 origin 首帧即 revealWebView。
+- SW 风险结论：SW 只拦同 origin 静态请求，拦截层在其下游；network-first + `cache:no-cache` ⇒ 拦截响应不会被 SW 长期遮蔽；版本更新靠 APK 覆盖安装（下次启动解包 assets），与本切片无关。无需禁用 SW。
+- 测量（x86_64 Medium_Phone_API_37.0，force-stop+pm clear，官方 2 轮×5 次=10 样本，0 弃跑；安装后首启 1574ms 作 warm-up 弃用；A/B 试点轮因未采 uvicorn 时点整轮弃用并写明理由）：
+  - M1 首内容帧：进程零点中位 **835.5ms**（803–967）；导航零点中位 **350.5ms**（334–388）。
+  - TTFD：进程零点中位 **1065ms**（1053–1232）；导航零点中位 **588ms**（558–647）。噪声下限 **179ms**。
+  - 接管：进程零点中位 **4238.5ms**，导航零点 **3769ms**；接管−uvicorn 中位 **1382.5ms**（1368–1535）。
+  - 接管路径：每次 5 条 /api/articles，首个 ~432ms 拒绝（4–29ms 快速失败），退避 256/426/806/1610ms 后末次 200/305ms；skip_reload=1、navCount==1、4 行、无重试按钮。预算耗尽仅 CDP 人为验证：14s 落「未连接，显示本地快照」+ 可点重试，点后 16.0s 接管且无重新导航。
+  - 白屏：6 帧连续抓取只见系统启动图→原生 splash→真实页，未见空白（采样间隔 ~0.33s 为局限）。
+- 判负核对：TTFD 劣化未触发；无白屏/露底；接管无需干预。**未闭合项**：接管−uvicorn 1382.5ms 超 ADR 候选 ≤1000ms 线 382.5ms，根因退避末档 1600ms 跨过就绪点（本切片不改重试参数，留待决定）。
+- 不跨构建相减：#330 的 4301.5ms 与本批 1065ms 不同构建、不同页面交付方，**不可直接相减**，仅作方向参照。
+- 落盘：docs/plans/2026-11-10-adr-0033-s1-static-intercept.md（新）；ADR-0033 §13「S1 测量切片结果」；INDEX 行更新；docs/agents/android-local-runtime.md 登记行置「已关闭」。docs 闸 39 passed。
+- 清理：模拟器 `adb emu kill`（adb devices 已空）、设备截图与 adb forward、临时目录 `%TEMP%\delector-s1` 均已删。
+- worktree：MainActivity.java + docs/adr/INDEX.md + docs/agents/android-local-runtime.md + WORKMEMORY/work.log 修改，ADR-0033 与 plan 未跟踪；未提交。
+- 未覆盖：arm64 真机（无设备）；低端机 CPU 争用未验证；白屏帧级结论受抓帧频率限制。
+
+### 2026-11-10 17:20 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read/write, shell-exec, emulator-run
+ADR-0033 S2 执行完毕（**未提交 / 未开 PR / 未合并**）：先补答 SW，再 (b) 就绪信号重试，再 (a) 同构建 A/B。
+- SW（上轮漏答项）：拦截响应会被 SW 缓存，但 `sw.js` network-first（`cache:no-cache`），拦截层 200 视为最新值覆盖，不会被钉死；`/sw.js` 不在白名单、随 APK 同版本解包，不会吃旧资产。**但发现 S1 真实回归**：页面先于 Python 加载时 `window.load` 的 `register("/sw.js")` 必然失败且被 catch 吞掉 → 安卓离线能力静默丢失。修复：同一个就绪钩子补注册，实测 `getRegistrations()`=1、scope `127.0.0.1:8000`、controller=true。测量期不禁用 SW（每次 `pm clear`）。
+- (b) 信号链：Java `pollServerReadiness` 的 `/api/settings` 200 → `evaluateJavascript(window.notifyServerReady())` → `articleStore.retryIfWaiting()`（只取消**待触发** timer、`attempts+1`、立即重试；不新建 cycle、不改退避序列、不动在途请求）。与 `retryNow()` 并存不重复，无第二套重试机制。探针 R11–R13 覆盖（25/25）。
+- (a) 同构建 A/B（x86_64 `Medium_Phone_API_37.0` 窗口模式，2 轮×5，各 1 次 warm-up 弃跑，0 弃跑）：
+  - TTFD 进程零点：A 3411 / 3410，B 1026 / 1042；改善 R1 **2385ms**、R2 **2368ms**；合并 A 3410.5 / B 1034（差 2376.5）；噪声下限 **391ms**（≈6.1×）；两轮同向、组内无交叉 → **正式判过 ≥1000ms**。
+  - TTFD 导航零点：A 401 / B 573.5（B 导航更晚、出文更早）。
+  - M1：A 壳页 1077.5（导航零点 159）/ B 真实页 805.5（导航零点 341），仪器不同不可比，未用于抵 TTFD。
+  - 接管：`data-ready − uvicorn` 中位 **80.5ms**（45–132），`navCount==1` 10/10，req=5，`ready_notify=true` 10/10 → **进 1000ms**，S1 未闭合项（1382.5ms）闭合。
+  - 首次打开文章：A 119ms（37–140）/ B 23ms（22–24），未触发 >50ms 且 >5% 回退判负；单轮未交替，改善不作主张。
+- 测量开关 `LEGACY_READY_GATE` 只活在 A/B 两个临时 APK，测后**整体删除**并重编译冒烟（content_frame 1260 → ttfd 1508 → settings_200 3597 → skip_reload → ready_notify "true"，SW 已注册）。全仓 grep 无残留。
+- 作废批次：无头 + swiftshader 下 TTFD 漂到 3.8–12.4s 且缺导航零点列，整批弃用；换窗口模式后 B（1034）与 S1（1065）一致。不跨构建相减。
+- 数据勘误：A R1 导航零点中位初记 410ms，复核原始 `results.jsonl` 为 **406ms**（400/402/406/410/423），已改 plan §4.1 与 ADR §14.3。
+- 落盘：`docs/plans/2026-11-10-adr-0033-s2-ready-signal-and-ab.md`（新）；ADR-0033 §14（14.1–14.6）；INDEX 0033 行补 S2；`docs/agents/android-local-runtime.md` 登记行置已关闭。docs 闸 39 passed。
+- 清理：`adb emu kill`（qemu 退出、`adb devices` 空）、`adb forward --remove-all`、删 `%TEMP%\delector-ab`（A/B.apk 各 96.9MB + measure.mjs + results*.jsonl）与本次 `emu*.log`。
+- worktree：`MainActivity.java`、`article-store.js`、`reader.js`、`main.js`、`tools/article_store_probe.mjs`、`docs/adr/INDEX.md`、`docs/agents/android-local-runtime.md`、`work.log` 修改；ADR-0033 与 S1/S2 plan 未跟踪；**未提交**。
+- 已知遗留：`MainActivity.loadShell()` 已无调用点（壳页降级为兜底资产），是否随 PR 删除待定范围。
+- 未覆盖：arm64 真机、低端机 CPU 争用、8000 端口顺延；白屏与预算耗尽 UI 本切片未复测。
