@@ -497,3 +497,13 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 - 顺手踩到并修正：顶栏版本号的**真身是 `static/layout/header.html`**，`static/index.html` 由 `tools/build_index_html.py` 装配；直接改产物会让 `test_check_index_html_sync.py` 两条用例红。正确顺序 = 改片段 → build → `check_index_html_sync`。
 - 已知限制写进 CHANGELOG（不得省略）：arm64 真机未点检（本版含 `static/` 与后端改动，需覆盖安装）；预热被关或线程未起时首开仍可能同步等；就绪等待时长未量化。
 - 回滚：versionCode 52301 不可回拨；零 DDL、零迁移，`v5.23.0` 包可直接回退。
+
+### 2026-11-11 00:45 | deepseek-v4.1-flash | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+v5.23.1 发版收尾（含 GitHub Release 正文）。
+- 合并：PR #341（`chore(release): v5.23.1`）→ `0c0dc25`；master push CI run 42845037417 **success**。
+- tag：annotated `v5.23.1` 打在 `0c0dc25`（含 bump），推送触发 `build-release.yml` run 42845127262 **success**：Build Linux / Android / Windows / macOS 四 job 全绿 + Publish GitHub Release 成功。
+- 资产（`gh release view` 实测，均非零）：Android APK 62,278,282 B（59.4 MB）/ Linux TAR.GZ 128,348,026 B（122.4 MB）/ macOS TAR.GZ 61,659,170 B（58.8 MB）/ Windows ZIP 90,738,384 B（86.5 MB）。
+- Release 正文：按 `.github/release-notes-template.md` **整份覆盖**（`gh release edit --notes-file`），含本版更新（修复/内部/文档）+ 已知限制 + 回滚四轴 + 本版资产表 + CHANGELOG 指针；无 emoji。`isDraft=false`、`isPrerelease=false`。
+- 分支：`release/v5.23.1` 合并后已删（本地+远端），tag 为权威锚点；临时 worktree `DeLector-readiness` 与 `fix/article-readiness-ux` 亦已清理。
+- 遗留（用户已确认口径）：arm64 真机仍未点检，本版含 `static/` 与后端改动 ⇒ 需覆盖安装验证；CHANGELOG 与 Release 正文均已按「未验证」写明，不得改记为已验证。
