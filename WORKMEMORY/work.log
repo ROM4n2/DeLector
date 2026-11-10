@@ -458,3 +458,13 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 - 由此证伪原报「查重/台账把 save_wb_state 推到 busy_timeout 5s」：查重写锁持有约 36 ms，与 busy_timeout=5000 ms 差两个数量级；台账是只读 SELECT，不持写锁。真要优化必须落持久化生成列/表达式索引（DDL，属 Step 2/3），本轮不改代码。边界：Android arm64 低端机未测；临时库已清理，零代码改动、未碰用户库。
 - 同一 PR 的收尾：统一 delector/core/vocab_identity.py 模块 docstring 与 CHANGELOG v5.22.1 词卡条目的口径措辞（台账是按 lemma_key 聚合的视图，不是与写侧共用的同一身份），并给 v5.22.1 的伴学 BEGIN IMMEDIATE 描述加勘误；tests/test_vocab_identity_upsert.py 的过渡期反向护栏改用 PRAGMA index_list 感知 Step 3 唯一索引。
 - 仍未做（按方案稿登记、非本轮范围）：Step 2 存量重复 G/S/M 统计与合并、三套计数口径统一、App 内已知限制文案、prep_saved 缺 refl、备份还原/wb 投影写锁统一。
+
+### 2026-11-10 22:04 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+v5.23.0 发版收尾 + 项目阶段性暂停；WORKMEMORY 流转（COLD digest 更新 + 交接包）。
+- 合并：#338（发布文档规范化，含 CHANGELOG 顺序根因修复）与 #339（v5.23.0 bump）。tag v5.23.0 为 annotated，指向 72d6e7a；四平台构建 run 42829293169 success（5/5 job，4m4s）；Release 资产 4 个（APK 62.3MB / Linux 128.3MB / macOS 61.7MB / Windows 90.7MB）；正文按 .github/release-notes-template.md 整份覆盖写入（无 emoji，含 新增/修复/内部/文档 + 已知限制 + 回滚四轴）。
+- 版本面：5.23.0 / versionCode 52300；五件套 + CHANGELOG（新 FORMAT RULES 首版）+ README（版本表 3 行）+ PROJECT_OVERVIEW 同一提交内更新；#339 合并后 master push CI 42829238785 success。
+- Tests 徽章仍为 v5.22.1 基线（3006/3009）：本版未在本地重跑全量 pytest（约束），README 注释已明确标注「不代表 v5.23.0、以 CI 为准」，未编造数字。
+- 发布文档规范（#338）：CHANGELOG 降序 + 固定结构 + 顶部 FORMAT RULES；新增 tools/check_release_docs.py 与 tests/test_release_docs_gate.py（unit-2，10 例含 8 类变异自证）；新增 .github/release-notes-template.md；ops.md 第 8/9 条改为降序插入与无 emoji 规范。
+- 项目暂停：自 2026-11-10 起短期内不再推进。接手入口 = WORKMEMORY/handoff_2026-11-10-project-pause.md 与 PROJECT_OVERVIEW「开放待办」第 7 条。热层 53 条 < 轮转阈值 75，未轮转。
+- 未做：本地全量 pytest 未重跑（约束）；本轮 PITFALL/DECISION 未蒸馏进 vault（协议 §6 需 WIKI_PATH 可用）。

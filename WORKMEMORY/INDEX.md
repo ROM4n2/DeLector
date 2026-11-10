@@ -10,7 +10,7 @@
 | `PROJECT_OVERVIEW.md` | 60 秒项目 primer（新 agent 第二读）                           |
 | `work.log`            | HOT 事件流（append-only，最近 50 条；第三读）                 |
 | `archive/`            | WARM 层（按日分片 `work-YYYY-MM-DD.log`，只按下方索引按需加载） |
-| `cold/`               | COLD 层（按月 digest；现有 `digest-2026-09.md` · `digest-2026-10.md`（覆盖 10 全月 v5.14.0~v5.19.0 / ADR-0017~0024 / A/B/C 全档 / 单体解耦 / 桌面单实例 / 伴学奠基） · **`digest-2026-11.md`**（2026-11-09 生成，覆盖 v5.20.0~v5.22.0 / ADR-0025~0030 / 伴学 Agent / 去 Emoji 与动效 / 视觉回归基建 / 存量重算 3.6.0）） |
+| `cold/`               | COLD 层（按月 digest；现有 `digest-2026-09.md` · `digest-2026-10.md`（覆盖 10 全月 v5.14.0~v5.19.0 / ADR-0017~0024 / A/B/C 全档 / 单体解耦 / 桌面单实例 / 伴学奠基） · **`digest-2026-11.md`**（2026-11-09 生成、2026-11-10 增补，覆盖 v5.20.0~v5.23.0 / ADR-0025~0033 / 伴学 Agent / 去 Emoji 与动效 / 视觉回归基建 / 存量重算 3.6.0 / 词卡审计修复批次 #332~#337 / 发布流程规范化）） |
 | `notes/`              | 超限事件正文（`NOTES-<日期>-<时间>-<slug>.md`，协议 §1.4；2026-10-17 从顶层收拢进本目录）。⚠️ 旧事件里以**文件名**引用的 NOTES 现在位于本目录——按名检索即可命中，事件正文按追加制不回改 |
 | `handoff_*.md`        | 跨 agent 交接包（**按需出现**：仅当存在活跃交接时才存在，非常驻文件；协议 §4）。**closed 的 MUST 移入 `archive/handoff_*.md`** 并在下方「已归档 handoffs」登记 |
 
@@ -21,6 +21,7 @@
 
 ## Active handoffs
 
+- 2026-11-10 → [`handoff_2026-11-10-project-pause.md`](handoff_2026-11-10-project-pause.md)（to: any · role: IMPLEMENT/REVIEW/VERIFY · status: open）— v5.23.0 发版收尾与项目阶段性暂停（接手必读）
 - 2026-10-14 → [`handoff_no-console-feedback-gaps.md`](handoff_no-console-feedback-gaps.md)（to: any · role: VERIFY/TEST · status: open）— 真机双击验收 + digest 归一历史 header
 
 ## 已归档 handoffs

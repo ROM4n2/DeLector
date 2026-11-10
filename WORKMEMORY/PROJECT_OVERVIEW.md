@@ -27,6 +27,7 @@
   - 体验层：存卡反馈区分新增与幂等命中（`created` / `skipped_fields`）、设置页本地「已知限制」说明、Android 首屏静态骨架先行、桌面静态层提前加载与 WebView2 持久化缓存修复。
   - 数据层：零 DDL、零迁移；词卡身份走行级 UDF（`card_identity` / `card_lemma_key`），空 lemma 与旧库行同源回退；存量重复仍未合并（只堵新增）。
   - 验证：本版**未**在本地重跑全量 pytest（约束：只跑定向），完整门禁以 CI 的 master push run 为准；四平台资产见 GitHub Releases。
+  - **项目状态：2026-11-10 起阶段性暂停**，短期内不再推进。接手先读 [`handoff_2026-11-10-project-pause.md`](handoff_2026-11-10-project-pause.md)。
 - **历史里程碑归档**：v5.22.1（文章响应体去重 / Android TTFD 口径）、v5.22.0（视觉材质、桌宠 P1–P4、复习台账、存量重算 3.6.0）、v5.21.1（伴学 SSE 跨 chunk 分帧修复）、v5.21.0（伴学页面级能力与 HITL 闭环）、v5.20.2（阅读排版与 CEFR 透视）、v5.20.1（Android 拖拽与 Apache 2.0）、v5.20.0（伴学 Agent 运行时）、v5.19.0 及更早版本演进详见 `CHANGELOG.md` 与 `WORKMEMORY/cold/digest-2026-10.md`。
 
 ## 红线速查（详情见 `docs/agents/architecture.md` / `ops.md`）
@@ -56,6 +57,8 @@
 5. **C 档已交付（2026-10-19 回填）**：`docs/reviews/2026-10-16-open-items-backlog.md` 的 C1~C9 均已交付（PR #143~#160，含 C9 终审与 mock 漂移闸 #150）；**C4 Android 真机点检仍暂缓**（见第 2 条，非交付缺口）。⚠️ ADR-0024 资产折旧：回灌（C1，PR #147，2026-10-17）已落地 ⇒ §4.3 实验（N=20 报告）的阈值与结论**只对"准入式裁判 + 无回灌"历史形态有效**。**已明确分域**（2026-11-03：`docs/reviews/2026-10-16-judge-gaming-control-experiment.md` 顶部适用域声明）；ADR-0024 D-2 四件工程前置**已于 2026-11-03 落地**（commit `c385ea7`：逐篇落盘+续跑 / temperature 钉定 / --real 连通预检 / 成本硬闸，均带测试）；重跑当前**仅阻塞于 `DEEPSEEK_API_KEY` 缺失**（未跑，重跑前报告仅作历史形态基线）。
 6. **递延项（未立项）**：tests `--strict`；`tools/vault-proactive-scan.py` 三条版本正则**已于 tests/test_app_version_source.py 补齐自动化守卫**；PWA 安装提示验证 / 192-512 PNG 图标（**图标已于 2026-11-03 补齐**：`static/icon-192.png`、`static/icon-512.png` + manifest 位图条目 + 尺寸守卫测试；安装提示仍待真机验证）；**桌面单实例与端口顺延已于 2026-10-22 交付**（见「当前状态」，勿再当待办）；发布链路 runbook（Publish 被跳过 / 孤儿 tag 的恢复路径：Vault v5.4.0 复盘 + **v5.1.1 孤儿 tag 在案**；`gh workflow run --ref <tag>` 理论可补发但**本仓未实证**，判据只能是 release 资产清单）。
 
+
+7. **项目阶段性暂停（2026-11-10）**：v5.23.0 发版后短期内不再推进。接手入口 = [`handoff_2026-11-10-project-pause.md`](handoff_2026-11-10-project-pause.md)（含已完成证据、下一步、风险与坑）。热层 `work.log` 53 事件 < 阈值 75，未轮转；COLD digest 已增补至 v5.23.0。
 
 ## 工作方式
 
