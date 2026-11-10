@@ -527,3 +527,14 @@ v5.23.2 发版收尾（白屏修复版）。
 - Release 正文：按模板整份覆盖写入（含本版资产表）；**v5.23.1 的 Release 正文顶部加白屏警示并指向 v5.23.2**（资产保留仅作追溯）。
 - 本地全量 pytest（干净环境，期间不改文件）：3035 passed / 3045 collected（8 skipped + 1 xfailed + 1 failed = GBK 环境问题）。上一轮 3033/3 failed 的三条，根因分别是：① GBK 环境（既有）② 我自己起 uvicorn 调试服务在仓库根生成了 `delector.db` / `progress.db`，触发数据目录迁移预检拒启（已 kill PID 2524 并删除这两个我造的库）③ **跑测试期间并发编辑 README** 导致版本面断言读到半成品。教训：全量跑测试期间不得改工作区文件，调试服务要指定临时数据目录。
 - 环境事故（同轮）：`python -c "...反引号..."` 被 bash 当作命令替换执行，误跑了文件内容（无破坏，`git status` 复核干净）。写含反引号的脚本一律落成 `.py` 文件再执行，不用 `-c`。
+
+### 2026-11-11 03:05 | deepseek-v4.1-flash | PITFALL
+Caps: filesystem-read, filesystem-write, shell-exec, git
+模拟器点验揪出 v5.23.2 的两个真缺陷（发版后 30 分钟内修完，出 v5.23.3）。
+- 环境：`/d/Android/sdk` + AVD `Medium_Phone_API_37.0`（x86_64，仅此镜像）；模拟器渠道 flavor `emulator`（applicationId 后缀 `.emulator`，额外带 x86_64），`assembleEmulatorDebug` 产物 96→112 MB。
+- 第一次构建踩坑：漏跑 `tools/sync_android_sources.py` ⇒ APK 里 assets 仍是 **v5.22.1** 的旧静态资源，界面上顶栏写着 V5.22.1 还提示「可更新 v5.23.2」。顺序必须是 sync → gradle。
+- 缺陷 A（点开文章无反应）：`reader.js` 的 `_readerStateHtml` 删掉 `const bar = ...` 后模板仍留 `${bar}` ⇒ 点击抛 `ReferenceError: bar is not defined`，只有全局兜底弹一条提示。模块能解析，`node --check`/模块图守卫/桩探针全都看不见。加守卫 `test_reader_state_template_uses_only_declared_vars`（只核对该函数内 `${纯标识符}` 是否已声明；变异自证：写回 `${bar}` 立即红）。**先试过的全仓通用启发式误报 30+ 条（解构/多声明器识别不了），已撤掉——宁窄勿糊。**
+- 缺陷 B（退出重进停在 Webpage not available）：首帧导航早于服务 listening，SW network-first 的 fetch **不经过** `shouldInterceptRequest` ⇒ 拿不到 APK 骨架、ERR_FAILED；Chromium 错误页 URL 仍是应用 origin 且**不触发 onPageFinished**（实测整轮 logcat 没有 page_finished），旧 `skip_reload detail=app_origin_ready` 判据把它当成功。修法：就绪后注入探针发现 `window.notifyServerReady` 缺失 ⇒ 1.5s 后同探针再问一次 ⇒ 仍缺就补载一次（一次性防抖）。实测探针序列：`ready_notify=missing → loadurl_retry_missing_page → commit → ttfd → ready_notify=false`。
+- 顺带发现（未修，记在 CHANGELOG 已知限制）：启动瞬间服务未就绪时 SW 会回落上一轮缓存，可能短暂遮蔽新静态文件（本次实测旧 reader.js 被缓存复用，`pm clear` 后才换新）。
+- 验证证据：模拟器截图证明首页/文章列表/阅读页均正常渲染，顶栏 V5.23.3、`/api/health` 返回 `nlp.state=ready`；本地全量 3037 passed / 3044 executed（5 skipped + 1 xfailed + 1 failed=GBK 环境）。
+- 另外：`test_android_packaging.py` 会扫 `android/app/build/outputs/apk/{device,emulator}/debug/*.apk`，本地 debug 包未做 zipalign ⇒ 报「本地头不连续」17 处死区。发版前删掉本地 debug 产物即可（不是产品缺陷，但别把这条红当成回归）。

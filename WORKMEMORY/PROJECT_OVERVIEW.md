@@ -23,7 +23,11 @@
 
 ## 当前状态
 
-- **最新发布 v5.23.2（2026-11-10）** —— **修复 v5.23.1 的全平台白屏（前端模块图解析期崩溃）**。
+- **最新发布 v5.23.3（2026-11-11）** —— **修复「点开文章毫无反应」+ Android「退出重进停在 Webpage not available」**（x86_64 模拟器实测通过）。
+  - ① 阅读页 `_readerStateHtml` 删了 `const bar` 却留着 `${bar}` ⇒ 点文章抛 `ReferenceError`，交互静默失效（v5.23.1/v5.23.2 均带）。
+  - ② 首帧导航早于本地服务就绪时，SW 的 network-first fetch 不经过 `shouldInterceptRequest` ⇒ ERR_FAILED；错误页 URL 仍是应用 origin 且不触发 `onPageFinished`，旧 `skip_reload` 判据把它当加载成功。修法：就绪后探针发现窗口里没有 `window.notifyServerReady` 就补载一次（一次性）。
+  - 新守卫：`test_reader_state_template_uses_only_declared_vars`（变异自证）。
+- **上一版 v5.23.2（2026-11-10，阅读页不可用）** —— 修复 v5.23.1 的全平台白屏（前端模块图解析期崩溃）。
   - 根因：`static/js/article-store.js` 同时用 `export const/function` 与底部 `export { ... }` 导出同一批符号 ⇒ `SyntaxError: Duplicate export`，`main.js` 整张图不执行，页面只剩静态骨架文字（Android 表现为「退出重进后只剩文字方框」）。
   - 修法：声明处去 `export`，公开面只在底部 `export { ... }` 列一次。
   - 新守卫：`tests/test_frontend_module_graph.py` 加「结构化重复导出检查」+「node 真 import 全部模块」，两条均做过变异自证。
