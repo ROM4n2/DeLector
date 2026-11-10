@@ -1460,7 +1460,12 @@
               <span class="cefr-badge" id="d-cefr"></span>
             </div>
             <div id="d-meta"></div>
-            <div id="d-ledger" class="wordcard-ledger" hidden></div>
+            <div
+              id="d-ledger"
+              class="wordcard-ledger"
+              title="共 N 张是按词头聚合后的显示值；旧版留下的重复卡仍在库中，本版只堵新增、未做存量合并。完整说明见「偏好与 API 设置 → 已知限制」。"
+              hidden
+            ></div>
             <div style="margin-top: 0.875rem">
               <div
                 style="
@@ -2191,6 +2196,34 @@
                 </select>
               </div>
             </div>
+          </div>
+        </section>
+
+        <!-- 已知限制：随应用打包的本地静态文案，脱网用户也能看到。
+             只陈述当前版本真实存在的中间态，不放外链、不依赖 /api/ 请求。 -->
+        <section class="settings-group">
+          <button
+            type="button"
+            class="settings-group-toggle"
+            aria-expanded="true"
+            aria-controls="settings-group-limits"
+            onclick="toggleSettingsGroup(this)"
+          >
+            <span class="settings-group-title">已知限制（本地说明 · 脱网可见）</span>
+            <svg class="ui-ico settings-group-chevron" aria-hidden="true" focusable="false">
+              <use href="#ui-ico-chevron-down"></use>
+            </svg>
+          </button>
+          <div class="settings-group-body" id="settings-group-limits">
+            <p class="settings-tip">
+              <b>生词卡重复只做部分修复。</b>重复提交同一个词不会再新增卡片，但旧版本留下的重复卡仍保留在数据库中，尚未合并，也没有唯一约束。抽屉里的「共 N 张」是按词头聚合后的显示值，不等于可以逐张复习的卡片数；存量清理要先统计真实重复规模，当前版本不做。
+            </p>
+            <p class="settings-tip">
+              存词时若这个词已在词卡中，按钮会显示「已在词卡中」且不再播放庆祝动画。已有内容按「只补空、不覆盖」保留，本次填写的释义不会覆盖原有释义；当前版本没有修改已有词卡释义的入口。
+            </p>
+            <p class="settings-tip">
+              本页随应用一起打包，脱网也能查看；完整版本说明、未验证项与回滚方式见发布日志 CHANGELOG。
+            </p>
           </div>
         </section>
 
