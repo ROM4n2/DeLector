@@ -557,3 +557,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 闸：`tools/wb_export_probe.mjs`（6 场景，精确定义「无 path 不报成功」）+ `tests/test_wb_export_save.py`（8 用例）+ `tools/ci_shards.py` 登记。
 - 落盘目录：自动创建 `Path.home()/Downloads`；建不出来才退回主目录，并在返回体带 `fallback_dir/warning`，前端文案显式说明位置。
 - 验证：desktop.py 实跑，toast `已导出轻量同步文件：C:\Users\Haoyu\Downloads\wb-sync-2026-11-11.json（134 字节）`，`Get-Item` Length=134（Downloads 由本修复自动创建）。未测：冻结 exe 内的导出点击、桌面 UI 真实磁盘写失败、macOS/Linux。
+
+### 2026-11-11 05:20 | deepseek-v4.1-flash | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec, git
+dependabot 积压 6 个 PR 一次性处理：合 1 个批量 PR（#351），其余 6 个关闭并留言指向。
+- 现状：#345 actions/cache v4→v6；#346 typer 0.27.3→0.28.0；#347 pydantic-core 2.50.2→2.50.4；#348 click 8.5.0→8.5.1；#349 fastapi 0.162.0→0.162.2（+requirements.txt pin）；#350 typing-inspection 0.4.4→0.4.5。
+- 为什么不逐个合：5 个 pip PR 的真实改动各 1 行，却因 `.gitattributes` 的 `* text=auto eol=crlf` 把 `requirements.lock.txt` **整文件重写**（每个 83 行噪声 diff），且 5 个 PR 改同一文件 ⇒ 逐个合并要 5 轮 rebase + 5 轮 CI。合成一笔：`4b3fadd` → merge `815afe9`。
+- 顺带发现：`requirements.txt` 的 **blob 是 CRLF**（早于 .gitattributes 契约写入），`requirements.lock.txt` 与 3 个 workflow 的 blob 是 LF —— 同一仓库两种存量，任何编辑这两个方向都会触发整文件重写。本次让 `requirements.txt` 由 git `text` 属性规范化成 LF（一次性 43 行 diff，已在提交信息与 PR 正文写明），lock 与 workflow 保持 LF 零噪声。
+- 验证口径：本地 `.venv` 仍是旧版本，**没有**本地证明新依赖兼容 —— 由 CI 的 `pip install -r requirements.txt` + 全量门禁裁决。PR CI 全绿（13 项）；合并后 master push run `815afe9` 也 success（actions/cache v6 在 GH 托管 runner 上可用，8 处替换无告警）。
+- 本地补跑：CI 定义/依赖清单相关守卫 116 passed；3 个 workflow YAML 可解析（jobs 8/5/1 不变）。
