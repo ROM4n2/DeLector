@@ -575,3 +575,12 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 - **依赖事故（本轮新发现）**：#351 合并后 `uv pip install -r requirements.lock.txt` **不可解**——① `numpy==2.5.4` 要求 Python≥3.12 而项目 .venv 固定 3.11（dependabot 早先 a8ab228 单包 bump 引入）② `pydantic-core==2.50.4` 与 `pydantic==2.14.2` 精确要求的 2.50.2 冲突。修法：numpy→2.4.6、pydantic-core→2.50.2，并在 dependabot.yml 对 numpy 暂缓 minor/major（解除条件=最低 Python 升到 3.12）。
 - **判据缺口**：CI 只装 `requirements.txt`、**不读 lock**，所以 dependabot 把 lock 改成不可解组合时 CI 全绿。此后合并任何依赖 PR 前必须真跑 `uv pip install --dry-run -r requirements.lock.txt`（等价「锁文件可解」探针）。
 - 本地验证（项目级 .venv，不用全局 pip）：`uv pip install --python ./.venv/Scripts/python.exe -r requirements.lock.txt` 成功，实际版本 fastapi 0.162.2 / click 8.5.1 / typer 0.28.0 / typing-inspection 0.4.5 / numpy 2.4.6 / pydantic 2.14.2 + core 2.50.2；升级后全量 pytest 3040 passed / 3054 collected（2 failed + 3 errors 为本地既有噪声：GBK 解码、player_tray_probe、probe_json_contract —— 已在纯 master 上用 stash 复验同样红）。
+
+### 2026-11-11 07:00 | deepseek-v4.1-flash | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+v5.23.4 发版收尾。
+- 合并：PR #355 → `4e4289b`；tag annotated `v5.23.4` 触发 `build-release.yml` run 42955334647 **success**（四平台 + Publish 全绿）。
+- 资产（实测非零）：APK 62,284,439 B / Linux 128,347,681 B / macOS 61,677,611 B / Windows 90,747,260 B。
+- Release 正文按模板整份写入（含本版资产表）；v5.23.1 / v5.23.2 的警示仍指向可用版本（v5.23.3 及更早的警示文案无需再改）。
+- 依赖环境：项目级 `.venv` 已按 lock 升级（fastapi 0.162.2 / click 8.5.1 / typer 0.28.0 / typing-inspection 0.4.5 / numpy 2.4.6 / pydantic 2.14.2 + core 2.50.2）——**全部装在项目级 .venv，未动全局解释器**（用户明确要求）。
+- 遗留：桌面导出未在冻结 exe / macOS / Linux 验证；arm64 真机仍未点检；本地 2 failed + 3 errors 为既有环境噪声（GBK / player_tray_probe / probe_json_contract，纯 master 上同样红）。
