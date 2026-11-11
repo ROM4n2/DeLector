@@ -34,6 +34,15 @@ updates:
     # app.openapi()["paths"]）而免疫；2026-09-26 本地全量验证通过后升 fastapi 0.141.1，
     # 同时**撤销 ignore** —— 恢复由「dependabot 周更 + ci.yml 全量门禁」兜底。
     # 若将来再遇同类"守卫依赖上游实现细节"的问题，优先修守卫而不是加 ignore。
+    #
+    # numpy 暂缓 minor/major（2026-11-11 实测）：dependabot 已把 lock 里的 numpy 升到
+    # 2.5.4，而 numpy 2.5 起要求 Python>=3.12；本项目 `.venv` 固定 3.11（README
+    # `uv venv --python 3.11`，Android 侧 Chaquopy 更老），结果
+    # `uv pip install -r requirements.lock.txt` 直接解不出解 —— lock 变成装不上的清单。
+    # 解除条件：项目最低 Python 升到 3.12（需同步 README / CI matrix / Android 互锁）。
+    ignore:
+      - dependency-name: "numpy"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
 
   -
     package-ecosystem: "github-actions"
