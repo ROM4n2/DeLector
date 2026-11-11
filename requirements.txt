@@ -9,7 +9,12 @@
 # fastapi 0.162 省略布尔表单字段不再默认 False —— 本仓库 delector/ 无 Form() 用法，不适用；
 # starlette 1.10 QueryParams 相等性顺序变更 —— 本仓库无 query_params 相等比较，不适用；
 # 唯一风险面为 starlette 1.9 TestClient 流式响应，由 companion 测试的 client.stream 覆盖，待 CI 全量验证）。
-fastapi==0.162.0
+# 2026-11-11 批量合并 dependabot #346–#350（一次 PR 完成，避免 5 个 PR 各自把
+# requirements.lock.txt 按 `.gitattributes` 的 `eol=crlf` 整文件重写、制造 5 次 83 行噪声 diff）：
+# fastapi 0.162.0→0.162.2（patch）、click 8.5.0→8.5.1、pydantic-core 2.50.2→2.50.4、
+# typer 0.27.3→0.28.0、typing-inspection 0.4.4→0.4.5。风险面：fastapi 仅 patch 级；
+# typer 0.28 为 minor，本仓库只在工具脚本里用它做 CLI 参数解析（无 Typer app 注册面）。
+fastapi==0.162.2
 starlette==1.10.0
 uvicorn>=0.54.0
 spacy>=3.8.18
