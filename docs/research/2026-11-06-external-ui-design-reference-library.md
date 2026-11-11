@@ -529,7 +529,7 @@
 - 工具：本机 Microsoft Edge（`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`）以 `--headless=new --remote-debugging-port=9333` 启动；Node 脚本通过 CDP 执行 `Page.navigate`、`Runtime.evaluate`、`Page.captureScreenshot`。
 - 视口：1440×900，`deviceScaleFactor=1`，桌面 UA。
 - 每个页面等待 `document.readyState=complete` 后再等 3.5s，读取 `getComputedStyle`，并截首屏 JPEG。
-- 测量脚本位于临时目录，不提交仓库：`C:\Users\Haoyu\AppData\Local\Temp\del_research\measure.mjs`。
+- 测量脚本位于临时目录，不提交仓库：`C:\Users\<user>\AppData\Local\Temp\del_research\measure.mjs`。
 - 原始数据：`_artifacts/2026-11-06-design-reference-shots/measured.json`。
 - 截图目录：`_artifacts/2026-11-06-design-reference-shots/`（含 `readlang.jpg`、`linear-home.jpg`、`notion-help.jpg`、`obsidian-help.jpg`、`things3.jpg`、`ia-writer.jpg`、`lingq.jpg`、`anki.jpg`、`migaku.jpg`、`stripe-docs.jpg`、`vercel-docs.jpg`、`github-docs.jpg` 等）。该目录与 `_artifacts/t5t6-20261106/` 同级，属仓库内未跟踪证据目录，**不提交进 git**。
 

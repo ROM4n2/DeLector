@@ -27,11 +27,11 @@
 - 复现命令：
 
 ```powershell
-node C:\Users\Haoyu\AppData\Local\Temp\del_motion\measure.mjs d:\Code\DeLector\_artifacts\2026-11-07-motion-shots
+node C:\Users\<user>\AppData\Local\Temp\del_motion\measure.mjs d:\Code\DeLector\_artifacts\2026-11-07-motion-shots
 
 # 只补测某几个页面（结果按 id 合并进 motion.json）
 $env:ONLY='linear-changelog,nng-article'
-node C:\Users\Haoyu\AppData\Local\Temp\del_motion\measure.mjs d:\Code\DeLector\_artifacts\2026-11-07-motion-shots
+node C:\Users\<user>\AppData\Local\Temp\del_motion\measure.mjs d:\Code\DeLector\_artifacts\2026-11-07-motion-shots
 ```
 
 > 脚本是临时文件，不入库。原始数据与截图在仓库内 `_artifacts/2026-11-07-motion-shots/`（12 张 JPG + `motion.json`，共 13 个文件、1,213,531 字节），属未跟踪证据目录，**不提交 git**。
@@ -383,7 +383,7 @@ export function countUp(el, to, { duration = 520, format } = {}) {
 
 - 原始数据：`_artifacts/2026-11-07-motion-shots/motion.json`
 - 截图：`_artifacts/2026-11-07-motion-shots/*.jpg`（12 张；`medium.jpg` 为 Cloudflare 验证页，仅作失败证据）
-- 采集脚本：`C:\Users\Haoyu\AppData\Local\Temp\del_motion\measure.mjs`（临时，不入库）
+- 采集脚本：`C:\Users\<user>\AppData\Local\Temp\del_motion\measure.mjs`（临时，不入库）
 - 主要页面：
   - https://readlang.com/
   - https://help.obsidian.md/
