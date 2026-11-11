@@ -15,6 +15,36 @@
 5. README.md 的「版本历史」表只保留最近 3 版，旧版只进本文件。
 -->
 
+## v5.23.4 - 2026-11-11
+
+### 修复
+
+- **桌面壳导出「假成功」**（PR #344）：桌面版点导出时磁盘上没有文件，界面却弹「已导出」。根因是 pywebview / WebView2 默认不放行下载（`ALLOW_DOWNLOADS` 为假时 `DownloadStarting` 被静默取消），前端 `download()` 后无条件报成功。改为 `POST /api/wb/backup/save` 由 Python 显式落盘并返回真实 path / bytes，前端只在拿到 path 时提示成功；Android 仍保持 501 回退系统下载。
+- **`requirements.lock.txt` 装不上**（PR #352）：两个依赖冲突让锁文件不可解——`numpy==2.5.4` 要求 Python>=3.12 而项目 `.venv` 固定 3.11，`pydantic-core==2.50.4` 与 `pydantic==2.14.2` 精确要求的 `2.50.2` 冲突。已分别回退到 `2.4.6` 与 `2.50.2`。
+
+### 内部
+
+- **批量依赖升级**（PR #351）：fastapi 0.162.0→0.162.2、click 8.5.0→8.5.1、typer 0.27.3→0.28.0、typing-inspection 0.4.4→0.4.5；`actions/cache` v4→v6（8 处）。六个 dependabot PR 合成一笔，避免逐个把 lock 文件整文件重写。
+- **依赖治理**：`.github/dependabot.yml` 对 numpy 暂缓 minor/major（解除条件=项目最低 Python 升到 3.12）。dependabot 对 `requirements*.txt` 的单包升级不做整体一致性求解，CI 又只装 `requirements.txt`（不读 lock），因此合并此类 PR 前必须真跑 `uv pip install --dry-run -r requirements.lock.txt`。
+- **新增守卫**：`tools/wb_export_probe.mjs`（5 场景，钉「无 path 不报成功」）+ `tests/test_wb_export_save.py`（6 用例）。
+
+### 已知限制（Known Limitations）
+
+- **桌面导出只在 `desktop.py` 实跑验证**：冻结后的 exe、真实磁盘写失败路径、macOS / Linux 均未验证。
+- **arm64 真机仍未点检**：v5.23.3 的两处修复（阅读页模板、退出重进补载）只在 x86_64 模拟器（`emulator` 渠道 debug 包）验证；本版 Android 侧无功能变化，但含 `static/` 改动 ⇒ 仍需覆盖安装才生效。
+- **本地测试环境有既有噪声**：本机全量为 3040 passed，另有 2 failed + 3 errors 属环境问题——`test_frontend_layers` 的 GBK 控制台解码，以及 `test_player_tray_probe` / `test_probe_json_contract`（在未改动的 master 上同样失败）。CI 上全部通过。
+- **重复卡存量未合并**：写入侧已幂等，未建 UNIQUE，历史重复仍在库中。
+
+### 回滚（Rollback）
+
+- **代码 / 产物**：可回退至 `v5.23.3` 发布包（`v5.23.1` 白屏、`v5.23.2` 阅读页不可用，均不宜作为回退目标）；`build-release.yml` 由 tag 触发。
+- **Android**：`versionCode` 由 `52303` 升至 `52304`，不可回滚；只能卸载重装旧 APK（会清应用私有数据，须先备份）；`versionCode` 不得回拨。
+- **数据位置 / 格式**：未搬移数据目录、未改变数据文件格式。
+- **Schema**：零 DDL、零迁移，旧版可直接读同一 SQLite。
+- **配置 / 发布通道**：无新增必需配置或密钥；git revert 可回退代码。桌面导出改由 Python 落盘后，回退版本会恢复「导出假成功」的旧行为。
+
+---
+
 ## v5.23.3 - 2026-11-11
 
 ### 修复

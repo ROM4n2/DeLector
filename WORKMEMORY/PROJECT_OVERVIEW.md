@@ -23,7 +23,11 @@
 
 ## 当前状态
 
-- **最新发布 v5.23.3（2026-11-11）** —— **修复「点开文章毫无反应」+ Android「退出重进停在 Webpage not available」**（x86_64 模拟器实测通过）。
+- **最新发布 v5.23.4（2026-11-11）** —— **桌面导出真落盘 + 依赖锁文件可解性修复**。
+  - 桌面导出（#344）：pywebview/WebView2 默认不放行下载、`DownloadStarting` 被静默取消，旧前端仍无条件报成功；改为 `POST /api/wb/backup/save` 由 Python 落盘并回传真实 path/bytes，前端只在拿到 path 时报成功。
+  - 依赖（#351/#352）：fastapi 0.162.2 / click 8.5.1 / typer 0.28.0 / typing-inspection 0.4.5 / `actions/cache` v6；并把 lock 里 numpy 2.5.4→2.4.6（要求 Py≥3.12）、pydantic-core 2.50.4→2.50.2（与 pydantic 2.14.2 精确 pin 冲突）。dependabot 对 numpy 暂缓 minor/major。
+  - 教训：dependabot 对 `requirements*.txt` 单包升级不做整体求解，CI 只装 `requirements.txt` 不读 lock ⇒ 合并前必须跑 `uv pip install --dry-run -r requirements.lock.txt`。
+- **上一版 v5.23.3（2026-11-11）** —— **修复「点开文章毫无反应」+ Android「退出重进停在 Webpage not available」**（x86_64 模拟器实测通过）。
   - ① 阅读页 `_readerStateHtml` 删了 `const bar` 却留着 `${bar}` ⇒ 点文章抛 `ReferenceError`，交互静默失效（v5.23.1/v5.23.2 均带）。
   - ② 首帧导航早于本地服务就绪时，SW 的 network-first fetch 不经过 `shouldInterceptRequest` ⇒ ERR_FAILED；错误页 URL 仍是应用 origin 且不触发 `onPageFinished`，旧 `skip_reload` 判据把它当加载成功。修法：就绪后探针发现窗口里没有 `window.notifyServerReady` 就补载一次（一次性）。
   - 新守卫：`test_reader_state_template_uses_only_declared_vars`（变异自证）。
