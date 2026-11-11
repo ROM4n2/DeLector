@@ -3,11 +3,14 @@
 
 import ipaddress
 import json
+import os
+import re
 import socket
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from delector.core.database import (
@@ -31,13 +34,63 @@ from delector.core.database import (
     regenerate_wb_sync_key,
     save_wb_state,
 )
-from delector.core.utils import _attachment_headers
+from delector.core.utils import _attachment_headers, is_android
 from delector.core.wb_auth import require_wb_key
 from delector.routes.sync import _SYNC_INSTANCE_ID
 
 router = APIRouter()
 
 _BACKUP_LS_DENYLIST = ("wb.pair.v1",)
+
+_UNSAFE_EXPORT_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+
+def _export_download_dir() -> Tuple[Path, bool]:
+    """导出落盘目录：自动创建用户「下载」目录；创建失败才退回用户主目录。
+
+    返回 ``(目录, 是否退回)``。退回时前端文案必须显式说明真实位置，
+    不能把主目录当成正常下载目录（否则又是一次「看起来成功」）。
+    """
+    downloads = Path.home() / "Downloads"
+    try:
+        downloads.mkdir(parents=True, exist_ok=True)
+        return downloads, False
+    except OSError:
+        return Path.home(), True
+
+
+def _export_filename(filename: str) -> str:
+    """把前端传来的文件名压成单段安全名（防目录穿越 / 非法字符）。"""
+    name = (filename or "").replace("\\", "/").rsplit("/", 1)[-1]
+    name = _UNSAFE_EXPORT_CHARS.sub("_", name).strip(" .")
+    if not name:
+        name = "workbench-backup.json"
+    if not name.lower().endswith(".json"):
+        name += ".json"
+    return name[:120]
+
+
+def _write_export_file(filename: str, data: bytes) -> Tuple[Path, bool]:
+    """独占创建并 fsync；同名时追加 -2/-3，绝不覆盖已有文件。
+
+    返回 ``(真实路径, 是否退回到用户主目录)``。
+    """
+    directory, fell_back = _export_download_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    name = _export_filename(filename)
+    suffix = Path(name).suffix
+    stem = Path(name).stem
+    for index in range(1, 1000):
+        target = directory / (name if index == 1 else f"{stem}-{index}{suffix}")
+        try:
+            with target.open("xb") as handle:
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+            return target, fell_back
+        except FileExistsError:
+            continue
+    raise OSError("同名导出文件过多，请先清理下载目录")
 
 
 @router.get("/api/backup/export")
@@ -115,6 +168,31 @@ def wb_download_backup(token: str, request: Request) -> Any:
         media_type="application/json",
         headers=_attachment_headers(filename),
     )
+
+
+@router.post("/api/wb/backup/save")
+def wb_save_backup(req: WbBackupReq, request: Request) -> Dict[str, Any]:
+    """把工作台导出显式写到本机，返回真实路径与字节数。
+
+    桌面壳（pywebview + WebView2）默认 `ALLOW_DOWNLOADS=False`，导航到附件 URL 会被
+    `on_download_starting` 静默取消（`edgechromium.py:316-319`），前端拿不到任何
+    失败信号 ⇒ 旧的「无条件报成功」是假成功。这里由 Python 侧写盘：只有 `write` +
+    `fsync` 成功才返回 200，前端 toast 只认这个结果。Android 仍走系统下载通道。
+    """
+    _require_localhost(request)
+    if is_android():
+        raise HTTPException(status_code=501, detail="Android 使用系统下载通道")
+    data = json.dumps(req.payload, ensure_ascii=False, indent=2).encode("utf-8")
+    try:
+        target, fell_back = _write_export_file(req.filename, data)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"写入失败：{exc}") from exc
+    body: Dict[str, Any] = {"ok": True, "path": str(target), "bytes": len(data)}
+    if fell_back:
+        # 下载目录建不出来（权限/只读盘）：位置仍然真实，但不是用户预期的地方。
+        body["fallback_dir"] = True
+        body["warning"] = "下载目录不可用，已保存到用户主目录"
+    return body
 
 
 # ── Workbench 进度 server 镜像同步（wb_state）─────────────────────────────

@@ -46,6 +46,7 @@ PROTECTED_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("POST", "/api/writing/ai-polish"),
         ("POST", "/api/writing/ai-polish/diff"),
         ("POST", "/api/wb/backup/prepare"),
+        ("POST", "/api/wb/backup/save"),
         ("POST", "/api/wb/state/key"),
     }
 )

@@ -346,6 +346,11 @@ input[type="range"]{width:190px;accent-color:var(--accent)}
   font-size:14px;opacity:0;pointer-events:none;transition:all .25s;z-index:300;max-width:86vw;text-align:center;
 }
 #toast.show{opacity:1;transform:translateX(-50%)}
+/* I1：失败态不能只靠颜色 —— 文字前缀「⚠」+ 方角厚左边框（形状）+ 加长停留 */
+#toast[data-kind="error"]{
+  border:2px solid var(--danger);border-left-width:8px;border-radius:8px;
+  background:var(--paper);color:var(--ink);
+}
 
 /* ================= 响应式 ================= */
 @media (max-width:640px){
