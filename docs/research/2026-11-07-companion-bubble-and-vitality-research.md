@@ -123,7 +123,7 @@
 
 ### 2.5 第二类冲突：桌宠遮挡写作区（本次新增实测）
 
-用户提供的真机截图：`c:\Users\Haoyu\.trae-cn\attachments\f58ab0c9-f9fc-4ccb-8dbc-9807c81cdad3_689ce394-cd70-42c8-a03c-ed24c299be2b_image.png`（只读，未改动）。在写作页 393×852 下复现并测量：
+用户提供的真机截图：`C:\Users\<user>\.trae-cn\attachments\f58ab0c9-f9fc-4ccb-8dbc-9807c81cdad3_689ce394-cd70-42c8-a03c-ed24c299be2b_image.png`（只读，未改动）。在写作页 393×852 下复现并测量：
 
 写作页关键矩形（同时刻）：标题 `#writer-title` `(45, 531.38) 303×44`；正文 `#ide-editor` `(45, 587.38) 303×240`；卡片 `.writer-card-box` `(24, 475.38) 345×420`；底部 sheet `#writer-panel`（`.writer-sidebar`）桌面端 z-index **1100**。
 
