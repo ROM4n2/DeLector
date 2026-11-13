@@ -44,7 +44,7 @@ def test_release_verify_step_has_hard_deadline_and_step_timeout() -> None:
     # 判据 MUST 钉「同一条命令里的包裹关系」：把心跳与真启拆成两行独立命令时，
     # 子串在场断言照样全绿，但硬截止只罩住秒退的心跳行（独立 reviewer MAJOR）。
     assert re.search(
-        r"ci_heartbeat\.py[^\n]*--deadline-seconds 480[^\n]*--\s+python tools/verify_windows_portable\.py",
+        r"ci_heartbeat\.py[^\n]*--deadline-seconds 480[^\n]*--[ \t]+python tools/verify_windows_portable\.py",
         run,
     ), "心跳与真启脚本必须在同一条命令里（用 `--` 包裹），否则挂死仍只记 cancelled"
 
@@ -61,7 +61,7 @@ def test_release_verify_step_has_hard_deadline_and_step_timeout() -> None:
     assert ci_verify is not None, "ci.yml 里的参照护栏不见了（发布侧无从对齐）"
     assert ci_verify.get("timeout-minutes") == verify.get("timeout-minutes")
     assert re.search(
-        r"--deadline-seconds 480[^\n]*--\s+python tools/verify_windows_portable\.py",
+        r"--deadline-seconds 480[^\n]*--[ \t]+python tools/verify_windows_portable\.py",
         str(ci_verify.get("run", "")),
     ), "CI 侧参照护栏的包裹关系不成立"
 
@@ -73,7 +73,7 @@ def test_release_build_step_has_heartbeat() -> None:
     build = _step(_load(RELEASE)["jobs"]["build-windows"], "Build Windows Portable")
     run = str(build.get("run", ""))
     assert re.search(
-        r"ci_heartbeat\.py[^\n]*--stage build[^\n]*--\s+python package_windows\.py",
+        r"ci_heartbeat\.py[^\n]*--stage build[^\n]*--[ \t]+python package_windows\.py",
         run,
     ), f"心跳与构建命令必须在同一条命令里，实际：{run!r}"
 
