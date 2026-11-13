@@ -27,12 +27,13 @@
 > 4. **D3 裁决**：取 **B** —— 保持 `tests/test_static_cache_fingerprint.py:71` 的「无戳=开发态」明示契约，不改 `package_windows.py` 打包注入；桌面自证缺失只在 CHANGELOG 已知限制登记。
 > 5. **D4 裁决**：取 **B** —— `tools/` 加纯 stdlib 版本一致性判定器，零新工具链；文档 MUST 写明「非真实依赖求解」的判据边界。
 > 6. **D5 裁决**：取 **B** —— 不对外披露项目暂停；仅 WORKMEMORY / handoff 记录，README 反馈承诺不动（产品策略需用户单独拍板）。
-> 7. **执行形态裁决**：用户批准「可使用 dfs 系列工作流」，`/dfs-exec` 的 VCS 隔离硬闸优先于本计划 GC2 —— **任何实现不得落在 `master`**。采用**单一执行分支** `fix/repo-health-remediation`（从 `master` 开）：Stage 0 决策文档作为该分支**首个原子提交**（以提交顺序满足 GC3 的「决策先行」，单分支天然无 `work.log` 撞车），其后按 Stage 原子提交。因 `/dfs-exec` 要求「batch landing MUST end in a PR」，本批次以 **PR-ready 形态**停在本地分支，**不 push、不开 PR、不直接合 master**；是否推送与开 PR 由用户决定。
+> 7. **执行形态裁决（已被 2026-11-13 15:xx 用户新约束覆写，见第 11 条）**：用户批准「可使用 dfs 系列工作流」，`/dfs-exec` 的 VCS 隔离硬闸优先于本计划 GC2 —— **任何实现不得落在 `master`**。首批曾采用**单一执行分支** `fix/repo-health-remediation`（从 `master` 开）：Stage 0 决策文档作为该分支**首个原子提交**（以提交顺序满足 GC3 的「决策先行」），其后按 Stage 原子提交。因 `/dfs-exec` 要求「batch landing MUST end in a PR」，该批次以 **PR-ready 形态**停在本地分支，**不 push、不开 PR、不直接合 master**。该分支是**历史遗留的混合分支**（11 提交含 7 个 Task + 审查修复 + 文档），不再往里追加。
 > 8. **Tier 分级**：T1/T2/T3 = `[Tier: 3-Critical]`（HITL 授权由用户本次「批准 + 火力全开」覆盖）；T4/T5/T6/T9/T10/T11/T13/T14/T15 = `[Tier: 2-Standard]`；T7/T12/T16 与 Stage 0 = `[Tier: 1-Light]`。
 > 9. **能力边界登记（执行偏差）**：本环境只有只读 `code-explorer` 子代理，无法派实现型 Maker 子代理；故实现在编排者线程完成，**每个 Stage 结束派独立只读 reviewer 子代理对抗审查 + 编排者在父树物理复现至少 1 组变异自证**，以满足 `/dfs-exec` 的「independent reviewer dispatch」与 `/dfs-orchestrate` 的「child self-report 不是证据」。登记为技术债。
 > 10. **Ledger**：`/dfs-exec` 的 `vault_exec_state.py init` 用 `--tasks` 显式登记 T1~T16（本计划 Task 标题为 `#### T1 · ...` 格式，不匹配 CLI 的 `### Task N:` 正则，不能只传 `--plan-file`）。
+> 11. **一 PR 只做一件事（2026-11-13 15:11 用户新约束，覆写第 7 条的单一分支裁决）**：剩余每个 Task 各占一条**独立分支 + 独立 PR**（stacked，PR 的 base 指向 `fix/repo-health-remediation`，故每个 PR 的 diff 只含自己这一件事）；并行子代理 MUST 用**独立 git worktree** 隔离，绝不共享工作区。首批 11 提交留在 `fix/repo-health-remediation` 作为**历史遗留混合分支**，不再往里追加 Task 改动。合并按主题逐个进行，不打包；首批合并后其余分支 rebase 到新 `master` 并把 PR base 改回 `master`。
 >
-> **Branch / 状态**：单一执行分支 `fix/repo-health-remediation`；Stage 0 为该分支首个原子提交。**当前状态：实施中（2026-11-13），未 push、未开 PR。**
+> **Branch / 状态**：首批 = `fix/repo-health-remediation`（历史遗留混合分支，已停）；剩余 Task 各自独立分支（见 `.worktrees/`）。**当前状态：实施中（2026-11-13），未 push、未开 PR。**
 
 ---
 

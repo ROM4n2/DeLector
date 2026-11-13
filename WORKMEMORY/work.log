@@ -621,3 +621,11 @@ Work done: 整体健康度修复计划 16 Task 中完成 7 个（T1/T2/T5/T9/T11
 Remaining work: 9 个 Task 未开工 —— T3（写事务边界，改动面大）、T4（SW 旧缓存回落，需 Android 真机覆盖安装验证）、T6（lock 求解闸）、T7（发布 runbook 实证）、T8（dotenv / 半截文件 / 锁降级）、T10（死测族 4 处判据）、T13/T14（前端状态机与失败终态，需模拟器）、T15（资源无界与索引登记）。T4 是 4 条 CONFIRMED P1 中唯一未修的一条，无真机环境不得声称已验证。
 - 续跑入口：Ledger `.vault-exec-ledger.json` 保留 7/16 completed、`active_task_id=null`；在 `fix/repo-health-remediation` 分支用 `python <dfs-exec>/scripts/vault_exec_state.py --workdir . start-task --task-id <Tn>` 继续。MUST 继续遵守「禁止全量 test，只对点」。
 - 按裁决未做：不 push、不开 PR（以 PR-ready 形态停本地，等用户决定）；不对外披露项目暂停（D5=B）；不改桌面 build-stamp 的空戳契约（D3=B）；不真机点检；不发版。
+
+### 2026-11-13 15:11 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+用户新约束「**一个 PR 只做一件事**」+「分派子代理火力全开」。why：首批把 11 个原子提交（7 Task + 审查修复 + 文档 + 簿记）堆在单一 `fix/repo-health-remediation` 分支，一个 PR 会含 11 件事，审阅/取舍/回滚无法按主题进行。
+- 裁决：该分支标记为**历史遗留混合分支，停止追加 Task 改动**；剩余 Task 各占独立分支 + 独立 PR（stacked，PR base 指向首批分支 ⇒ 每个 diff 只含自己这一件事）。首批合并后其余 rebase 到新 master 并把 PR base 改回 master。
+- 隔离：并行子代理 MUST 用独立 git worktree，不共享工作区（HEAD 与文件所有权会互踩）。已建 3 个：`.worktrees/t6` → `fix/lock-solvability-gate`（T6）、`.worktrees/t8` → `fix/runtime-silent-degradation`（T8）、`.worktrees/t10` → `fix/dead-guard-probes`（T10），均基于首批 HEAD `60a669a`；`.worktrees/` 已加入 `.git/info/exclude`（本地排除，未改 .gitignore）。
+- 已同步：本约束写入计划 EXECUTION ADDENDUM 第 11 条、持久化到工作记忆 `feedback_one_pr_one_thing.md`。
+- 不做：不因新约束重写首批历史（无显式授权不做 rebase/cherry-pick 改写）。
