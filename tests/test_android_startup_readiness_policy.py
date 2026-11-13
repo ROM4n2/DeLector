@@ -166,18 +166,69 @@ def test_readiness_terminal_state_guard_rejects_regressions() -> None:
         assert mutated != good, f"变异 {label} 没改动源码（替换串失效）"
         assert _terminal_state_violations(mutated), f"变异 {label} 没被拦住"
 
-def test_fault_injection_is_debug_only() -> None:
-    """故障注入 MUST 被 BuildConfig.DEBUG 短路（release 包 R8 折叠后不留可激活路径）。
+# 原先的 `test_fault_injection_is_debug_only`（只看 `fakeStuckStart()` 之后 600 字符窗口，
+# 并假设窗口里只有一个 `BuildConfig.DEBUG &&`）已并入下面的逐方法用例：加入 `once` 档后
+# 该窗口出现第二个短路，「抹掉一处仍满足判据」的变异自证随之失效。新用例对三个注入入口
+# 分别切片验证短路，覆盖严格更强，不会因为多一个入口就假绿。
+# 用途登记：`--ez delector_fake_stuck true` 让预算立即耗尽、首帧不发起，用于真机点验
+# 「预算耗尽后的终态 UI」（2026-11-13 arm64 真机验证成功）；没有 DEBUG 短路，正式包就等于
+# 带了一个「让应用卡在 splash」的后门。
 
-    用途登记：adb shell am start ... --ez delector_fake_stuck true 会让启动预算立即
-    耗尽、首帧不发起，用于在真机上点验「预算耗尽后的终态 UI」（2026-11-13 arm64
-    真机验证成功）。它只在 debug 包生效——没有这层短路，正式包就等于带了一个
-    「让应用卡在 splash」的后门。
+def _retry_injection_violations(src: str) -> list[str]:
+    """`once` 注入档的三条硬要求：debug 短路 / 只第一轮耗尽 / 恢复首帧加载。
+
+    **逐方法**切片：三个入口各自必须带 `BuildConfig.DEBUG &&`，只要有一个裸奔，
+    正式包就多一条可激活后门；合并成一段切会被另一个方法的短路兜住（实测踩到）。
     """
-    src = _main_source()
-    start = src.index("private boolean fakeStuckStart()")
-    body = src[start : start + 600]
-    assert "BuildConfig.DEBUG &&" in body, "注入开关缺少 BuildConfig.DEBUG 短路"
-    assert "getBooleanExtra" in body
-    # 变异自证：抹掉短路后同一段不再满足判据（证明这条断言真在守它）
-    assert "BuildConfig.DEBUG &&" not in body.replace("BuildConfig.DEBUG &&", "", 1)
+    bad: list[str] = []
+    segments = (
+        ("private boolean fakeStuckStart()", "private boolean fakeStuckAlways()"),
+        ("private boolean fakeStuckAlways()", "private boolean fakeStuckFirstPollOnly()"),
+        ("private boolean fakeStuckFirstPollOnly()", "private void revealWebView"),
+    )
+    for sig, nxt in segments:
+        if sig not in src or nxt not in src:
+            return [f"切不到注入档位（结构被改）：{sig} / {nxt}"]
+        seg = src.split(sig, 1)[1].split(nxt, 1)[0]
+        if "BuildConfig.DEBUG &&" not in seg:
+            bad.append(f"{sig} 缺少 BuildConfig.DEBUG 短路（正式包会带可激活后门）")
+    if "delector_fake_stuck_once" not in src:
+        bad.append("缺 once 档开关")
+    if "private boolean injectedFirstPollDone" not in src:
+        bad.append("缺「只第一轮耗尽」的轮次状态")
+    if "!firstPaintSkipped" not in src:
+        bad.append("就绪分支未排除 firstPaintSkipped（重试后只会 reveal 一个空白 WebView）")
+    return bad
+
+
+def test_retry_then_pass_injection_is_debug_only_and_observable() -> None:
+    """`once` 档必须同时满足三条，否则「重试生效」无法被观察、或正式包留下后门。
+
+    背景（2026-11-13 arm64 真机点检卡点）：`fake_stuck` 档下点「重试」必然立刻再耗尽，
+    UI 与截图在「点了没反应」和「点了但立刻又失败」之间无法区分。`once` 档让第二轮走
+    真实预算，于是能观察到「终态 → 真实页面」的翻转 —— 但这依赖两点：
+    ① 只有第一轮耗尽（`injectedFirstPollDone`）；
+    ② 首帧被跳过时，就绪分支必须落到 `loadUrl` 而不是 `revealWebView`（`!firstPaintSkipped`），
+       否则重试成功也只是掀开一个从未加载过 URL 的空白 WebView，截图同样无法判定。
+    """
+    good = _main_source()
+    assert _retry_injection_violations(good) == [], _retry_injection_violations(good)
+
+    mutations = (
+        (
+            "去掉 once 档的 DEBUG 短路",
+            good.replace(
+                'return BuildConfig.DEBUG && getIntent().getBooleanExtra('
+                '"delector_fake_stuck_once", false);',
+                'return getIntent().getBooleanExtra("delector_fake_stuck_once", false);',
+            ),
+        ),
+        (
+            "删掉轮次状态字段",
+            good.replace("private boolean injectedFirstPollDone = false;", ""),
+        ),
+        ("就绪分支不再排除跳过首帧", good.replace("&& !firstPaintSkipped", "")),
+    )
+    for label, mutated in mutations:
+        assert mutated != good, f"变异 {label} 没改动源码（替换串失效）"
+        assert _retry_injection_violations(mutated), f"变异 {label} 没被拦住"
