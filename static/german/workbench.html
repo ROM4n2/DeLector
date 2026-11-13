@@ -2601,30 +2601,40 @@ async function download(filename, obj) {
   return { ok: null, fallback: true };
 }
 
+// 失败终态统一出口：download() reject 或 click 链抛出，都落一条 error 形态 toast。
+function reportExportFailure(err) {
+  const reason = err && err.message ? err.message : String(err);
+  toast("⚠ 导出失败：" + reason, "error");
+}
+
 // toast 只认 download() 的真实结果：写盘成功才报「已导出」，失败必须可见。
 async function exportAndReport(label, filename, obj) {
-  const res = await download(filename, obj);
-  if (res.ok) {
-    const where = res.fallbackDir ? "（下载目录不可用，已存到用户主目录）" : "";
-    toast("已导出" + label + "：" + res.path + "（" + res.bytes + " 字节）" + where);
-  } else if (res.fallback) {
-    toast("已请求下载，请在系统下载列表确认真实落盘");
-  } else {
-    toast("⚠ 导出失败：" + res.error, "error");
+  try {
+    const res = await download(filename, obj);
+    if (res.ok) {
+      const where = res.fallbackDir ? "（下载目录不可用，已存到用户主目录）" : "";
+      toast("已导出" + label + "：" + res.path + "（" + res.bytes + " 字节）" + where);
+    } else if (res.fallback) {
+      toast("已请求下载，请在系统下载列表确认真实落盘");
+    } else {
+      toast("⚠ 导出失败：" + res.error, "error");
+    }
+  } catch (err) {
+    reportExportFailure(err);
   }
 }
 $("btnExportFull").addEventListener("click", () => {
-  exportAndReport("完整备份", "wb-full-" + todayStr() + ".json", {
+  Promise.resolve().then(() => exportAndReport("完整备份", "wb-full-" + todayStr() + ".json", {
     type: "wb-full", version: 1, exportedAt: Date.now(),
     words: S.words, cards: S.cards, log: S.log, wrong: S.wrong, settings: S.settings
-  });
+  })).catch(reportExportFailure);
 });
 $("btnExportSync").addEventListener("click", () => {
   const custom = S.words.filter(w => w.custom);
-  exportAndReport("轻量同步文件", "wb-sync-" + todayStr() + ".json", {
+  Promise.resolve().then(() => exportAndReport("轻量同步文件", "wb-sync-" + todayStr() + ".json", {
     type: "wb-sync", version: 1, exportedAt: Date.now(),
     cards: S.cards, log: S.log, wrong: S.wrong, customWords: custom
-  });
+  })).catch(reportExportFailure);
 });
 $("fileImport").addEventListener("change", (e) => {
   const file = e.target.files[0];

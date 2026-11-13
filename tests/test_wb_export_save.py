@@ -7,7 +7,8 @@
 
 本文件钉两层：
 1. `POST /api/wb/backup/save` 真的写盘，并把真实路径与字节数回给前端；
-2. `tools/wb_export_probe.mjs` 切真源码跑五种场景，断言 toast 只认 `res.ok`。
+2. `tools/wb_export_probe.mjs` 切真源码逐场景跑（含 download 整体 reject / click 链抛出），
+   断言 toast 只认 `res.ok`，且失败一律走 `error` 形态。
 """
 
 from __future__ import annotations
@@ -158,10 +159,10 @@ def test_android_keeps_system_download_channel(client, export_dir: Path, monkeyp
 
 
 def test_export_toast_is_bound_to_probe_verified_result() -> None:
-    """动态探针：成功/失败/回退三条路径的 toast 都由真实结果驱动。"""
+    """动态探针：成功/失败/回退/整体 reject/click 抛出的 toast 都由真实结果驱动。"""
     out = run_json_probe("wb_export_probe")
     assert_probe_clean("wb_export_probe", out)
-    assert out["total"] >= 5
+    assert out["total"] >= 8
     assert {
         "save_ok",
         "save_ok_fallback_dir",
@@ -169,6 +170,8 @@ def test_export_toast_is_bound_to_probe_verified_result() -> None:
         "save_no_path",
         "fallback_501",
         "save_network_throw",
+        "download_all_reject",
+        "click_reject",
     } <= scenario_keys(out)
 
 

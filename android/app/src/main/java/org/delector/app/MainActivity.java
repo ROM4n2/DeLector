@@ -57,6 +57,7 @@ public class MainActivity extends AppCompatActivity {
     private WebView webView;
     private LinearLayout splashLayout;
     private TextView statusTextView;
+    private ProgressBar progressBar;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private volatile boolean isServerReady = false;
     /** Python 侧抛异常后服务永远不会就绪，用它让轮询与重载立刻停手并保留错误信息 */
@@ -443,7 +444,7 @@ public class MainActivity extends AppCompatActivity {
         subtitleView.setPadding(0, 12, 0, 36);
         subtitleView.setGravity(Gravity.CENTER);
 
-        ProgressBar progressBar = new ProgressBar(this);
+        progressBar = new ProgressBar(this);
         progressBar.setIndeterminate(true);
 
         statusTextView = new TextView(this);
@@ -469,8 +470,13 @@ public class MainActivity extends AppCompatActivity {
         // 静态资源由拦截层从 APK assets/static 交付；/api/* 走真实网络，
         // 首个请求被拒后由 article-store 的退避重试接管（navCount 保持 1）。
         StartupProbe.navZero();
-        StartupProbe.markNav("loadurl_first_paint", APP_ORIGIN + "/");
-        webView.loadUrl(APP_ORIGIN + "/");
+        if (fakeStuckStart()) {
+            // 注入态：不发起首帧，splash 会一直留着，终态文案才可见。
+            StartupProbe.markNav("loadurl_skipped_for_fault_injection", APP_ORIGIN + "/");
+        } else {
+            StartupProbe.markNav("loadurl_first_paint", APP_ORIGIN + "/");
+            webView.loadUrl(APP_ORIGIN + "/");
+        }
 
         // 4. Background Initialization (Assets Extraction + Python Server Launch)
         StartupProbe.mark("server_thread_spawn");
@@ -656,13 +662,10 @@ public class MainActivity extends AppCompatActivity {
                 + " ? String(window.notifyServerReady()) : 'missing';}catch(e){return 'err';}})()";
         webView.evaluateJavascript(js, value -> {
             StartupProbe.markNav("ready_notify", value);
-            if ("\"missing\"".equals(value)) {
+            // 'missing'（不是我们的页面）/ 'err'（页面 JS 抛异常）/ null 都要复位 CAS：
+            // 否则这个一次性标记会让 onPageFinished 的兜底注入永远不再发生，失败无终态。
+            if (value == null || "\"missing\"".equals(value) || "\"err\"".equals(value)) {
                 readyHookInjected.set(false);
-                // 文档已经加载结束，却连 window.notifyServerReady 都没有 ⇒ 这不是我们的页面。
-                // 典型成因：SW 的 network-first 在服务 listening 前导航，fetch 被拒（SW 发起的
-                // 请求不经过 shouldInterceptRequest），Chromium 换成错误页，而 URL 仍是应用
-                // origin、onReceivedError 也不为 SW 请求回调主帧 —— 旧判据因此一直 skip_reload。
-                // 此刻服务已就绪，补载一次即可恢复；只补一次，防止抖动成循环。
                 if (!reloadedForMissingPage && serverPort > 0) {
                     scheduleMissingPageCheck();
                 }
@@ -703,6 +706,20 @@ public class MainActivity extends AppCompatActivity {
      * WebView 常驻 VISIBLE（GONE/INVISIBLE 不绘制、rAF 被节流，首帧会推迟），所以幂等标记
      * 改看 splash 的可见性。
      */
+    /**
+     * debug 包的故障注入开关：模拟「服务进程起来了但 HTTP 永不就绪」。
+     *
+     * 用途：只有这种状态才会让启动预算真正耗尽、splash 上出现终态文案——正常设备上
+     * Python 2~10s 就绪、首帧 1s 就成功，splash 2.7s 就被撤掉，终态分支根本进不去
+     * （2026-11-13 arm64 真机点检的实测结论）。release 包 BuildConfig.DEBUG 恒 false，
+     * R8 会把整段折叠掉，正式产物不含此路径。
+     *
+     * 用法：adb shell am start -n org.delector.app/.MainActivity --ez delector_fake_stuck true
+     */
+    private boolean fakeStuckStart() {
+        return BuildConfig.DEBUG && getIntent().getBooleanExtra("delector_fake_stuck", false);
+    }
+
     private void revealWebView() {
         if (splashLayout.getVisibility() != View.VISIBLE) {
             return;
@@ -719,7 +736,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void pollServerReadiness(File dataDir) {
         StartupProbe.mark("poll_begin");
-        for (int i = 0; i < StartupReadinessPolicy.maxAttempts(); i++) {
+        // 注入态把预算置 0（等价于「等到预算用完也没起来」）；正常路径仍走策略类，
+        // 守卫 test_main_activity_uses_policy_instead_of_literals 要求这一行必须在此方法体内。
+        final int attempts = fakeStuckStart() ? 0 : StartupReadinessPolicy.maxAttempts();
+        for (int i = 0; i < attempts; i++) {
             if (fatalError != null) {
                 return; // 服务不可能再就绪，别用超时文案盖掉真实错误
             }
@@ -787,9 +807,18 @@ public class MainActivity extends AppCompatActivity {
         }
         final int timeoutPort = serverPort;
         mainHandler.post(() -> {
+            // 预算已耗尽：Java 侧不再轮询，必须给「可见终态 + 可点重试」，不能假进行中。
+            progressBar.setVisibility(View.GONE);
+            statusTextView.setTextIsSelectable(true);
             statusTextView.setText(timeoutPort > 0
-                    ? "服务启动超时（端口 " + timeoutPort + "），正在重试连接..."
-                    : "服务启动超时，正在重试连接...");
+                    ? "服务启动超时（端口 " + timeoutPort + "），已停止连接。点此重试。"
+                    : "服务启动超时，已停止连接。点此重试。");
+            statusTextView.setOnClickListener(v -> {
+                statusTextView.setOnClickListener(null);
+                statusTextView.setText("正在重新连接本地服务...");
+                progressBar.setVisibility(View.VISIBLE);
+                new Thread(() -> pollServerReadiness(getFilesDir())).start();
+            });
             if (timeoutPort > 0 && timeoutPort != APP_PORT) {
                 // 页面已在 8000 上加载时不再二次导航：留在快照 + 重试 UI 上。
                 StartupProbe.navZero();

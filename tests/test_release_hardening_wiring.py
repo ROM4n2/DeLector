@@ -85,3 +85,40 @@ def test_build_agent_job_has_explicit_timeout() -> None:
     assert isinstance(timeout, int) and 0 < timeout <= 60, (
         f"build-agent job 缺合理硬上限（实际 {timeout!r}）：挂死会烧满默认 360 分钟"
     )
+def _auto_body_warning_violations(body: str) -> list[str]:
+    """自动 Release 正文的失败版本警示判定器：缺任一要素都列为违规。
+
+    判据落在**警示行本身**，不是整篇正文：v5.23.1 / v5.23.2 在后续正文里还会被
+    提到（「v5.23.1 全平台白屏…」），只搜全文会让「警示行的版本号被删」假绿
+    （实测变异自证抓到的漏洞）。
+    """
+    violations: list[str] = []
+    warning_line = next((ln for ln in body.splitlines() if "请勿使用" in ln), "")
+    if not warning_line:
+        return ["自动正文没有明确的禁用措辞（整段警示缺失）"]
+    # 只判「禁用措辞 + 版本列表」那一段（全角冒号前）：同一行的后文还会复述
+    # 「v5.23.1 全平台白屏…」，按整行判会把「标题里的版本号被删」洗成绿。
+    ban_list = warning_line.split("：", 1)[0]
+    if "v5.23.1" not in ban_list or "v5.23.2" not in ban_list:
+        violations.append("警示行的禁用版本列表未同时点名 v5.23.1 / v5.23.2")
+    if "gh release edit" not in body or "另行核对" not in body:
+        violations.append("自动正文未声明人工覆盖后需另行核对（不得声称已覆盖）")
+    return violations
+
+
+def test_release_auto_body_warns_about_broken_tags() -> None:
+    """结构化 YAML 取 with.body 真值 → 判定器裁决；三类删改都必须变红。"""
+    release = _load(RELEASE)["jobs"]["publish-github-release"]
+    step = _step(release, "Create or Update Release")
+    body = str(step.get("with", {}).get("body", ""))
+    assert body, "Create or Update Release 缺 body（整体删除会静默无警示）"
+    assert _auto_body_warning_violations(body) == [], _auto_body_warning_violations(body)
+
+    assert _auto_body_warning_violations(body.replace("v5.23.1 / v5.23.2", "v5.23.0")), (
+        "删掉废弃版本号却没变红"
+    )
+    assert _auto_body_warning_violations(body.replace("另行核对", "已覆盖")), (
+        "把人工覆盖写成已覆盖却没变红"
+    )
+    line = next(ln for ln in body.splitlines() if "请勿使用" in ln)
+    assert _auto_body_warning_violations(body.replace(line, "")), "整段警示被删却没变红"
