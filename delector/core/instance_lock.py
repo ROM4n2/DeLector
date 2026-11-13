@@ -189,6 +189,27 @@ def _load_primitive(name: str) -> Optional[ModuleType]:
         return None
 
 
+def _emit_degraded_notice(reason: str) -> None:
+    """降级出口的可见喇叭：stderr 优先，无控制台时退回 logger。
+
+    刻意不新增 logging record —— 既有 `tests/test_instance_lock.py` 把
+    「降级 WARNING 恰好 1 条」钉成契约，多一条会让那条守卫变红。
+    锁仍是加固层，不拒启。
+    """
+    import sys
+
+    message = f"WARNING: 单实例锁降级（{reason}）：本次不是真互斥，同机多实例可能同时启动。"
+    stream = sys.stderr
+    if stream is None:
+        _LOGGER.warning("%s", message)
+        return
+    try:
+        print(message, file=stream)
+    except UnicodeEncodeError:
+        # Windows GBK 控制台 print 非 ASCII 会崩（本仓已知坑）：退回 logger 保底。
+        _LOGGER.warning("%s", message)
+
+
 def _warn_degraded(reason: str) -> None:
     """锁降级的唯一喇叭。文案必须点明「不是真互斥」，否则读日志的人会以为单实例仍成立。"""
     _LOGGER.warning("单实例锁降级（%s）：本次不是真互斥，同机多实例可能同时启动。", reason)
@@ -294,14 +315,18 @@ def try_acquire(paths: LockPaths, record: LockRecord) -> "LockHandle | LockRecor
     （只读介质、权限）时把用户挡在门外比降级更糟（spec §2.2 最后一行），故一律降级为
     无互斥句柄并 WARNING；调用方拿到 `LockHandle` 就继续启动，行为等于今天的端口探测路径。
     """
-    if not _ensure_parent_dir(paths):
+    def degraded(reason: str) -> LockHandle:
+        _emit_degraded_notice(reason)
         return LockHandle(paths=paths, record=record, _fd=-1)
+
+    if not _ensure_parent_dir(paths):
+        return degraded("单实例锁降级")
 
     try:
         fd = os.open(paths.lock, os.O_RDWR | os.O_CREAT, 0o600)
     except OSError as exc:
         _warn_degraded(f"无法打开锁文件 {paths.lock}（{exc}）")
-        return LockHandle(paths=paths, record=record, _fd=-1)
+        return degraded("单实例锁降级")
 
     acquired = _acquire_os_lock(fd)
     if acquired is None:
@@ -309,7 +334,7 @@ def try_acquire(paths: LockPaths, record: LockRecord) -> "LockHandle | LockRecor
         # （那里已打含真实 errno 的 WARNING）。此处再喊会给出假陈述，还会把
         # `_PRIMITIVE_MISSING_WARNED` 置真，让同进程后续真·原语缺失变成零 warning。
         _close_fd(fd)
-        return LockHandle(paths=paths, record=record, _fd=-1)
+        return degraded("单实例锁降级")
     if not acquired:
         _close_fd(fd)
         # 锁被持有但 meta 缺失/半截是合法中间态：收敛为 unknown，绝不把 None 漏给调用方。
@@ -326,5 +351,5 @@ def try_acquire(paths: LockPaths, record: LockRecord) -> "LockHandle | LockRecor
         # 记录本身不可序列化 = 调用方 bug：不吞（warn 显式点名），也不留悬空 fd。
         handle.release()
         _warn_degraded(f"锁记录无法序列化（{exc!r}）：已释放锁，本次不是真互斥")
-        return LockHandle(paths=paths, record=record, _fd=-1)
+        return degraded("单实例锁降级")
     return handle
