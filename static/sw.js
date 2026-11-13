@@ -92,10 +92,17 @@ async function networkFirst(event, request) {
     }
     return response;
   } catch (error) {
-    const cached = await caches.match(request);
+    // 2026-11-13 审计 P1 #4：只从**当前** CACHE_NAME 回落。
+    // `caches.match()` 默认跨所有 cache 搜索：覆盖安装后旧 SW 仍可能控制首帧，
+    // 它会命中旧 CACHE_NAME 里的旧 JS 并当成 200 交付 —— 页面跑在新服务端的旧壳上。
+    // 旧 cache 的正确归宿是 activate 里的清理，不是 fetch 的兜底。
+    const cache = await caches.open(CACHE_NAME);
+    const cached = await cache.match(request);
     if (cached) return cached;
-    if (request.mode === "navigate") {
-      const shell = await caches.match("/");
+    // 导航请求只在**真离线**时回落应用外壳；服务未就绪（fetch 失败但在线）
+    // 必须让错误冒泡，交给 MainActivity 的就绪探针补载，而不是拿旧壳冒充成功。
+    if (request.mode === "navigate" && self.navigator.onLine === false) {
+      const shell = await cache.match("/");
       if (shell) return shell;
     }
     throw error;
