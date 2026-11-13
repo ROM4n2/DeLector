@@ -156,6 +156,7 @@ SHARDS: dict[str, tuple[str, ...]] = {
         "tests/test_listen_engine.py",
         "tests/test_listen_lab_probe.py",
         "tests/test_llm_client.py",
+        "tests/test_install_apk_helper.py",
         "tests/test_localhost_guard.py",
         "tests/test_setup_go_guard.py",
         "tests/test_runtime_silent_degradation.py",

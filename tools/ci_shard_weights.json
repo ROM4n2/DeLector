@@ -121,6 +121,7 @@
   "tests/test_listen_engine.py": 0.1,
   "tests/test_listen_lab_probe.py": 0.2,
   "tests/test_llm_client.py": 0.0,
+  "tests/test_install_apk_helper.py": 0.1,
   "tests/test_localhost_guard.py": 0.0,
   "tests/test_setup_go_guard.py": 0.1,
   "tests/test_runtime_silent_degradation.py": 0.1,
