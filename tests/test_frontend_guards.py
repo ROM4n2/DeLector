@@ -273,6 +273,13 @@ _PROBE_SCENARIOS = (
     "mutation_submit_review_gate_removed_is_caught",
     "mutation_global_guard_throttle_removed_is_caught",
     "mutation_iframe_static_src_added_is_caught",
+    "satz_lab_network_failure_is_booting_not_raw_error",
+    "satz_lab_http_error_keeps_status_detail",
+    "satz_lab_undefined_error_treated_as_booting",
+    "notify_server_ready_retries_pending_satz_lab",
+    "notify_server_ready_ignores_idle_satz_lab",
+    "mutation_satz_lab_network_failure_classification_removed_is_caught",
+    "mutation_satz_lab_retry_hook_removed_from_notify_is_caught",
 )
 
 
