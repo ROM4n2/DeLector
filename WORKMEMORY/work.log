@@ -696,3 +696,19 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 Work done: 上条 NOTE 的 T10 ②/④ 两个独立 PR；累计 10 个独立 PR + 1 个历史遗留混合分支，工作树全干净、未 push / 未开 PR。Ledger 仍 13/16（T10 因 ③ 未落地保持 pending，避免把部分完成记成完成）。
 Remaining work: `T10` 的 ③（模块图判据，方案需重做）/ `T4`（需 Android 真机）/ `T14`（需模拟器）。继续按「一 Task 一分支一 PR、独立 worktree、只跑对点测试」推进。
 - 不做：不 push、不开 PR、不发版、不真机点检、不重写历史（均无显式授权）。
+
+### 2026-11-13 17:48 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+T10-③ 重做完成（上一批因 diff 与真实源码脱节被拒收，本次重新派只读诊断席位逐字读源码）。
+- `fix/module-graph-guards` `ec386ef` + `eea9110` + `bbdc609`（T10-③，独立 PR）：三处判据真实源码落地 —— ① 自身导出正则 `\}(?!\s*from\b)` 堵零宽回溯（运行时与常量两处）；② `_module_local_bindings` 改 `_iter_code` 状态机只收花括号净深度 0 的顶层声明；③ `_all_cycles` 全图遍历替换只钉 3 模块、CI 缺 node 改 `pytest.exit(returncode=1)`、新增 `_pytest.outcomes` 行为探针（不再用不存在的 `pytest.Exit/Skipped`）。PR 净 diff 330 insertions / 22 deletions，仅改现有测试文件、无分片登记冲突。
+- 验证：对点 **31 passed**；相关守卫 `test_ci_hardening_infra.py` / `governance.py` / `test_probe_wiring_guard.py` **44 passed**；ruff 绿；三组父树物理变异（旧正则 / 全文 findall / 注入 `/[}]/` 到 main.js）均红→恢复绿。
+- 独立 reviewer 复核：**无 BLOCKER**；R1/R3/R5 OK，R2 CONCERN（正则字面量花括号会让深度漂移，当前生产文件不触发）、R4 CONCERN（`CI=0` 会误判，但属全仓 conftest 既有约定且被 `test_ci_hardening_infra.py:370` 钉住，非本 PR 引入）。R2 已补源码级棘轮 `test_iter_code_depth_returns_to_zero_on_real_exposer_files`，未来引入该形态立即红；R4 如实登记，未擅自改全仓约定。
+- 已知瑕疵：③ 与 ② 的 PR 内都有中间修正提交（③ 含一次 CRLF 全文件重写），最终净 diff 与测试均干净，但历史需 Squash and merge 才干净（未授权改写历史，故保留）。
+- **T10 四项 ①②③④ 全部完成**，Ledger 14/16 completed、`active_task_id=null`。
+
+### 2026-11-13 17:48 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 上条 NOTE 的 T10-③ 独立 PR；累计 11 个有交付的独立 PR + 1 个历史遗留混合分支，工作树全干净、未 push / 未开 PR。方案备料 `.git/t10full.txt` 已删（T10 完成），`.git/t14.txt` 保留供 T14。
+Remaining work: `T4`（SW 旧缓存回落，4 条 CONFIRMED P1 中唯一未修，需 Android 真机覆盖安装验证）/ `T14`（失败终态，需 Android 模拟器 x86_64 + arm64 真机点检）。这两项不提供设备环境不会硬做，也不会写成已验证。
+- 合并顺序：首批历史分支（或按主题拆分）→ `fix/register-new-guard-tests` → 其余 10 个 PR 可并行；合并后 rebase 到新 `master` 并把 PR base 改回 `master`；含中间修正提交的 PR 建议 Squash and merge。
+- 不做：不 push、不开 PR、不发版、不真机点检、不重写历史（均无显式授权）。
