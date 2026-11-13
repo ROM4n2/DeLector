@@ -629,3 +629,23 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 - 隔离：并行子代理 MUST 用独立 git worktree，不共享工作区（HEAD 与文件所有权会互踩）。已建 3 个：`.worktrees/t6` → `fix/lock-solvability-gate`（T6）、`.worktrees/t8` → `fix/runtime-silent-degradation`（T8）、`.worktrees/t10` → `fix/dead-guard-probes`（T10），均基于首批 HEAD `60a669a`；`.worktrees/` 已加入 `.git/info/exclude`（本地排除，未改 .gitignore）。
 - 已同步：本约束写入计划 EXECUTION ADDENDUM 第 11 条、持久化到工作记忆 `feedback_one_pr_one_thing.md`。
 - 不做：不因新约束重写首批历史（无显式授权不做 rebase/cherry-pick 改写）。
+
+### 2026-11-13 15:52 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+第二批交付（15:11~15:52）收口。
+- 子代理：并行派 3 个实现席位（T6 / T8 / T10），受工具能力限制均为 READ-ONLY（仅 search/read），产出精确 unified diff + 新测试全文 + 对点命令清单，**未落地 / 未跑测试 / 未提交**，且明确不编造实测数字；由编排者在各自 worktree 落地。该能力边界登记为技术债。
+- 隔离：4 个独立 git worktree（`.worktrees/{shards,t6,t8,t10}`），stacked 链 `master` → `fix/repo-health-remediation`（历史遗留混合分支，已停） → `fix/register-new-guard-tests` → 三个 Task 分支。PR base 指向前一环 ⇒ 每个 diff 只含自己这一件事。
+- 4 个 PR（工作树全干净、未 push、未开 PR）：
+  ① `fix/register-new-guard-tests` `f2d260e`：修首批引入的真实回归（3 个新守卫未登记 `ci_shards` ⇒ 分片守卫红），补 CI 的 pyyaml 测试期依赖。对点 39 passed，删一条注册的变异红→恢复绿。
+  ② `fix/lock-solvability-gate` `d041bb1`（T6）：`pip --dry-run` 真求解闸 + PyYAML 结构化接线守卫 + 分片登记。对点 45 passed，删 step 的物理变异红→恢复绿。
+  ③ `fix/runtime-silent-degradation` `4a03010` + `a74b024`（T8）：dotenv 显式 env 优先 / 写盘失败清半截文件 + detail 脱敏 / 锁降级 stderr 可见告警 + 分片登记。RED 3 failed → GREEN 70 passed；物理变异曾暴露「本机未装 dotenv ⇒ `override` 改动无人守」，补注入假 dotenv 的行为探针后变异红→恢复绿。
+  ④ `fix/setup-go-guard` `8728d46`（T10-①）：删恒真的 `setup-go@v5` 子串判据，改解析 YAML 的 `uses:` 真值 + 阴性 / 注入式变异用例 + 分片登记。对点 42 passed，删真实 uses 的物理变异红→恢复绿。
+- 纪律：全程**只跑对点测试**，未跑全量 pytest；每个 PR 内新增测试自行登记分片（自洽）；ruff 与 JSON 合法性逐 PR 验证；无 PR 混入别的文件。
+- 剩余：T3 / T4 / T7 / T13 / T14 / T15 未开工；T10 的 ②③④（前端守卫探针 / 模块图判据 / wb 锚点配平）方案已由子代理产出（持久化在会话输出），未落地。Ledger 9/16 completed、`active_task_id=null`。
+
+### 2026-11-13 15:52 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 上条 NOTE 的 4 个独立 PR，全部 PR-ready、工作树干净、未 push / 未开 PR。
+Remaining work: 按 `docs/plans/2026-11-13-repo-health-remediation.md` 续跑剩余 7 个 Task；每个仍须独立分支 + 独立 PR（stacked），继续「禁止全量 test，只对点」。T4 需 Android 真机覆盖安装验证，不得在无真机环境声称已修。
+- 合并顺序建议：先合首批历史分支（或按主题拆分）→ 分片注册 PR → T6 / T8 / T10-① 三个 PR 可并行；合并后其余分支 rebase 到新 master 并把 PR base 改回 master。
+- 不做：不 push、不开 PR、不发版、不真机点检、不重写首批历史（均无显式授权）。
