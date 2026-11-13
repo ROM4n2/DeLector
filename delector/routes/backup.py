@@ -34,6 +34,7 @@ from delector.core.database import (
     regenerate_wb_sync_key,
     save_wb_state,
 )
+from delector.core.db.backup import restore_write_barrier
 from delector.core.utils import _attachment_headers, is_android
 from delector.core.wb_auth import require_wb_key
 from delector.routes.sync import _SYNC_INSTANCE_ID
@@ -308,7 +309,7 @@ def restore_database_backup(req: RestoreReq, request: Request) -> Dict[str, Any]
     _require_localhost(request)
     payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
 
-    with _db_snapshot_guard():
+    with restore_write_barrier(), _db_snapshot_guard():
         conn = get_db()
         try:
             with conn:

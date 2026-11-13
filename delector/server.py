@@ -6,8 +6,10 @@ from typing import AsyncIterator, Awaitable, Callable
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+
+from delector.core.db.backup import RESTORE_IN_PROGRESS, note_write_end, note_write_start
 
 # Windows 的 mimetypes 读注册表，.woff2 未必登记 → 静态资源落到
 # application/octet-stream。字体经 @font-face 加载（不查严格 MIME），多数浏览器
@@ -357,6 +359,34 @@ def create_app() -> FastAPI:
     app.state.static_dir = STATIC_DIR
     app.middleware("http")(add_frontend_no_cache_headers)
     app.middleware("http")(_wb_sync_cors)
+
+    async def _restore_write_barrier(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        """还原期间挡住其它写请求（2026-11-13 审计 P1 #1，见 db/backup.py）。
+
+        只拦写方法；还原端点自身跳过（它自己持屏障）。Event 置位时立即 503 +
+        Retry-After，**不排队**，避免占满 anyio 线程池把还原自己饿死。
+        未置位时登记在途计数，让 `restore_write_barrier()` 能等它排空。
+        """
+        if (
+            request.method in ("POST", "PUT", "PATCH", "DELETE")
+            and request.url.path != "/api/backup/restore"
+        ):
+            if RESTORE_IN_PROGRESS.is_set():
+                return JSONResponse(
+                    status_code=503,
+                    content={"detail": "restore_in_progress"},
+                    headers={"Retry-After": "1", "Cache-Control": "no-store"},
+                )
+            note_write_start()
+            try:
+                return await call_next(request)
+            finally:
+                note_write_end()
+        return await call_next(request)
+
+    app.middleware("http")(_restore_write_barrier)
     register_routes(app)
     init_db()
     seed_preset_articles()
