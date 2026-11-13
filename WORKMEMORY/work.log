@@ -680,3 +680,19 @@ Work done: 上条 NOTE 的 2 个独立 PR；累计 8 个独立 PR + 1 个历史�
 Remaining work: `T4`（SW 旧缓存回落，4 条 CONFIRMED P1 中唯一未修，需 Android 真机覆盖安装验证，无真机不得声称已修）/ `T10` 的 ②③④（前端守卫探针 / 模块图判据 / wb 锚点配平，方案就绪）/ `T14`（失败终态，需模拟器）。继续按「一 Task 一分支一 PR、独立 worktree、只跑对点测试」推进。
 - 合并顺序：首批历史分支（或按主题拆分）→ `fix/register-new-guard-tests` → 其余 7 个 PR 可并行；合并后 rebase 到新 `master` 并把 PR base 改回 `master`。
 - 不做：不 push、不开 PR、不发版、不真机点检、不重写历史（均无显式授权）。
+
+### 2026-11-13 17:02 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+第五批（T10 专项）收口：拆成 3 个独立 PR，落地 2 个，第 3 个按纪律拒收半成品。
+- ① `fix/setup-go-guard` 已于前批交付（`8728d46`）。
+- ② `fix/frontend-guard-probes` `0aeba62` + `8b3bbb6`：前端守卫从字符串断言改为 node 行为探针（新建 `tools/frontend_guards_probe.mjs`，15 场景含 5 个 `mutation_*` 变异自证），`tests/test_frontend_guards.py` 全量重写；node 15/15 全绿、对点 20 passed、ruff 绿。**已知瑕疵**：第一个提交含语法错误（编排者通用拆行脚本误伤 JS 字符串里的 `; `，且子代理写了不存在的 `pytest.Exit` / `pytest.Skipped`），第二个提交修正；PR 最终状态正确，但历史需 squash 才干净（未授权改写历史，故保留两提交，合并时用 Squash and merge 即可）。
+- ④ `fix/wb-probe-slicer` `00d1ef4` + `185a2e7`：`tools/wb_export_probe.mjs` 的 `sliceFunction` 按红线 13 改为跳过字符串/注释/模板的括号配平 + 参数表 `)` 后 MUST 是 `{`；探针内建 5 个 `slice_*` 自证场景，测试补阳性 + 注入式变异副本。node 11/11 全绿、对点 10 passed、ruff 绿；删 `paramsEnd` 行的物理变异使 node 探针 exit 1、恢复后 exit 0。
+- ③ **未落地**：`fix/module-graph-guards` worktree 已重置到 base（干净）。原因：子代理 diff 的 9 个 hunk 中 4 个与实际源码上下文冲突（`git apply --reject` 留半成品、5 个测试红），且新增测试沿用不存在的 `pytest.Exit/Skipped`。按「守卫必须能红、不提交半成品」的纪律拒收；完整方案保留在 `.git/t10full.txt`，需重新基于真实源码设计。
+- 踩坑：子代理完整文件方案里 `pytest.Exit/Skipped` 须换 `from _pytest.outcomes import Exit, Skipped`；E702 拆行 MUST 限定在 `_iter_braces` 函数体（40–90 行），全文件拆行会误伤 JS 字符串字面量。
+- 纪律：全程只跑对点测试，未跑全量 pytest；每个 PR 独立 worktree + 独立分支（stacked，base 指向 `fix/register-new-guard-tests`），diff 只含自己这一件事；不新增测试文件、无分片登记冲突。
+
+### 2026-11-13 17:02 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 上条 NOTE 的 T10 ②/④ 两个独立 PR；累计 10 个独立 PR + 1 个历史遗留混合分支，工作树全干净、未 push / 未开 PR。Ledger 仍 13/16（T10 因 ③ 未落地保持 pending，避免把部分完成记成完成）。
+Remaining work: `T10` 的 ③（模块图判据，方案需重做）/ `T4`（需 Android 真机）/ `T14`（需模拟器）。继续按「一 Task 一分支一 PR、独立 worktree、只跑对点测试」推进。
+- 不做：不 push、不开 PR、不发版、不真机点检、不重写历史（均无显式授权）。
