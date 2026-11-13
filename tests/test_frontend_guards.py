@@ -339,11 +339,10 @@ def test_rating_bar_buttons_still_rendered_with_submit_handler():
 # ── 变异自证 ────────────────────────────────────────────────────────────────
 def test_static_layer_red_short_circuits_before_node_vm(monkeypatch):
     """静态层红 ⇒ MUST NOT 调 _run_probe（即不跑 node:vm）。"""
-    broken = READER.replace(
-        "  try {\n    for (let attempt = 1; ; attempt += 1) {",
-        "  for (let attempt = 1; ; attempt += 1) {",
-    )
-    assert broken != READER, "注入式变异锚点应恰好命中 1 处"
+    # 删除全部 `try {`：T13 在同一函数里新增了退避等待的 try，只删旧锚点那一处
+    # 已经不会让静态层变红（合并后实测），故按语义删光 try 关键字。
+    broken = READER.replace("try {", "")
+    assert broken != READER, "注入式变异应至少改动一处 try {"
     monkeypatch.setattr(sys.modules[__name__], "READER", broken)
     monkeypatch.setattr(
         sys.modules[__name__], "_run_probe",
@@ -414,7 +413,6 @@ def test_reader_state_template_uses_only_declared_vars():
 
 # ── T13：阅读页状态机残留（行为探针：node 真跑 + 内建变异自证）─────────────
 import json  # noqa: E402
-import shutil  # noqa: E402
 import subprocess  # noqa: E402
 
 from probe_runner import require_node  # noqa: E402

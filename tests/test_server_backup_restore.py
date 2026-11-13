@@ -780,6 +780,7 @@ def test_restore_wb_projection_holds_write_lock_before_first_select(client, test
             rival.close()
         return real_project(conn, payload)
 
+    # mock-drift-ok: 消费方在 routes/backup.py 还原尾段调用期经模块属性取值，补丁即时生效
     monkeypatch.setattr(vocab_pool, "project_wb_deck", spy)
 
     backup = client.get("/api/backup/export").json()

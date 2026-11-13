@@ -193,6 +193,7 @@ def test_service_worker_fallback_does_not_cross_cache_versions() -> None:
         if os.environ.get("CI"):
             pytest.exit("CI 缺少 node：SW 缓存回落探针不能静默跳过", returncode=1)
         pytest.skip("未安装 node：本探针需要 node 执行真实 networkFirst")
+    assert node is not None  # 类型收窄：pytest.skip 不被 mypy 当作 NoReturn
     proc = subprocess.run(
         [node, "-e", SW_FALLBACK_PROBE],
         capture_output=True,

@@ -146,6 +146,8 @@ const readerStatePrefix = () => [
   takeLine(readerJs, /^let _readerOpenToken\s*=.*$/m, "_readerOpenToken"),
   takeLine(readerJs, /^const READER_LOADING_HINT\s*=.*$/m, "READER_LOADING_HINT"),
   takeLine(readerJs, /^const READER_NLP_LOADING_HINT\s*=.*$/m, "READER_NLP_LOADING_HINT"),
+  takeLine(readerJs, /^let _readerRetryTimer\s*=.*$/m, "_readerRetryTimer"),
+  takeLine(readerJs, /^const READER_LOADING_TITLE\s*=.*$/m, "READER_LOADING_TITLE"),
 ].join("\n");
 
 /* ── A：openReader 加载占位 + 失败可见 ─── */
@@ -162,6 +164,9 @@ async function scenarioOpenReader() {
       isRetryableError: () => false,
       RETRY_DELAYS_MS: [],
       RETRY_BUDGET_MS: 0,
+      // T13 引入：openReader 开头先撤掉上一篇的退避定时器。它是模块级函数、不在切片里，
+      // 这里给无副作用桩；本探针只断言占位/失败态，不对定时器本身下判断。
+      _cancelReaderRetryTimer: () => {},
       _openReaderBody: async () => { throw new Error("boom"); },
       notify: (msg) => state.notify.push(msg),
       Date: class extends Date { static now() { return 1000; } },
@@ -185,7 +190,7 @@ async function scenarioOpenReader() {
     `errors=${r.state.errors.length} notify=${r.state.notify.length} title=${r.titleEl.textContent}`);
 
   const noPlaceholder = replaceOnce(
-    openReaderFn, 'if (titleEl) titleEl.textContent = "⏳ 载入中…";',
+    openReaderFn, 'if (titleEl) titleEl.textContent = READER_LOADING_TITLE;',
     "if (titleEl) { /* 占位被删 */ }", "openReader 加载占位"
   );
   const m1 = await run(noPlaceholder);
