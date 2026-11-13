@@ -283,7 +283,7 @@ def test_static_gates_run_in_exactly_one_shard():
 # 其中判定器本身 1–3s）。
 # ci-speed-budget §3.3 明确要求「只为一个断言单开 job」应并入现有机械闸；本轮
 # 为抵消 cost 分片拆分新增的 1 个 job（峰值并发预算 ≤13），把它们合并成一个 job。
-# 守卫钉住：三个判定器仍逐步执行、无 continue-on-error、job 级超时仍按轻量闸预算。
+# 守卫钉住：四个判定器仍逐步执行、无 continue-on-error、job 级超时仍按轻量闸预算。
 MECHANICAL_STDLIB_GATE_SCRIPTS = (
     "tools/check_silent_degradation.py",
     "tools/check_mock_drift.py",

@@ -40,62 +40,82 @@ from delector.core.db.connection import (
 
 BACKUP_FORMAT_VERSION = 2
 
-# ── 还原期间的写请求屏障（2026-11-13 整体健康度审计 P1 #1）──────────────────
+# ── 还原期间的请求屏障（2026-11-13 整体健康度审计 P1 #1）────────────────────
 # 事故链：`restore_database_backup` 把还原拆成 4 个独立事务，`_db_snapshot_guard`
 # 的 yield 期间不持锁；任一步失败时 `snap.backup(live)` 整库覆盖活库，会把事务
-# 间隙里**其它请求**提交的合法写入一并抹掉。
+# 间隙里**其它请求**提交的合法写入一并抹掉（文章详情 GET 也会惰性回写，故屏障
+# 覆盖**所有** HTTP 请求，不是只拦写方法）。
 #
 # 修法不是取消自动回滚（2026-10-15 P0 的「已清库必须滚回去」契约不能放宽），
-# 而是让间隙里不可能有别的写请求：
-#   ① Event 置位 ⇒ HTTP 层新写请求立即 503 + Retry-After（不排队、不占线程池）；
-#   ② 等待已在途（检查过 Event、还没执行完）的写请求计数归零再开始还原；
-#   ③ 单实例锁只拦第二进程，本屏障补的是**同进程其它线程**这个洞。
+# 而是让间隙里不可能有别的请求：
+#   ① `note_write_start()` 在**同一把锁内**完成「检查 Event + 登记在途计数」——
+#      分开两步会被还原抢进窗口（独立 reviewer BLOCKER-1）；
+#   ② Event 置位后 503 新请求，并等已在途的请求排空再开始还原；
+#   ③ `RESTORE_OWNER_LOCK` 保证同时只有一次还原，否则先结束者 clear Event
+#      会让仍在还原者裸露（独立 reviewer BLOCKER-2）。
 # 跨进程 / 外部工具直连 SQLite 的写入不在保护范围（本仓单实例语义，见 instance_lock）。
 RESTORE_WRITE_LOCK = threading.Lock()
+RESTORE_OWNER_LOCK = threading.Lock()
 RESTORE_IN_PROGRESS = threading.Event()
-_ACTIVE_WRITES = 0
+_ACTIVE_REQUESTS = 0
 RESTORE_BARRIER_TIMEOUT_SEC = 5.0
 
 
-def note_write_start() -> None:
-    """HTTP 层写请求开始：登记在途计数（由 server 的 middleware 调用）。"""
-    global _ACTIVE_WRITES
+def note_write_start() -> bool:
+    """HTTP 请求进入：**原子地**检查屏障并登记在途计数。
+
+    返回 False ⇒ 还原正在进行，调用方 MUST 立即 503，且**不得**调用
+    `note_write_end()`（本次没有登记）。
+    """
+    global _ACTIVE_REQUESTS
     with RESTORE_WRITE_LOCK:
-        _ACTIVE_WRITES += 1
+        if RESTORE_IN_PROGRESS.is_set():
+            return False
+        _ACTIVE_REQUESTS += 1
+        return True
 
 
 def note_write_end() -> None:
-    """HTTP 层写请求结束（含异常路径）：在途计数出栈。"""
-    global _ACTIVE_WRITES
+    """HTTP 请求结束（含异常路径）：在途计数出栈，钳制下界防多减导致永久超时。"""
+    global _ACTIVE_REQUESTS
     with RESTORE_WRITE_LOCK:
-        _ACTIVE_WRITES -= 1
+        _ACTIVE_REQUESTS -= 1
+        if _ACTIVE_REQUESTS < 0:
+            _ACTIVE_REQUESTS = 0
 
 
 @contextmanager
 def restore_write_barrier() -> Iterator[None]:
-    """挡住新写请求并等在途写请求排空，然后才允许还原开始。
+    """挡住新请求、等在途请求排空，然后才允许还原开始。
 
-    等待有硬截止：在途写请求卡住时宁可让还原**响亮失败**，也不能带着并发写入
-    进入 4 段事务间隙。finally 无条件复位 Event —— 一次失败不得让全站写接口
-    永久 503。
+    等待有硬截止：在途请求卡住时宁可让还原**响亮失败**，也不能带着并发写入
+    进入 4 段事务间隙。finally 无条件复位 Event 与 owner —— 一次失败不得让
+    全站请求永久 503，也不得让 owner 锁泄漏使还原永久不可用。
     """
-    RESTORE_IN_PROGRESS.set()
-    deadline = time.monotonic() + RESTORE_BARRIER_TIMEOUT_SEC
+    if not RESTORE_OWNER_LOCK.acquire(blocking=False):
+        raise RuntimeError("已有一次还原在进行中，请稍后重试（本次未开始，未改动任何数据）。")
     try:
-        while True:
+        with RESTORE_WRITE_LOCK:
+            RESTORE_IN_PROGRESS.set()
+        deadline = time.monotonic() + RESTORE_BARRIER_TIMEOUT_SEC
+        try:
+            while True:
+                with RESTORE_WRITE_LOCK:
+                    inflight = _ACTIVE_REQUESTS
+                    if inflight == 0:
+                        break
+                if time.monotonic() >= deadline:
+                    raise RuntimeError(
+                        "还原无法开始：仍有 %d 个请求在途（等待 %.1fs 超时），"
+                        "请稍后重试还原。" % (inflight, RESTORE_BARRIER_TIMEOUT_SEC)
+                    )
+                time.sleep(0.005)
+            yield
+        finally:
             with RESTORE_WRITE_LOCK:
-                inflight = _ACTIVE_WRITES
-            if inflight == 0:
-                break
-            if time.monotonic() >= deadline:
-                raise RuntimeError(
-                    "还原无法开始：仍有 %d 个写请求在途（等待 %.1fs 超时），"
-                    "请稍后重试还原。" % (inflight, RESTORE_BARRIER_TIMEOUT_SEC)
-                )
-            time.sleep(0.005)
-        yield
+                RESTORE_IN_PROGRESS.clear()
     finally:
-        RESTORE_IN_PROGRESS.clear()
+        RESTORE_OWNER_LOCK.release()
 
 # app_settings 的**正向**白名单。用白名单而非黑名单：将来新增敏感设置项时，
 # 黑名单会默认泄露，白名单会默认安全。DEEPSEEK_API_KEY 绝不在列 ——

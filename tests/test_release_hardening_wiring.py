@@ -38,10 +38,15 @@ def test_release_verify_step_has_hard_deadline_and_step_timeout() -> None:
     assert verify.get("timeout-minutes") == 10, (
         f"验包步缺步骤级 timeout-minutes: 10（实际 {verify.get('timeout-minutes')!r}）"
     )
+    import re  # 局部 import：不为一条正则改动文件头 import 区
+
     run = str(verify.get("run", ""))
-    assert "ci_heartbeat.py" in run, "验包步没有工具内硬截止（挂死仍只会记 cancelled）"
-    assert "--deadline-seconds 480" in run, "硬截止参数与 ci.yml 不同源"
-    assert "tools/verify_windows_portable.py" in run, "心跳包装器没有包住真启脚本"
+    # 判据 MUST 钉「同一条命令里的包裹关系」：把心跳与真启拆成两行独立命令时，
+    # 子串在场断言照样全绿，但硬截止只罩住秒退的心跳行（独立 reviewer MAJOR）。
+    assert re.search(
+        r"ci_heartbeat\.py[^\n]*--deadline-seconds 480[^\n]*--\s+python tools/verify_windows_portable\.py",
+        run,
+    ), "心跳与真启脚本必须在同一条命令里（用 `--` 包裹），否则挂死仍只记 cancelled"
 
     # 参照护栏在 ci.yml 的 Windows 冒烟 job 里；按步骤名遍历所有 job 找，
     # 不硬编码 job 名（paths-filter 与冒烟是两个 job，写死名字会守错对象）。
@@ -55,17 +60,22 @@ def test_release_verify_step_has_hard_deadline_and_step_timeout() -> None:
             break
     assert ci_verify is not None, "ci.yml 里的参照护栏不见了（发布侧无从对齐）"
     assert ci_verify.get("timeout-minutes") == verify.get("timeout-minutes")
-    assert "--deadline-seconds 480" in str(ci_verify.get("run", ""))
+    assert re.search(
+        r"--deadline-seconds 480[^\n]*--\s+python tools/verify_windows_portable\.py",
+        str(ci_verify.get("run", "")),
+    ), "CI 侧参照护栏的包裹关系不成立"
 
 
 def test_release_build_step_has_heartbeat() -> None:
     """构建步也要留相位证据（挂死时能分辨卡在 build 还是 verify）。"""
+    import re
+
     build = _step(_load(RELEASE)["jobs"]["build-windows"], "Build Windows Portable")
     run = str(build.get("run", ""))
-    assert "ci_heartbeat.py --stage build" in run, (
-        f"构建步没有 --stage build 心跳：{run!r}"
-    )
-    assert "python package_windows.py" in run, "心跳包装器没有包住真正的构建命令"
+    assert re.search(
+        r"ci_heartbeat\.py[^\n]*--stage build[^\n]*--\s+python package_windows\.py",
+        run,
+    ), f"心跳与构建命令必须在同一条命令里，实际：{run!r}"
 
 
 def test_build_agent_job_has_explicit_timeout() -> None:

@@ -53,11 +53,12 @@ Task 4（冷启动基准）的交付物是「进程起到**可服务**」的各�
 **两个进程、不同前置状态**（probe B 在 import 期已跑过一次完整 `create_app()`，进程级与文件
 系统级缓存已热），**不存在必然的大小关系**（本机同向、CI 反向，见 `segments_note`）。
 
-一条**例外**（⑬ `test_health_200_covers_whole_startup`）：它是**跨进程**比较（`health_200_ms`
-来自 probe C、`import_ms` 来自 probe B），本不属"同进程不变式"。之所以保留，是因为 `health_200_ms`
-的那一次起服务里**本就含一次冷 import**，故它必须 ≥ import 段的一半；机器抖动用 `0.5` 松弛兜底，
-只钉 `> import_ms * 0.5` 这一条**弱下界**、不钉绝对量级。这是"`health_200` 不是空转"的唯一守卫，
-故不删。
+曾经的**例外**（⑬ `test_health_200_covers_whole_startup`）是跨进程比较（`health_200_ms`
+来自 probe C、`import_ms` 来自 probe B），用 `0.5` 经验余量钉 `> import_ms * 0.5`。
+**2026-11-13 审计 P2 #15 已删除该断言**：同机相邻两次起进程可差 2 倍，量级比较不是
+不变式，会随机打红 master。现在 ⑬ 只钉「`health_200_ms` 可解析且为正」，与 ⑥ 的
+`POSITIVE_KEYS` 同源；「不是空转」由基准脚本的探针桩与段包含判据共同承担，
+不再靠跨进程比值。本模块**没有任何**跨进程量级比较，勿再引入。
 
 门禁跑的是快档（`BENCH_COLD_START_ROUNDS=5`，下限也是 5）。
 """
