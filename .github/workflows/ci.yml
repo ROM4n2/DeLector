@@ -84,6 +84,9 @@ jobs:
         run: |
           pip install -r requirements.txt
           pip install pytest
+          # yaml 仅供接线守卫测试（结构化解析 workflow）使用，属测试期依赖，
+          # 不进 requirements.txt（避免混入 Android 运行时打包面）。
+          pip install pyyaml
           # Pillow 仅供 tests/test_pwa_manifest.py 的 PNG 尺寸守卫使用，属测试期依赖，
           # 不进 requirements.txt（避免混入 Android 运行时打包面）。
           pip install pillow
