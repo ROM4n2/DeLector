@@ -712,3 +712,20 @@ Work done: 上条 NOTE 的 T10-③ 独立 PR；累计 11 个有交付的独立 P
 Remaining work: `T4`（SW 旧缓存回落，4 条 CONFIRMED P1 中唯一未修，需 Android 真机覆盖安装验证）/ `T14`（失败终态，需 Android 模拟器 x86_64 + arm64 真机点检）。这两项不提供设备环境不会硬做，也不会写成已验证。
 - 合并顺序：首批历史分支（或按主题拆分）→ `fix/register-new-guard-tests` → 其余 10 个 PR 可并行；合并后 rebase 到新 `master` 并把 PR base 改回 `master`；含中间修正提交的 PR 建议 Squash and merge。
 - 不做：不 push、不开 PR、不发版、不真机点检、不重写历史（均无显式授权）。
+
+### 2026-11-13 18:10 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Android 模拟器环境打通 + T4 落地（用户授权模拟器后首轮）。
+- 环境实测（无需用户额外提供）：SDK `D:/Android/sdk`（`local.properties` 已指）、Gradle **8.14.3** 在 `D:/Android/gradle/wrapper/dists/gradle-8.14.3-all/<hash>/gradle-8.14.3`（项目 wrapper 写 8.6，8.14 与 AGP 兼容，配置解析 BUILD SUCCESSFUL）、JDK 17.0.12、`D:/Android/avd` 下 3 个 AVD 全 x86_64、`D:/Android/chaquo-wheels/x86_64` 有 cp310 wheel、`python.buildPython` 指向本机 Python310。`emulator` flavor 本就带 `arm64-v8a + x86_64`，无需改 build.gradle。
+- **构建流程（关键，漏了会打空包）**：`python tools/sync_android_sources.py` → `gradle :app:assembleEmulatorDebug`（`GRADLE_USER_HOME=D:/Android/gradle`）。`android/app/src/main/assets/static/` 被 `.gitignore` 忽略，不同步则 APK 内无前端资源、运行时 `syncStaticAssets` 无内容可解包。
+- **T4（`fix/sw-cache-invalidation`）**：`306fdb9` + `1e722b6`。最终修法只保留「catch 回落**只从当前 CACHE_NAME** 取，不跨 cache」（`caches.match` → `caches.open(CACHE_NAME).match`），并**保留 navigate 回落应用外壳**。净 diff 87/5；对点 60 passed；跨 cache 回落的物理变异红→恢复绿。
+- **重要实证（审计报告建议被模拟器证伪）**：`networkFirst` 的 catch 若在「在线但服务未就绪」时拒绝回落，Android 会直接停在 `net::ERR_FAILED`——实测首帧导航 ≈0.5s，而进程内 Python 服务 `python_start_done` ≈1.4s，首帧必然早于服务就绪。故审计 P1 #4「在线未就绪不拿旧壳冒充」不建议在 navigate 上执行；旧壳版本失配交给页面 `build-stamp` 自检 + `MainActivity` 就绪探针补载。
+- **模拟器验证**：① 全新安装 T4 版 → 首页完整渲染、无 ERR_FAILED/FATAL、`skip_reload app_origin_ready` + `ttfd` + `ready_notify` 齐全；② 覆盖安装（master `c23f3d0ba2f1` → T4 `715400f2df05`）→ 无白屏，探针出现 `ready_notify "missing"` 触发补载、二次 `ready_notify "false"`，最终页面正常。
+- **勘误（先前的错误判断）**：首次 T4 验证出现的 `ERR_FAILED` 白屏，主因是**首次构建漏了 sync、APK 缺 assets**，不是 `sw.js` 改动的实证。但去掉 `navigator.onLine` 条件仍然必要：全新安装时 cache 为空，navigate 回落没有 shell 可回落，首帧失败就是错误页，靠补载兜底。
+- Ledger 15/16、`active_task_id=null`；剩 T14（失败终态，需模拟器，环境已就绪）。
+
+### 2026-11-13 18:10 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: T4 独立 PR（2 提交）+ 模拟器双路径验证；累计 12 个有交付的独立 PR + 1 历史遗留混合分支，工作树干净、未 push / 未开 PR。
+Remaining work: T14（三个失败终态：Android 就绪预算耗尽后的终态文案与重试入口、`exportAndReport` 无 try/catch、Release 自动正文警示）。模拟器已可用，下一轮直接做。
+- 不做：不 push、不开 PR、不发版、不重写历史（均无显式授权）。
