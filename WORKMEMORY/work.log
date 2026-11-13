@@ -604,3 +604,20 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 - 执行形态：单一分支 fix/repo-health-remediation（dfs-exec 的 VCS 隔离硬闸优先于计划 GC2）；Stage 0 决策文档为分支首个原子提交（以提交顺序满足 GC3）；每 Stage 后派独立只读 reviewer + 父树复现至少 1 组变异；以 PR-ready 形态停在本地。
 - 能力边界：本环境只有只读 code-explorer 子代理，无法派实现型 Maker，实现在编排者线程完成；登记为技术债。
 - 旧台账 .vault-exec-ledger.json 为 2026-10-31 已完成 9/9、active_task_id=null 的死台账，本轮 init 覆盖（历史在 git）。
+
+### 2026-11-13 15:06 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+独立 reviewer 席位在本批次提交上找出 2 个 BLOCKER + 6 个 MAJOR，全部已修并经第二个 reviewer 席位复核（8 项 RESOLVED，末项再收紧后亦已变异自证）。
+- BLOCKER-1：`note_write_start()` 原先把「检查 Event」与「登记在途计数」分两步、非原子，写请求可在窗口内溜进 restore 的 4 段事务间隙并被 `snap.backup(live)` 整库抹掉 ⇒ 修复：同一把 `RESTORE_WRITE_LOCK` 内原子完成检查+登记，返回 bool 供 middleware 决定 503。
+- BLOCKER-2：并发两个 restore 无互斥，先结束者 `clear()` Event 会让仍在还原者裸露 ⇒ 修复：`RESTORE_OWNER_LOCK.acquire(blocking=False)`，第二个直接拒绝，finally 复位 Event 与 owner。
+- MAJOR 族：屏障只拦写方法，但 `GET /api/articles/{id}` 会做 `processed_json` 惰性迁移并 UPDATE（改为覆盖所有方法/路径，仅排除 restore 自身）；顶层 import `db.backup` 抢在 `load_env()` 之前冻结 `DATA_DIR`（改为 middleware 内惰性 import）；503 在最外层直接 return 绕过 CORS（屏障改为最先注册＝最内层）；接线无守卫（补 monkeypatch 计数行为探针）；`total_mods` 数文件数导致「解析全失败」恒绿（改为成功解析数）；发布侧子串断言挡不住「心跳与真启拆成两行」（改为 `--[ \t]+` 的同一行包裹判据）。
+- 教训：为求「最小改动」把屏障放在 HTTP 层，反而一次引入 6 处语义洞；对抗式独立 reviewer 是必需环节，不是可跳过的仪式。复核席位又指出 `--\s+` 会吃换行，已收紧并用物理变异（拆两行）验证必红。
+
+### 2026-11-13 15:06 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 整体健康度修复计划 16 Task 中完成 7 个（T1/T2/T5/T9/T11/T12/T16）＋ 2 个独立 reviewer 修复提交；全部落在分支 `fix/repo-health-remediation`（原子提交序列见 `git log --oneline master..HEAD`），未 push、未开 PR。
+- T1 restore 请求屏障（含 BLOCKER 重做）· T2 preflight 逐库判 `progress.db` · T5 发布侧硬截止/心跳 ＋ `build-agent` 超时 · T9 门禁清单补项 ＋ 空扫描面退 2 · T11 CHANGELOG 规则 2 机械闸 ＋ 死代码清理 · T12 删除跨进程 0.5 量级比较 · T16 活文档版本/数字/状态口径收口。
+- 验证纪律：全程**只跑对点测试**（用户硬约束），未跑全量 pytest。覆盖改动面的 18 文件 307 passed、复核 84 passed、末轮 22 passed；`check_docs_layout` / `check_release_docs` 两闸绿；ruff 与 mypy 按文件对点绿；T1/T2/T5/T9/T11 及 4 个新增守卫共 9 组父树物理变异自证（写回旧实现必红、恢复必绿）。本机既有 5 条噪声（GBK 解码 / player_tray_probe / probe_json_contract）本轮未触发。
+Remaining work: 9 个 Task 未开工 —— T3（写事务边界，改动面大）、T4（SW 旧缓存回落，需 Android 真机覆盖安装验证）、T6（lock 求解闸）、T7（发布 runbook 实证）、T8（dotenv / 半截文件 / 锁降级）、T10（死测族 4 处判据）、T13/T14（前端状态机与失败终态，需模拟器）、T15（资源无界与索引登记）。T4 是 4 条 CONFIRMED P1 中唯一未修的一条，无真机环境不得声称已验证。
+- 续跑入口：Ledger `.vault-exec-ledger.json` 保留 7/16 completed、`active_task_id=null`；在 `fix/repo-health-remediation` 分支用 `python <dfs-exec>/scripts/vault_exec_state.py --workdir . start-task --task-id <Tn>` 继续。MUST 继续遵守「禁止全量 test，只对点」。
+- 按裁决未做：不 push、不开 PR（以 PR-ready 形态停本地，等用户决定）；不对外披露项目暂停（D5=B）；不改桌面 build-stamp 的空戳契约（D3=B）；不真机点检；不发版。
