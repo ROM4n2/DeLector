@@ -210,7 +210,11 @@ def _iter_code(src):
     当前含 window exposer 块的生产文件不触发该形态；若新增，
     test_iter_code_depth_returns_to_zero_on_real_exposer_files 会立即变红。
     """
-    depth, modes, interp, i, n = 0, ["code"], [], 0, len(src)
+    depth = 0
+    modes: list[str] = ["code"]
+    interp: list[int] = []
+    i = 0
+    n = len(src)
     while i < n:
         ch = src[i]
         nxt = src[i + 1] if i + 1 < n else ""

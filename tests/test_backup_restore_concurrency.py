@@ -153,7 +153,9 @@ def test_middleware_registers_every_request(monkeypatch: pytest.MonkeyPatch) -> 
         calls["end"] += 1
         real_end()
 
+    # mock-drift-ok: 消费方在 server.py 中间件调用期经模块属性取值，补丁即时生效
     monkeypatch.setattr(db_backup, "note_write_start", counted_start)
+    # mock-drift-ok: 同上，出栈在中间件 finally 里经模块属性调用，补丁即时生效
     monkeypatch.setattr(db_backup, "note_write_end", counted_end)
 
     _client().get("/api/health")

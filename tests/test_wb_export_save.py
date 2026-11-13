@@ -206,6 +206,7 @@ def test_export_probe_slice_guard_fails_when_balancing_removed(
         if os.environ.get("CI"):
             pytest.exit("CI 环境缺少必需的 node 运行时；导出探针不能以 skip 静默跳过", returncode=1)
         pytest.skip("未安装 node：本用例需要 node 跑变异副本")
+    assert node is not None  # 类型收窄：pytest.skip 不被 mypy 当作 NoReturn
 
     src = (PROBE_ROOT / "tools" / "wb_export_probe.mjs").read_text(encoding="utf-8")
     anchor = "function sliceFunction(src, name) {"
