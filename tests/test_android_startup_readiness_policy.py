@@ -165,3 +165,19 @@ def test_readiness_terminal_state_guard_rejects_regressions() -> None:
     for label, mutated in mutations:
         assert mutated != good, f"变异 {label} 没改动源码（替换串失效）"
         assert _terminal_state_violations(mutated), f"变异 {label} 没被拦住"
+
+def test_fault_injection_is_debug_only() -> None:
+    """故障注入 MUST 被 BuildConfig.DEBUG 短路（release 包 R8 折叠后不留可激活路径）。
+
+    用途登记：adb shell am start ... --ez delector_fake_stuck true 会让启动预算立即
+    耗尽、首帧不发起，用于在真机上点验「预算耗尽后的终态 UI」（2026-11-13 arm64
+    真机验证成功）。它只在 debug 包生效——没有这层短路，正式包就等于带了一个
+    「让应用卡在 splash」的后门。
+    """
+    src = _main_source()
+    start = src.index("private boolean fakeStuckStart()")
+    body = src[start : start + 600]
+    assert "BuildConfig.DEBUG &&" in body, "注入开关缺少 BuildConfig.DEBUG 短路"
+    assert "getBooleanExtra" in body
+    # 变异自证：抹掉短路后同一段不再满足判据（证明这条断言真在守它）
+    assert "BuildConfig.DEBUG &&" not in body.replace("BuildConfig.DEBUG &&", "", 1)

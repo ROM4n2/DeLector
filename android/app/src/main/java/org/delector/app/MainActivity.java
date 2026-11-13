@@ -470,8 +470,13 @@ public class MainActivity extends AppCompatActivity {
         // 静态资源由拦截层从 APK assets/static 交付；/api/* 走真实网络，
         // 首个请求被拒后由 article-store 的退避重试接管（navCount 保持 1）。
         StartupProbe.navZero();
-        StartupProbe.markNav("loadurl_first_paint", APP_ORIGIN + "/");
-        webView.loadUrl(APP_ORIGIN + "/");
+        if (fakeStuckStart()) {
+            // 注入态：不发起首帧，splash 会一直留着，终态文案才可见。
+            StartupProbe.markNav("loadurl_skipped_for_fault_injection", APP_ORIGIN + "/");
+        } else {
+            StartupProbe.markNav("loadurl_first_paint", APP_ORIGIN + "/");
+            webView.loadUrl(APP_ORIGIN + "/");
+        }
 
         // 4. Background Initialization (Assets Extraction + Python Server Launch)
         StartupProbe.mark("server_thread_spawn");
@@ -701,6 +706,20 @@ public class MainActivity extends AppCompatActivity {
      * WebView 常驻 VISIBLE（GONE/INVISIBLE 不绘制、rAF 被节流，首帧会推迟），所以幂等标记
      * 改看 splash 的可见性。
      */
+    /**
+     * debug 包的故障注入开关：模拟「服务进程起来了但 HTTP 永不就绪」。
+     *
+     * 用途：只有这种状态才会让启动预算真正耗尽、splash 上出现终态文案——正常设备上
+     * Python 2~10s 就绪、首帧 1s 就成功，splash 2.7s 就被撤掉，终态分支根本进不去
+     * （2026-11-13 arm64 真机点检的实测结论）。release 包 BuildConfig.DEBUG 恒 false，
+     * R8 会把整段折叠掉，正式产物不含此路径。
+     *
+     * 用法：adb shell am start -n org.delector.app/.MainActivity --ez delector_fake_stuck true
+     */
+    private boolean fakeStuckStart() {
+        return BuildConfig.DEBUG && getIntent().getBooleanExtra("delector_fake_stuck", false);
+    }
+
     private void revealWebView() {
         if (splashLayout.getVisibility() != View.VISIBLE) {
             return;
@@ -717,7 +736,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void pollServerReadiness(File dataDir) {
         StartupProbe.mark("poll_begin");
-        for (int i = 0; i < StartupReadinessPolicy.maxAttempts(); i++) {
+        // 注入态把预算置 0（等价于「等到预算用完也没起来」）；正常路径仍走策略类，
+        // 守卫 test_main_activity_uses_policy_instead_of_literals 要求这一行必须在此方法体内。
+        final int attempts = fakeStuckStart() ? 0 : StartupReadinessPolicy.maxAttempts();
+        for (int i = 0; i < attempts; i++) {
             if (fatalError != null) {
                 return; // 服务不可能再就绪，别用超时文案盖掉真实错误
             }
