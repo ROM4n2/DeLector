@@ -271,6 +271,15 @@ def run_gate(
         return 2
 
     violations, total_mods = scan_layers(delector_dir)
+    if total_mods == 0:
+        # 扫描面为空时 violations 必然为空 —— 不能据此打印「100% 单向层序」并放行。
+        # 与同族 check_silent_degradation.py / check_mock_drift.py 的环境错误口径一致：退 2。
+        print(
+            f"[layer-gate] 错误：{delector_dir} 下扫描到 0 个模块 —— 扫描面为空，"
+            "判定器不得据此打印 100% 单向层序并放行（空转恒绿）。",
+            file=stderr,
+        )
+        return 2
     unexempted = [v for v in violations if not v.exempted]
 
     print(

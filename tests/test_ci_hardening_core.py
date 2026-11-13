@@ -288,6 +288,7 @@ MECHANICAL_STDLIB_GATE_SCRIPTS = (
     "tools/check_silent_degradation.py",
     "tools/check_mock_drift.py",
     "tools/check_layer_invariants.py",
+    "tools/check_docs_layout.py",
 )
 MECHANICAL_GATES_JOB = "static-invariants"
 
