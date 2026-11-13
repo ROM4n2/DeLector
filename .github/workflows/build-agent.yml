@@ -17,6 +17,9 @@ on:
 jobs:
   build-agent:
     name: Build Agent (${{ matrix.os }})
+    # 2026-11-13 审计 P1 #3：本 workflow 原先全文无 timeout-minutes，挂死可烧满
+    # runner 默认 360 分钟且只记 cancelled。三平台矩阵各给一个显式硬上限。
+    timeout-minutes: 20
     runs-on: ${{ matrix.os }}
     strategy:
       # 三平台并行；任一失败不影响其余（artifact 各自独立）。

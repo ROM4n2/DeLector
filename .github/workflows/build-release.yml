@@ -57,16 +57,21 @@ jobs:
       # 为什么验包 MUST 早于压缩与 upload-artifact：一旦先压缩/先上传，坏产物就进了 zip/artifact，
       # 用户下载到的正是那个坏包 —— 闸形同虚设（tests/test_ci_hardening_workflow_wiring.py 有顺序守卫钉住）。
       - name: Build Windows Portable (PyInstaller)
-        run: |
-          python package_windows.py
+        # 与 ci.yml 的 Windows 冒烟 job 同源：旁路心跳留相位证据，不改退出码（TODO-CI-02 B）。
+        run: python tools/ci_heartbeat.py --stage build -- python package_windows.py
 
       - name: Verify Windows Portable (真启闸)
+        # 发布侧补齐 CI 侧那套双重护栏（2026-11-13 审计 P1 #3）：
+        # ① tools/ci_heartbeat.py --deadline-seconds 480 到点杀掉整棵子进程树并以 124 退出
+        #    ⇒ 步骤失败、结论 failure 可辨，不再与「被顶掉」同形；② 步骤级 timeout-minutes: 10。
+        # 取证：2026-11-04 run 41833602180 的 Verify 步挂死后，只被 job 级 30min 记成 cancelled。
+        timeout-minutes: 10
         run: |
           # --expect-commit 传**完整** GITHUB_SHA（40 位十六进制）；产物里存的是
           # `git rev-parse --short HEAD` 的短 sha，而脚本按**前缀**比对（见
           # tools/verify_windows_portable.py::commit_mismatch）—— 故无需在 PowerShell 里截断 sha，
           # 少一处平台相关的字符串处理（PowerShell 的 Substring 与 bash 的 ${sha::7} 并不通用）。
-          python tools/verify_windows_portable.py --expect-commit ${{ github.sha }}
+          python tools/ci_heartbeat.py --stage verify --deadline-seconds 480 -- python tools/verify_windows_portable.py --expect-commit ${{ github.sha }}
 
       - name: Compress Windows Portable Release
         run: |
