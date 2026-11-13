@@ -483,10 +483,15 @@ def test_segment_containment_is_visible_on_pure_python_path(tmp_path: Path) -> N
 
 
 def test_health_200_covers_whole_startup(bench_out: str) -> None:
-    """⑬ `health_200_ms` 是用户体感主指标，必须覆盖 import 段（进程起 → 可服务）。"""
-    assert _number(bench_out, "health_200_ms") > _number(bench_out, "import_ms") * 0.5, (
-        f"health_200_ms 小于 import_ms 的一半：它没在测「进程起 + 起服务 + 首请求」\n{bench_out}"
-    )
+    """⑬ `health_200_ms` 是用户体感主指标，MUST 可解析且为正（同一次基准输出内）。
+
+    2026-11-13 审计 P2 #15：旧断言 `health_200_ms > import_ms * 0.5` 是**跨进程 /
+    跨状态的量级比较** —— 两个量来自各自起进程的基准，同机相邻两次可差 2 倍，
+    0.5 是拍脑袋的经验余量，会随机打红 master。量级比较不是不变式，故删除；
+    「覆盖 import 段」由 `_assert_segment_containment(out)` 的段包含判据承担。
+    """
+    ms = _number(bench_out, "health_200_ms")
+    assert ms > 0, f"health_200_ms 不是正数：{ms}\n{bench_out}"
 
 
 def test_verdict_names_android_baseline(bench_out: str) -> None:
