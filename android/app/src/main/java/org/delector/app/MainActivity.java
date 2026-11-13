@@ -77,6 +77,14 @@ public class MainActivity extends AppCompatActivity {
     private volatile boolean mainFrameLoadFailed = false;
     /** 「窗口里没有我们的 JS」只允许补载一次，避免抖动成循环。 */
     private boolean reloadedForMissingPage = false;
+    /**
+     * debug 注入专用状态（release 恒 false，不参与任何生产判据）：
+     * `injectedFirstPollDone` 让 `once` 档只耗尽第一轮；`firstPaintSkipped` 记录「首帧被注入跳过」，
+     * 供就绪分支判定必须走 loadUrl —— 否则 revealWebView 会掀开一个从未加载过 URL 的空白 WebView，
+     * 「重试生效」与「重试把页面搞白」在截图上就无法区分。
+     */
+    private boolean injectedFirstPollDone = false;
+    private boolean firstPaintSkipped = false;
     private long lastBackPressTime = 0;
     private NativeTTSBridge nativeTTS;
     private ValueCallback<Uri[]> filePathCallback;
@@ -473,6 +481,7 @@ public class MainActivity extends AppCompatActivity {
         if (fakeStuckStart()) {
             // 注入态：不发起首帧，splash 会一直留着，终态文案才可见。
             StartupProbe.markNav("loadurl_skipped_for_fault_injection", APP_ORIGIN + "/");
+            firstPaintSkipped = true;
         } else {
             StartupProbe.markNav("loadurl_first_paint", APP_ORIGIN + "/");
             webView.loadUrl(APP_ORIGIN + "/");
@@ -700,26 +709,42 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
+     * debug 包的故障注入开关：模拟「服务进程起来了但 HTTP 永不就绪」。
+     *
+     * 两档，都只在 BuildConfig.DEBUG 下生效（release 由 R8 折叠掉整段，正式产物不含）：
+     * - `delector_fake_stuck=true`：每一轮轮询都耗尽预算 ⇒ 终态常驻，用来点验终态文案与按钮；
+     * - `delector_fake_stuck_once=true`：只**第一轮**耗尽；点「重试」启动的第二轮走真实预算
+     *   ⇒ 页面会真的加载出来，「重试是否重启了轮询」因此可被观察验证。
+     *
+     * 为什么需要 once 档：`fake_stuck` 下点击后必然立刻再耗尽，截图与 UI 在「点了没反应」
+     * 和「点了但立刻又失败」之间无法区分（2026-11-13 arm64 真机点检的实际卡点）。
+     *
+     * 用法：
+     *   adb shell am start -n org.delector.app/.MainActivity --ez delector_fake_stuck true
+     *   adb shell am start -n org.delector.app/.MainActivity --ez delector_fake_stuck_once true
+     */
+    private boolean fakeStuckStart() {
+        return BuildConfig.DEBUG && (getIntent().getBooleanExtra("delector_fake_stuck", false)
+                || getIntent().getBooleanExtra("delector_fake_stuck_once", false));
+    }
+
+    /** 永远不就绪档：点重试也只会在终态里打转。 */
+    private boolean fakeStuckAlways() {
+        return BuildConfig.DEBUG && getIntent().getBooleanExtra("delector_fake_stuck", false);
+    }
+
+    /** 只第一轮耗尽档：第二轮（重试）恢复正常预算。 */
+    private boolean fakeStuckFirstPollOnly() {
+        return BuildConfig.DEBUG && getIntent().getBooleanExtra("delector_fake_stuck_once", false);
+    }
+
+    /**
      * 撤掉 splash、露出 WebView。只允许 UI 线程调用（WebViewClient 回调 / postOnAnimation）。
      * 用「幂等 + 只改可见性」保证重复调用安全，不引入任何新的计时假设。
      *
      * WebView 常驻 VISIBLE（GONE/INVISIBLE 不绘制、rAF 被节流，首帧会推迟），所以幂等标记
      * 改看 splash 的可见性。
      */
-    /**
-     * debug 包的故障注入开关：模拟「服务进程起来了但 HTTP 永不就绪」。
-     *
-     * 用途：只有这种状态才会让启动预算真正耗尽、splash 上出现终态文案——正常设备上
-     * Python 2~10s 就绪、首帧 1s 就成功，splash 2.7s 就被撤掉，终态分支根本进不去
-     * （2026-11-13 arm64 真机点检的实测结论）。release 包 BuildConfig.DEBUG 恒 false，
-     * R8 会把整段折叠掉，正式产物不含此路径。
-     *
-     * 用法：adb shell am start -n org.delector.app/.MainActivity --ez delector_fake_stuck true
-     */
-    private boolean fakeStuckStart() {
-        return BuildConfig.DEBUG && getIntent().getBooleanExtra("delector_fake_stuck", false);
-    }
-
     private void revealWebView() {
         if (splashLayout.getVisibility() != View.VISIBLE) {
             return;
@@ -738,7 +763,13 @@ public class MainActivity extends AppCompatActivity {
         StartupProbe.mark("poll_begin");
         // 注入态把预算置 0（等价于「等到预算用完也没起来」）；正常路径仍走策略类，
         // 守卫 test_main_activity_uses_policy_instead_of_literals 要求这一行必须在此方法体内。
-        final int attempts = fakeStuckStart() ? 0 : StartupReadinessPolicy.maxAttempts();
+        // 注入态第一轮把预算置 0（等价于「等到预算用完也没起来」）；`once` 档在点「重试」
+        // 触发的第二轮恢复真实预算，于是能观察到「终态 → 真实页面」的翻转。
+        // 注意 MUST 保留 StartupReadinessPolicy.maxAttempts() 在本方法体内（接线守卫要求）。
+        final boolean injectedZeroBudget =
+                fakeStuckAlways() || (fakeStuckFirstPollOnly() && !injectedFirstPollDone);
+        injectedFirstPollDone = true;
+        final int attempts = injectedZeroBudget ? 0 : StartupReadinessPolicy.maxAttempts();
         for (int i = 0; i < attempts; i++) {
             if (fatalError != null) {
                 return; // 服务不可能再就绪，别用超时文案盖掉真实错误
@@ -765,9 +796,11 @@ public class MainActivity extends AppCompatActivity {
                         isServerReady = true;
                         final int readyPort = serverPort;
                         mainHandler.post(() -> {
-                            if (readyPort == APP_PORT && !mainFrameLoadFailed) {
+                            if (readyPort == APP_PORT && !mainFrameLoadFailed && !firstPaintSkipped) {
                                 // 页面已在应用 origin 上加载：不再导航，接管交给 store 的重试。
                                 // 这里只补一次状态（splash 通常已被首个内容帧撤掉）。
+                                // `firstPaintSkipped` 只可能来自 debug 注入：那时首帧没发起，
+                                // 走这条分支会 revealWebView 掀开空白页，必须落到下面的 loadUrl。
                                 StartupProbe.markNav("skip_reload", "app_origin_ready");
                                 statusTextView.setText("服务已就绪");
                                 revealWebView();
