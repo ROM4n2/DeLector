@@ -11,7 +11,7 @@ import sqlite3
 from datetime import date
 from typing import Any, Dict, List, Optional, Tuple
 
-from delector.core.database import get_db
+from delector.core.database import db_conn
 from delector.core.db.companion import (
     append_message,
     create_proposal,
@@ -48,7 +48,7 @@ class CompanionSessionService:
         norm_scope_key = scope_key.strip() if scope_key else None
         title = title.strip() or "新伴学会话"
 
-        with get_db(self.db_path) as conn:
+        with db_conn(self.db_path) as conn:
             try:
                 if norm_scope_key is not None:
                     sessions = list_sessions(conn, scope_key=norm_scope_key, limit=20)
@@ -80,7 +80,7 @@ class CompanionSessionService:
 
     def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         """按 ID 查询伴学会话元数据。"""
-        with get_db(self.db_path) as conn:
+        with db_conn(self.db_path) as conn:
             try:
                 return db_get_session(conn, session_id=session_id)
             except sqlite3.OperationalError:
@@ -101,7 +101,7 @@ class CompanionSessionService:
         """在同一事务保存断点消息与 proposals；proposal-only 不伪造空消息。"""
         user_msg: Optional[Dict[str, Any]] = None
         assistant_msg: Optional[Dict[str, Any]] = None
-        with get_db(self.db_path) as conn:
+        with db_conn(self.db_path) as conn:
             if save_messages:
                 try:
                     user_msg = append_message(
@@ -170,7 +170,7 @@ class CompanionSessionService:
 
     def get_history(self, session_id: str) -> List[Dict[str, Any]]:
         """按时序获取指定会话的完整消息与思维链历史。"""
-        with get_db(self.db_path) as conn:
+        with db_conn(self.db_path) as conn:
             try:
                 return get_messages(conn, session_id=session_id)
             except sqlite3.OperationalError:
@@ -186,7 +186,7 @@ class CompanionSessionService:
         """查询指定 scope / 文章或全局的最新活跃伴学会话。"""
         norm_article_id = article_id.strip() if article_id else None
         norm_scope_key = scope_key.strip() if scope_key else None
-        with get_db(self.db_path) as conn:
+        with db_conn(self.db_path) as conn:
             try:
                 return list_sessions(
                     conn,
@@ -207,7 +207,7 @@ class CompanionSessionService:
         """返回当前学习与视口上下文摘要 (生词总量与已掌握数)。"""
         today_str = date.today().isoformat()
         total, mastered = 0, 0
-        with get_db(self.db_path) as conn:
+        with db_conn(self.db_path) as conn:
             try:
                 row = conn.execute(
                     "SELECT COUNT(*) AS total, SUM(mastered = 1) AS mastered FROM vocab_cards"

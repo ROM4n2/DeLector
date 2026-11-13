@@ -367,6 +367,9 @@ def restore_database_backup(req: RestoreReq, request: Request) -> Dict[str, Any]
             proj_conn = get_db()
             try:
                 with proj_conn:
+                    # 投影首条语句是 _pool_index 的 SELECT，sqlite3 只对 DML 隐式 BEGIN；
+                    # 先抢写锁才能把「查重 → INSERT」收进同一事务，WAL 只读仍可并发。
+                    proj_conn.execute("BEGIN IMMEDIATE")
                     project_wb_deck(proj_conn, wb_payload)
             finally:
                 proj_conn.close()

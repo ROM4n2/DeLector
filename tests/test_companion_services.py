@@ -650,3 +650,58 @@ def test_multi_action_malformed_payload_stays_pending(
         svc.execute_proposal(prop["id"], action, payload)
 
     assert svc.list_proposals(sid)[0]["status"] == "pending"
+
+
+def _track_db_connections(monkeypatch, db_file):
+    """真跑 SQLite：捕获所有指向 db_file 的连接对象（不替换 Connection 行为）。"""
+    real_connect = sqlite3.connect
+    opened = []
+
+    def tracking_connect(*args, **kwargs):
+        conn = real_connect(*args, **kwargs)
+        path = args[0] if args else kwargs.get("database")
+        if path == db_file:
+            opened.append(conn)
+        return conn
+
+    monkeypatch.setattr(sqlite3, "connect", tracking_connect)
+    return opened
+
+
+def _assert_closed(conn):
+    with pytest.raises(sqlite3.ProgrammingError):
+        conn.execute("SELECT 1")
+
+
+def test_companion_services_deterministically_close_connections(test_db, monkeypatch):
+    """阳性：两个服务各方法返回后，指向该库的连接均已 close。"""
+    opened = _track_db_connections(monkeypatch, test_db)
+    sessions = CompanionSessionService(db_path=test_db)
+    sid = sessions.get_or_create_session(article_id="art_lifecycle")["id"]
+    sessions.save_turn(sid, "Hallo", "Eule")
+    sessions.get_history(sid)
+    proposals = CompanionProposalService(db_path=test_db)
+    proposals.create_proposal(
+        session_id=sid, action="create_vocab_cards", title="T", payload={"cards": []}
+    )
+    proposals.list_proposals(sid)
+
+    assert len(opened) >= 5, f"探针未捕获到预期连接数：{len(opened)}"
+    for conn in opened:
+        _assert_closed(conn)
+
+
+def test_companion_services_close_keeps_committed_data(test_db, monkeypatch):
+    """阴性：确定性 close 不吞 commit；故意不 close 的对照连接仍可用（探针可区分）。"""
+    control = sqlite3.connect(test_db)  # monkeypatch 之前建，故意不 close
+    try:
+        opened = _track_db_connections(monkeypatch, test_db)
+        sessions = CompanionSessionService(db_path=test_db)
+        sid = sessions.get_or_create_session(article_id="art_lifecycle2")["id"]
+        control.execute("SELECT 1").fetchone()  # 对照：未 close 的连接仍可执行
+        assert sessions.get_session(sid) is not None, "close 不得吞掉 commit：会话必须仍可读"
+        assert len(opened) >= 2
+        for conn in opened:
+            _assert_closed(conn)
+    finally:
+        control.close()
