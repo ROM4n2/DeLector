@@ -649,3 +649,19 @@ Work done: 上条 NOTE 的 4 个独立 PR，全部 PR-ready、工作树干净、
 Remaining work: 按 `docs/plans/2026-11-13-repo-health-remediation.md` 续跑剩余 7 个 Task；每个仍须独立分支 + 独立 PR（stacked），继续「禁止全量 test，只对点」。T4 需 Android 真机覆盖安装验证，不得在无真机环境声称已修。
 - 合并顺序建议：先合首批历史分支（或按主题拆分）→ 分片注册 PR → T6 / T8 / T10-① 三个 PR 可并行；合并后其余分支 rebase 到新 master 并把 PR base 改回 master。
 - 不做：不 push、不开 PR、不发版、不真机点检、不重写首批历史（均无显式授权）。
+
+### 2026-11-13 16:24 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+第三批（续跑）收口：又派 3 个并行设计席位（T3 / T13 / T15，均 READ-ONLY，产出 unified diff + 行为探针），3 个独立 worktree 均基于 `fix/register-new-guard-tests`（stacked）。
+- 新增 2 个 PR（工作树干净、未 push / 未开 PR）：
+  ① `fix/reader-state-machine` `44ce9f4` + `af2fb71`（T13）：`reader.js` 三处状态机（占位标题归一化、503 退避定时器句柄 + `pagehide` 撤销、`processed_stale` 可见提示）；node 行为探针内建阳性/阴性/变异自证，追加进既有 `tests/test_frontend_guards.py`（不新增文件，避免分片冲突）。`node --check` 绿、对点 16 passed；删 `pagehide` 监听的物理变异红→恢复绿；追加探针曾触发 ruff E402/E501，行级拆行 + `# noqa: E402` 后收口。
+  ② `fix/model-load-negative-cache` `7bd24b6`（T15，按「一 PR 一事」缩小为**无下载加载失败负缓存**）：`model_loader.py` 加 TTL 负缓存 + `_failure_window_open()` / `reset_nlp_load_failure()`，失败写诊断、TTL 内不重跑本地三级回退；**不**置位 `_nlp_resolved`（首次分析仍有重试机会）。对点 62 passed；删短路判据的物理变异红→恢复绿；ruff + `mypy --strict` 绿。索引治理裁决登记与 `test_query_plans.py` 未纳入本 PR（属另一件事）。
+- 落地踩坑（已自证并修正）：① Windows 长路径读不到子代理持久化输出 ⇒ 复制到 `.git/` 短路径；② T15 的 `git apply --recount` 上下文失配 ⇒ 改手写精确补丁（`replace_once` + CRLF 安全）；③ T13 追加探针的模块级 import 触发 ruff E402，JS 探针长行触发 E501；④ T15 负缓存残留让既有 `test_try_load_nlp_no_download_loads_locally` 变红 ⇒ 在 4 处既有测试加 `_nlp_failed_at` 隔离（子代理已预警该风险）。
+- T3 方案已产出但未落地：`fix/write-tx-boundaries` worktree 干净、停在 base。事务边界（`BEGIN IMMEDIATE` 嵌套 / 跨库补偿）需更谨慎验证，不在本批次 rushed 落地。
+- 纪律：全程只跑对点测试，未跑全量 pytest；无新增测试文件、无分片登记冲突；每个 PR 只做一件事。
+
+### 2026-11-13 16:24 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 上条 NOTE 的 2 个独立 PR；累计 6 个独立 PR + 1 个历史遗留混合分支，全部 PR-ready、工作树干净、未 push / 未开 PR。Ledger 11/16 completed、`active_task_id=null`。
+Remaining work: T3（方案已就绪，待落地）/ T4（需 Android 真机）/ T7（发布 runbook 实证需 GitHub 权限）/ T10 的 ②③④（前端探针 / 模块图判据 / wb 锚点配平，方案已产出）/ T14（前端 + Android，需模拟器）。继续按「一 Task 一分支一 PR、独立 worktree、只跑对点测试」推进。
+- 不做：不 push、不开 PR、不发版、不真机点检、不重写历史（均无显式授权）。
