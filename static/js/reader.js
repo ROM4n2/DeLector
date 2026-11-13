@@ -340,6 +340,16 @@ function reportFirstArticleVisible(listEl) {
 // 陈旧响应守卫：用户在文章间快速切换时，较早的慢响应不得覆盖后打开的文章。
 let _readerOpenToken = 0;
 
+// 503 退避定时器：切文章 / pagehide 时必须撤销，否则旧回调醒来继续循环写 DOM。
+let _readerRetryTimer = null;
+function _cancelReaderRetryTimer() {
+  const pending = _readerRetryTimer;
+  if (!pending) return;
+  _readerRetryTimer = null;
+  clearTimeout(pending.id);
+  pending.resolve(false);
+}
+
 // P0-3：本函数曾全程静默失败（无 try/catch、无加载态）——首次打开恰逢 spaCy 惰性迁移
 // 时 25s 超时 ⇒ 页面停在列表零提示。拆成两层：本壳负责"加载占位 + 失败 notify +
 // finally 恢复标题"；正文原样搬进 _openReaderBody（逐行零改动，降低搬运风险）。
@@ -353,6 +363,8 @@ let _readerOpenToken = 0;
 // 显示加载态（不是错误），预算耗尽或不可重试才降级为带「重试」按钮的友好错误态。
 const READER_LOADING_HINT = "首次打开可能需要十几秒，请稍候。";
 const READER_NLP_LOADING_HINT = "正在准备德语分词模型（首次启动较慢），请稍候。";
+const READER_LOADING_TITLE = "⏳ 载入中…";
+const READER_STALE_HINT = "分词正在升级，当前显示上一版分析结果，稍后重新打开可查看新版。";
 
 function _readerStateHtml(kind, title, hint, opts) {
   const options = opts || {};
@@ -408,10 +420,14 @@ function _humanizeReaderError(err) {
 }
 
 export async function openReader(id) {
+  _cancelReaderRetryTimer(); // T13: 切换文章先撤掉上一篇挂着的退避定时器
   const token = ++_readerOpenToken;
   const titleEl = document.getElementById("reader-title");
-  const prevTitle = titleEl ? titleEl.textContent : "";
-  if (titleEl) titleEl.textContent = "⏳ 载入中…";
+  const rawPrevTitle = titleEl ? titleEl.textContent : "";
+  // 上一篇若也是失败残留的占位串，它不是「真实标题」：归一化为空，
+  // 否则 finally 会把它原样写回，失败态永久停在「载入中」。
+  const prevTitle = rawPrevTitle === READER_LOADING_TITLE ? "" : rawPrevTitle;
+  if (titleEl) titleEl.textContent = READER_LOADING_TITLE;
   _renderReaderLoading(READER_LOADING_HINT);
 
   const startedAt = Date.now();
@@ -440,14 +456,20 @@ export async function openReader(id) {
         _renderReaderLoading(
           _isNlpLoadingError(err) ? READER_NLP_LOADING_HINT : READER_LOADING_HINT,
         );
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        if (token !== _readerOpenToken) return;
+        const delayDone = await new Promise((resolve) => {
+          const id = setTimeout(() => {
+            _readerRetryTimer = null;
+            resolve(true);
+          }, delay);
+          _readerRetryTimer = { id, resolve };
+        });
+        if (!delayDone || token !== _readerOpenToken) return;
       }
     }
   } finally {
     // 占位标题必须在所有退出路径复原，否则会永久停在「载入中」。
     // 只复原仍属于本次打开、且没人接手写标题的情形（后继 openReader 已写入自己的标题）。
-    if (titleEl && token === _readerOpenToken && titleEl.textContent === "⏳ 载入中…") {
+    if (titleEl && token === _readerOpenToken && titleEl.textContent === READER_LOADING_TITLE) {
       titleEl.textContent = prevTitle;
     }
   }
@@ -519,7 +541,12 @@ async function _openReaderBody(id, token) {
     paraElements.push(`<p class="reader-p">${currentSentences.join(" ")}</p>`);
   }
 
-  content.innerHTML = paraElements.join("");
+  // 后端分词升级时返回上一版结果并打 processed_stale（快退是刻意设计）：
+  // 只做可见告知，不后台自动重拉，避免把阅读页变成隐式轮询。
+  const staleTip = a.processed_stale
+    ? `<div class="reader-state-tip" role="status">${esc(READER_STALE_HINT)}</div>`
+    : "";
+  content.innerHTML = staleTip + paraElements.join("");
 
   ShadowPlayer.reset();
   applyTypography();
@@ -1702,5 +1729,8 @@ export async function saveAndRenderSyntaxRadar(articleId, stats) {
 
 if (typeof window !== "undefined") {
   window.deleteArticle = deleteArticle;
+  if (typeof window.addEventListener === "function") {
+    window.addEventListener("pagehide", _cancelReaderRetryTimer);
+  }
 }
 
