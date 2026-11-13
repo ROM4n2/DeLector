@@ -311,16 +311,14 @@ def test_missing_node_skips_only_locally(monkeypatch):
 
 # ── 阴性：删掉保护物 ⇒ 守卫必红 ─────────────────────────────────────────────
 def test_open_reader_violations_catch_removed_protection():
-    assert _open_reader_violations("export async function openReader(id) { return
-    }"), (
+    assert _open_reader_violations("export async function openReader(id) { return; }"), (
         "try/catch/notify/finally/占位被删光后判据仍全绿 ⇒ 死测"
     )
 
 
 def test_submit_review_violations_catch_removed_protection():
     assert _submit_review_violations(
-        "export async function submitCardReview(t,i,g) { await reviewCard(t,i,{})
-        }"
+        "export async function submitCardReview(t,i,g) { await reviewCard(t,i,{}); }"
     ), "重入闸/disabled/finally 被删光后判据仍全绿 ⇒ 死测"
 
 
@@ -342,12 +340,8 @@ def test_rating_bar_buttons_still_rendered_with_submit_handler():
 def test_static_layer_red_short_circuits_before_node_vm(monkeypatch):
     """静态层红 ⇒ MUST NOT 调 _run_probe（即不跑 node:vm）。"""
     broken = READER.replace(
-        "  try {\n    for (let attempt = 1
-        
-        attempt += 1) {",
-        "  for (let attempt = 1
-        
-        attempt += 1) {",
+        "  try {\n    for (let attempt = 1; ; attempt += 1) {",
+        "  for (let attempt = 1; ; attempt += 1) {",
     )
     assert broken != READER, "注入式变异锚点应恰好命中 1 处"
     monkeypatch.setattr(sys.modules[__name__], "READER", broken)
@@ -369,24 +363,18 @@ def test_extract_function_balances_to_closing_brace():
 
 def test_extract_function_does_not_bleed_into_neighbour():
     """阴性：旧 `\\nexport ` 边界会把邻函数切进来。"""
-    src = "function f() { return 1
-    }\nfunction g() { return 2
-    }\n"
+    src = "function f() { return 1; }\nfunction g() { return 2; }\n"
     assert "return 2" not in _extract_function(src, "function f(")
 
 
 def test_extract_function_handles_destructured_params_and_fails_loud():
     """变异自证：`f({a}={})` 不短切；`)` 后非 `{` 具名报错；字符串/注释里的 `}` 不误配平。"""
-    src = "function f({a}={}) { return a
-    }\nfunction g() { return 2
-    }\n"
+    src = "function f({a}={}) { return a; }\nfunction g() { return 2; }\n"
     body = _extract_function(src, "function f(")
     assert "return a;" in body and "return 2" not in body
     with pytest.raises(AssertionError, match="不是函数体"):
         _extract_function("function h() 42;", "function h(")
-    trap = 'function t() { const s = "}"
-    /* } */ const tail = 1
-    }\n'
+    trap = 'function t() { const s = "}"; /* } */ const tail = 1; }\n'
     assert "const tail = 1;" in _extract_function(trap, "function t(")
 
 
