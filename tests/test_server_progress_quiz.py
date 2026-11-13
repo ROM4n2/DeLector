@@ -788,3 +788,125 @@ def test_prep_dict_registered_in_all_package_targets():
     assert '_copy_tree(delector, python_dest / "delector")' in sync_script, (
         "同步脚本应整目录拷入 delector/（prep_dict.py 在包内）"
     )
+
+
+def _new_review_card(client, word="verstehen"):
+    res = client.post(
+        "/api/cards/vocab",
+        json={
+            "word": word,
+            "lemma": word,
+            "pos": "VERB",
+            "cefr_level": "A1",
+            "definition_zh": "理解",
+            "sentence_context": "Ich verstehe.",
+        },
+    )
+    assert res.status_code == 200
+    return res.json()["id"]
+
+
+def _gate_calculate_fsrs(monkeypatch):
+    """让首个请求停在「SELECT 之后、Python 算 FSRS 之前」，构造真实丢更新窗口。"""
+    import threading
+
+    from delector.routes import cards as routes_cards
+
+    entered = threading.Event()
+    release = threading.Event()
+    guard = threading.Lock()
+    state = {"first": True}
+    real_calc = routes_cards.calculate_fsrs
+
+    def gated(*args, **kwargs):
+        with guard:
+            first = state["first"]
+            state["first"] = False
+        if first:
+            entered.set()
+            if not release.wait(timeout=5):
+                raise RuntimeError("闸门未放行：测试死锁")
+        return real_calc(*args, **kwargs)
+
+    monkeypatch.setattr(routes_cards, "calculate_fsrs", gated)
+    return entered, release
+
+
+def test_concurrent_fsrs_reviews_do_not_lose_repetition(client, test_db_path, monkeypatch):
+    """阳性：两连接并发同卡评级，四列状态 +2；correct/wrong 原子增不被误改。"""
+    from concurrent.futures import ThreadPoolExecutor
+
+    card_id = _new_review_card(client)
+    entered, release = _gate_calculate_fsrs(monkeypatch)
+
+    def review(_i):
+        return client.post(f"/api/cards/vocab/{card_id}/review", json={"grade": 3})
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(review, 1)
+        assert entered.wait(timeout=5), "首个请求未进入计算阶段（SELECT 未完成）"
+        second = pool.submit(review, 2)
+        release.set()
+        r1 = first.result(timeout=10)
+        r2 = second.result(timeout=10)
+
+    assert r1.status_code == 200 and r2.status_code == 200, (r1.text, r2.text)
+    with db_conn(test_db_path) as conn:
+        row = conn.execute(
+            "SELECT repetition_count, correct_count, wrong_count FROM vocab_cards WHERE id = ?",
+            (card_id,),
+        ).fetchone()
+    assert row["repetition_count"] == 2, (
+        "两次并发评级都读到旧 rep 各自算出 1 ⇒ 丢更新；BEGIN IMMEDIATE 应串行化成 2"
+    )
+    assert row["correct_count"] == 2, "correct_count 的 SQL 原子增必须原样保留"
+    assert row["wrong_count"] == 0
+
+
+def test_single_fsrs_review_still_writes_four_columns_and_quiz_log(client, test_db_path, test_progress_path):
+    """阴性（点 2/3 共用）：正常路径四列 + quiz_log 一行，响应契约不回归。"""
+    card_id = _new_review_card(client, word="behalten")
+    res = client.post(f"/api/cards/vocab/{card_id}/review", json={"grade": 3})
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["repetition_count"] == 1
+    assert body["interval_days"] == 4
+    assert body["ease_factor"] == 4.4
+    assert body["due_date"]
+    with db_conn(test_db_path) as conn:
+        row = conn.execute(
+            "SELECT repetition_count, interval_days, ease_factor, due_date, correct_count "
+            "FROM vocab_cards WHERE id = ?",
+            (card_id,),
+        ).fetchone()
+    assert row["repetition_count"] == 1 and row["correct_count"] == 1
+    with db_progress_conn(test_progress_path) as pconn:
+        n = pconn.execute(
+            "SELECT COUNT(*) FROM quiz_log WHERE card_id = ? AND mode = 'fsrs_review'", (card_id,)
+        ).fetchone()[0]
+    assert n == 1, "正常路径跨库写必须落一行进度记录"
+
+
+def test_fsrs_review_progress_db_failure_is_loud_not_silent(client, test_db_path, test_progress_path):
+    """阳性（点 3）：真把 progress 库的 quiz_log 表改名，制造 SQLite 写失败。"""
+    card_id = _new_review_card(client, word="lernen")
+    first = client.post(f"/api/cards/vocab/{card_id}/review", json={"grade": 3})
+    assert first.status_code == 200
+
+    with db_progress_conn(test_progress_path) as pconn:
+        pconn.execute("ALTER TABLE quiz_log RENAME TO quiz_log_disabled")
+
+    res = client.post(f"/api/cards/vocab/{card_id}/review", json={"grade": 3})
+    # 响应体行为断言（非源码字符串扫描）：必须拿到带非空 detail 的 5xx，而非静默 2xx
+    assert res.status_code == 500, (
+        "progress 库写入失败却返回 2xx：主库已提交、进度库无记录 = 静默半写"
+    )
+    detail = res.json().get("detail")
+    assert isinstance(detail, str) and detail.strip(), "5xx 必须带显式半写文案，不得是空 detail"
+
+    with db_conn(test_db_path) as conn:
+        row = conn.execute("SELECT repetition_count FROM vocab_cards WHERE id = ?", (card_id,)).fetchone()
+    assert row["repetition_count"] == 2, "主库半写事实必须如实保留（不假装回滚）"
+    with db_progress_conn(test_progress_path) as pconn:
+        n = pconn.execute("SELECT COUNT(*) FROM quiz_log_disabled").fetchone()[0]
+    assert n == 1, "失败的这次复习不得留下进度记录"
