@@ -2,7 +2,10 @@
 """静态资源更新链路的守卫：指纹可读、SW 不吃旧缓存、APK 资产新鲜度可判定。"""
 
 import importlib.util
+import json
+import os
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -45,11 +48,13 @@ def test_service_worker_is_network_first_and_purges_on_request():
     # 在线必须回源（且强制 HTTP 缓存校验），旧缓存只能作为离线兜底。
     assert 'fetch(request, { cache: "no-cache" })' in sw
     assert "async function networkFirst" in sw
-    assert "const cached = await caches.match(request);" in sw
     # 页面发现指纹失配时能请求清缓存；不要求用户手动操作。
     assert 'event.data.type !== "delector-purge-cache"' in sw
-    # 不允许退回 cache-first：先 fetch 再 match 的顺序就是契约。
-    assert sw.index("await fetch(request") < sw.index("await caches.match(request)")
+    # 不允许退回 cache-first：先 fetch 再回落，且回落只走**当前** CACHE_NAME。
+    assert sw.index("await fetch(request") < sw.index("await caches.open(CACHE_NAME)")
+    # 跨 cache 回落必须已移除（旧 `caches.match(request)` 会命中旧版本 cache，
+    # 把覆盖安装前的旧 JS 当 200 交付 —— 2026-11-13 审计 P1 #4）。
+    assert "caches.match(request)" not in sw
 
 
 def test_service_worker_registration_bypasses_http_cache():
@@ -137,3 +142,71 @@ def test_android_sync_check_rejects_stale_packaged_assets(tmp_path):
         new_fingerprint,
     )
     tool.check(android_root, repo_root)
+
+
+SW_FALLBACK_PROBE = r"""
+const fs = require('fs');
+const src = fs.readFileSync('static/sw.js', 'utf8');
+const m = src.match(/const CACHE_NAME = "([^"]+)"/);
+if (!m) { console.log(JSON.stringify({ fatal: 'CACHE_NAME not found' })); process.exit(0); }
+const nameCur = m[1];
+const nameOld = nameCur.replace(/v[\d.]+$/, 'v0.0.0');
+
+// 旧 cache 里有同名旧资源；当前 cache 为空。fetch 失败 ⇒ 走 catch。
+const selfObj = {
+  addEventListener() {},
+  skipWaiting() {},
+  clients: { claim: async () => {}, matchAll: async () => [] },
+  navigator: { onLine: true }, // 在线但服务未就绪
+};
+const cachesObj = {
+  keys: async () => [nameOld, nameCur],
+  delete: async () => true,
+  open: async (name) => ({
+    put: async () => {},
+    match: async (r) => (name === nameCur ? undefined : (String(r.url || r) === '/js/x.js' ? 'OLD' : undefined)),
+  }),
+  // 旧实现用的跨 cache 语义：任何 cache 命中都算。
+  match: async (r) => (String(r.url || r) === '/js/x.js' ? 'OLD' : undefined),
+};
+const offlineFetch = async () => { throw new Error('offline'); };
+const fn = new Function('self', 'caches', 'fetch', src + '\n; return networkFirst;')(selfObj, cachesObj, offlineFetch);
+(async () => {
+  let outcome;
+  try { outcome = await fn({ waitUntil() {} }, { url: '/js/x.js', mode: 'no-cors' }); }
+  catch (e) { outcome = 'THREW'; }
+  console.log(JSON.stringify({ outcome, cacheName: nameCur, nameOld }));
+})();
+"""
+
+
+def test_service_worker_fallback_does_not_cross_cache_versions() -> None:
+    """行为探针：旧 CACHE_NAME 里的资源不得被 catch 当离线兜底返回。
+
+    2026-11-13 审计 P1 #4：`caches.match(request)` 跨所有 cache 搜索，覆盖安装后
+    旧 SW 会把旧 cache 里的旧 JS 当 200 交付。这里在 node 里 mock self/caches/fetch，
+    真调 `networkFirst`：当前 cache 为空 + 旧 cache 有同名资源 + fetch 失败（在线），
+    正确行为是抛错（交给就绪探针补载），而不是返回 'OLD'。
+    """
+    node = shutil.which("node")
+    if not node:
+        if os.environ.get("CI"):
+            pytest.exit("CI 缺少 node：SW 缓存回落探针不能静默跳过", returncode=1)
+        pytest.skip("未安装 node：本探针需要 node 执行真实 networkFirst")
+    proc = subprocess.run(
+        [node, "-e", SW_FALLBACK_PROBE],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(ROOT),
+        timeout=60,
+    )
+    assert proc.returncode == 0, f"node 探针自身失败：{proc.stderr[-1500:]}"
+    payload = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert "fatal" not in payload, payload
+    assert payload["outcome"] != "OLD", (
+        "catch 跨 cache 命中了旧版本资源并当 200 交付："
+        f"nameOld={payload['nameOld']} nameCur={payload['cacheName']}"
+    )
+    assert payload["outcome"] == "THREW", payload
