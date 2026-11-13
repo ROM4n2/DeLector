@@ -20,7 +20,9 @@ def load_env() -> None:
     try:
         import dotenv
 
-        dotenv.load_dotenv(override=True)
+        # 与 start.py 的 `k not in os.environ` 同口径：显式注入的 env 优先，
+        # 磁盘残留 .env 只补缺，绝不覆写 DEEPSEEK_API_KEY / DELECTOR_DATA_DIR。
+        dotenv.load_dotenv(override=False)
     # silent-ok: dotenv 是可选依赖（缺库即 ImportError）；紧随其后的手写 .env 逐行解析是明确兜底，不是降级丢失
     except Exception:
         pass
@@ -35,7 +37,7 @@ def load_env() -> None:
                             k, v = line.split("=", 1)
                             k = k.strip()
                             v = v.strip().strip("'").strip('"')
-                            if k:
+                            if k and k not in os.environ:
                                 os.environ[k] = v
             # silent-ok: 启动期 .env 便利层：读取失败等价于「该文件未生效」，按既有环境变量 + DB 权威配置继续
             except Exception:
