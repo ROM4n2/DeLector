@@ -16,6 +16,7 @@ actually resolve to a real export in the target module (transitively through
 """
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -41,7 +42,7 @@ def _parse_own_exports(src):
     names.update(re.findall(r"\bexport\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)", src))
     names.update(re.findall(r"\bexport\s+(?:let|const|var|class)\s+([A-Za-z_$][\w$]*)", src))
     # export { a, b, c }  WITHOUT `from` → module's own exported bindings
-    for m in re.finditer(r"\bexport\s*\{([^}]*)\}\s*(?!from\b)", src, re.S):
+    for m in re.finditer(r"\bexport\s*\{([^}]*)\}(?!\s*from\b)", src, re.S):
         for item in m.group(1).split(","):
             item = item.strip()
             if item:
@@ -196,6 +197,74 @@ def _parse_star_namespace_imports(src):
     )
 
 
+_DECL_AT = re.compile(r"\b(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)")
+
+
+def _iter_code(src):
+    """产出 `(下标, 字符, 该处花括号净深度)`，只覆盖代码（跳字符串/注释/模板）。
+
+    状态机与 tests/wb_source.py::_iter_braces 同源（已核对其签名与 yield 形态：
+    `_iter_braces(text, start)` 只 yield `(下标, '{'|'}', 扫描前深度, 扫描后深度)`）。
+    这里额外逐字符 yield，才能在净深度 0 处只认真正的声明。
+    """
+    depth, modes, interp, i, n = 0, ["code"], [], 0, len(src)
+    while i < n:
+        ch = src[i]
+        nxt = src[i + 1] if i + 1 < n else ""
+        m = modes[-1]
+        if m == "code":
+            if ch == "/" and nxt in ("/", "*"):
+                modes.append("line" if nxt == "/" else "block")
+                i += 2
+                continue
+            if ch in ("'", '"', "`"):
+                modes.append("tpl" if ch == "`" else "str" + ch)
+                i += 1
+                continue
+            yield i, ch, depth
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if interp and depth == interp[-1]:
+                    interp.pop()
+                    modes.pop()
+            i += 1
+            continue
+        if m == "line":
+            if ch == "\n":
+                modes.pop()
+            i += 1
+            continue
+        if m == "block":
+            if ch == "*" and nxt == "/":
+                modes.pop()
+                i += 2
+            else:
+                i += 1
+            continue
+        if m == "tpl":
+            if ch == "\\":
+                i += 2
+            elif ch == "`":
+                modes.pop()
+                i += 1
+            elif ch == "$" and nxt == "{":
+                interp.append(depth)
+                depth += 1
+                modes.append("code")
+                i += 2
+            else:
+                i += 1
+            continue
+        if ch == "\\":
+            i += 2
+        else:
+            if ch == m[-1]:
+                modes.pop()
+            i += 1
+
+
 def _module_local_bindings(src):
     """Names bound at top level of `src` (imports + own declarations)."""
     bound: set[str] = set()
@@ -205,8 +274,12 @@ def _module_local_bindings(src):
     bound.update(_parse_star_namespace_imports(src).keys())
     # default import
     bound.update(re.findall(r"\bimport\s+([A-Za-z_$][\w$]*)\s*,?[^;]*\bfrom\b", src))
-    # own top-level declarations
-    bound.update(re.findall(r"\b(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)", src))
+    # own declarations: only at net brace depth 0, in real code
+    for i, _ch, depth in _iter_code(src):
+        if depth == 0:
+            m = _DECL_AT.match(src, i)
+            if m:
+                bound.add(m.group(1))
     return bound
 
 
@@ -588,6 +661,26 @@ def _cycles_through(modules, target):
     return found
 
 
+def _all_cycles(modules):
+    """全图遍历：import 图上只要存在环就返回非空（元素为环上的模块序列）。"""
+    edges = _import_edges(modules)
+    found: list[list[str]] = []
+    done: set[str] = set()
+
+    def dfs(node: str, path: list[str], on_path: set[str]) -> None:
+        for nxt in edges.get(node, ()):
+            if nxt in on_path:
+                found.append(path[path.index(nxt):] + [nxt])
+            elif nxt not in done:
+                dfs(nxt, path + [nxt], on_path | {nxt})
+        done.add(node)
+
+    for start in sorted(edges):
+        if start not in done:
+            dfs(start, [start], {start})
+    return found
+
+
 def test_listen_lab_not_an_island():
     """listen-lab.js 必须存在、非空、且被 main.js import（孤岛 = 前端接线静默失效）。"""
     path = JS_DIR / "listen-lab.js"
@@ -606,18 +699,10 @@ def test_listen_lab_exports_complete():
         assert name in own, f"listen-lab.js 缺导出 {name}"
 
 
-def test_listen_lab_no_circular_dependency():
-    """listen-lab.js 不得出现在任何 import 环上（环破坏 ES 模块求值序）。"""
-    cycles = _cycles_through(_load_modules(), "listen-lab.js")
-    assert not cycles, f"listen-lab.js 存在循环依赖：{cycles}"
-
-
-def test_cards_and_a1_no_circular_dependency():
-    """cards.js ↔ a1_cards.js 的 import 环必须已断开（getCachedVocabLemmas 上移 cd-state.js）。"""
-    modules = _load_modules()
-    for target in ("cards.js", "a1_cards.js"):
-        cycles = _cycles_through(modules, target)
-        assert not cycles, f"{target} 存在循环依赖：{cycles}"
+def test_no_circular_dependency_in_whole_graph():
+    """整张 import 图不得有环（环破坏 ES 模块求值序）—— 不再只钉 3 个模块。"""
+    cycles = _all_cycles(_load_modules())
+    assert not cycles, f"ES 模块图存在循环依赖：{cycles}"
 
 
 def test_cards_reexports_cached_vocab_lemmas():
@@ -672,12 +757,6 @@ def test_hard_sentences_exports_complete():
         assert name in own, f"hard-sentences.js 缺导出 {name}"
 
 
-def test_hard_sentences_no_circular_dependency():
-    """hard-sentences.js 不得出现在任何 import 环上（环破坏 ES 模块求值序）。"""
-    cycles = _cycles_through(_load_modules(), "hard-sentences.js")
-    assert not cycles, f"hard-sentences.js 存在循环依赖：{cycles}"
-
-
 # ── v5.23.1 事故守卫：重复导出会让整张图在解析期就死 ─────────────────────────
 # 事故：article-store.js 把 RETRY_DELAYS_MS / RETRY_BUDGET_MS / isRetryableError
 # 既写成 `export const` / `export function`，又列进文件底部的 `export { ... }`
@@ -690,7 +769,7 @@ def test_hard_sentences_no_circular_dependency():
 
 _EXPORT_DECL_FUNC_RE = re.compile(r"\bexport\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)")
 _EXPORT_DECL_VAR_RE = re.compile(r"\bexport\s+(?:let|const|var|class)\s+([A-Za-z_$][\w$]*)")
-_EXPORT_OWN_LIST_RE = re.compile(r"\bexport\s*\{([^}]*)\}\s*(?!from\b)", re.S)
+_EXPORT_OWN_LIST_RE = re.compile(r"\bexport\s*\{([^}]*)\}(?!\s*from\b)", re.S)
 
 
 def _exported_names_in_order(src):
@@ -754,6 +833,11 @@ def test_node_parses_and_links_every_module():
     """真让 node 解析+链接每个模块：重复导出、缺失导出都会在这里现形。"""
     node = shutil.which("node")
     if not node:
+        if os.environ.get("CI"):
+            pytest.exit(
+                "CI 环境缺少必需的 node 运行时；ES 模块图探针不能以 skip 静默跳过",
+                returncode=1,
+            )
         pytest.skip("未安装 node：本守卫需要 node 解析 ES 模块图")
     assert node is not None  # 供类型检查收窄（pytest.skip 在这里不被识别为 NoReturn）
 
@@ -772,3 +856,202 @@ def test_node_parses_and_links_every_module():
         "以下模块在解析/链接期失败，整页会只剩静态骨架：\n"
         + "\n".join(payload["fatal"])
     )
+
+
+# ── T10-③ 判据自证：正则边界 / 顶层绑定 / 全图环 / CI 响亮失败 ────────────────
+
+
+def test_own_export_list_regex_rejects_from_reexport():
+    """阳性：跨行与单行 `export {…} from` 都不得计入模块自身导出。"""
+    src = (
+        "export {\n"
+        "  setA1Mode,\n"
+        '} from "./a1_cards.js";\n'
+        'export { getCachedVocabLemmas } from "./cd-state.js";\n'
+        "export { getCardViewMode };\n"
+    )
+    assert _parse_own_exports(src) == {"getCardViewMode"}
+    assert _exported_names_in_order(src) == ["getCardViewMode"]
+
+
+def test_own_export_list_regex_keeps_plain_export_list():
+    """阴性：不带 from 的 `export {…}` 仍必须计入自身导出，含 `export {};`。"""
+    assert _parse_own_exports("export {};") == set()
+    assert _parse_own_exports("export { a, b as c };") == {"a", "b"}
+    assert _exported_names_in_order("export { a, b as c };") == ["a", "b"]
+
+
+def test_own_export_list_regex_mutation_proof():
+    """变异自证：旧正则把 from 边界放在空白之后会回溯到零宽而误收，新正则不会。"""
+    from_reexport = 'export { getCachedVocabLemmas } from "./cd-state.js";'
+    old = re.compile(r"\bexport\s*\{([^}]*)\}\s*(?!from\b)", re.S)
+    assert old.search(from_reexport), "旧正则必须能回溯到零宽而误收（变异体）"
+    assert not _EXPORT_OWN_LIST_RE.search(from_reexport), "修复后不得误收"
+    assert _parse_own_exports(from_reexport) == set()
+
+
+def test_module_local_bindings_only_top_level():
+    """阳性：只收顶层声明；函数体内局部声明不得冒充模块绑定。"""
+    src = (
+        "import { x } from './y.js';\n"
+        "const topLevel = 1;\n"
+        "function topFn() {\n"
+        "  const inner = 2;\n"
+        "  let shadow = 3;\n"
+        "}\n"
+    )
+    bound = _module_local_bindings(src)
+    assert {"x", "topLevel", "topFn"} <= bound
+    assert not ({"inner", "shadow"} & bound)
+
+
+def test_module_local_bindings_ignores_strings_comments_templates():
+    """阴性：字符串/注释/模板里的 const 声明不得成为绑定。"""
+    src = (
+        "// const inComment = 1;\n"
+        "/* const inBlock = 2; */\n"
+        'const s = "const inString = 3";\n'
+        "const t = `const inTpl = 4`;\n"
+        "const real = 5;\n"
+    )
+    bound = _module_local_bindings(src)
+    assert {"real", "s", "t"} <= bound
+    assert not ({"inComment", "inBlock", "inString", "inTpl"} & bound)
+
+
+def test_module_local_bindings_mutation_proof():
+    """变异自证：旧全文 findall 确实把函数体/字符串里的名字当绑定（判据恒绿）。"""
+    src = (
+        "function f() {\n"
+        "  const phantom = 1;\n"
+        "}\n"
+        "const s = 'const ghost = 2';\n"
+    )
+    legacy = set(
+        re.findall(r"\b(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)", src)
+    )
+    assert {"phantom", "ghost"} <= legacy, "旧全文 findall 确实误收（被修的变异体）"
+    assert not ({"phantom", "ghost"} & _module_local_bindings(src)), "修复后不得误收"
+
+
+def test_dangling_exposer_guard_flags_names_only_bound_in_body_or_string(tmp_path, monkeypatch):
+    """阳性（端到端）：只绑定在函数体/字符串里的名字必须被判为悬空。"""
+    js = tmp_path / "static" / "js"
+    js.mkdir(parents=True)
+    (js / "fake.js").write_text(
+        "function f() {\n"
+        "  const phantom = 1;\n"
+        "}\n"
+        "const s = 'const ghost = 2';\n"
+        "Object.assign(window, {\n"
+        "  phantom,\n"
+        "  ghost,\n"
+        "});\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    violations = _dangling_exposer_violations()
+    assert any("'phantom'" in v for v in violations)
+    assert any("'ghost'" in v for v in violations)
+
+
+def test_dangling_exposer_guard_allows_real_top_level_binding(tmp_path, monkeypatch):
+    """阴性（端到端）：真顶层绑定与导入不得被误报为悬空。"""
+    js = tmp_path / "static" / "js"
+    js.mkdir(parents=True)
+    (js / "fake.js").write_text(
+        "import { imported } from './y.js';\n"
+        "const real = 1;\n"
+        "Object.assign(window, {\n"
+        "  real,\n"
+        "  imported,\n"
+        "});\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    assert _dangling_exposer_violations() == []
+
+
+def test_all_cycles_detects_cycle_outside_pinned_modules():
+    """阳性：非钉死模块之间成环，全图遍历必须发现。"""
+    modules = {
+        "main.js": {"src": "import * as A from './alpha.js';\n"},
+        "alpha.js": {"src": "import { b } from './beta.js';\n"},
+        "beta.js": {"src": "import { a } from './alpha.js';\n"},
+    }
+    cycles = _all_cycles(modules)
+    assert cycles, "整图遍历必须发现环"
+    assert any({"alpha.js", "beta.js"} <= set(c) for c in cycles)
+
+
+def test_all_cycles_is_empty_on_acyclic_graph():
+    """阴性：无环图不得误报。"""
+    modules = {
+        "main.js": {"src": "import { a } from './alpha.js';\n"},
+        "alpha.js": {"src": "import { b } from './beta.js';\n"},
+        "beta.js": {"src": "export const b = 1;\n"},
+    }
+    assert _all_cycles(modules) == []
+
+
+def test_pinned_target_scan_would_miss_other_cycles():
+    """变异自证：只钉 target 的旧扫描确实漏报别的环（这就是被修的变异体）。"""
+    modules = {
+        "main.js": {"src": "import * as A from './alpha.js';\n"},
+        "alpha.js": {"src": "import { b } from './beta.js';\n"},
+        "beta.js": {"src": "import { a } from './alpha.js';\n"},
+    }
+    assert not _cycles_through(modules, "main.js"), "旧钉法确实漏报（变异体）"
+    assert _all_cycles(modules), "全图遍历必须报"
+
+
+def test_node_missing_in_ci_fails_loud(monkeypatch):
+    """阳性：CI 缺 node 必须 pytest.exit(returncode=1)，不静默 skip。"""
+    from _pytest.outcomes import Exit, Skipped
+
+    monkeypatch.setenv("CI", "true")
+    monkeypatch.setattr(shutil, "which", lambda _name: None)
+    try:
+        test_node_parses_and_links_every_module()
+    except Exit as exc:
+        assert exc.returncode == 1
+    except Skipped:
+        pytest.fail("CI 缺 node 时错误地静默 skip 了")
+    else:
+        pytest.fail("CI 缺 node 时没有响亮失败")
+
+
+def test_node_missing_locally_still_skips(monkeypatch):
+    """阴性：本地（无 CI）缺 node 仍保持 pytest.skip()。"""
+    from _pytest.outcomes import Exit, Skipped
+
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setattr(shutil, "which", lambda _name: None)
+    try:
+        test_node_parses_and_links_every_module()
+    except Skipped:
+        pass
+    except Exit:
+        pytest.fail("本地缺 node 不该 pytest.exit")
+    else:
+        pytest.fail("本地缺 node 没有 skip")
+
+
+def test_ci_loud_failure_mutation_proof(monkeypatch):
+    """变异自证：旧分支（无 CI 判断）在 CI 里同样会 skip，那正是要修的假绿。"""
+    from _pytest.outcomes import Skipped
+
+    monkeypatch.setenv("CI", "true")
+    monkeypatch.setattr(shutil, "which", lambda _name: None)
+
+    def legacy():
+        node = shutil.which("node")
+        if not node:
+            pytest.skip("未安装 node：本守卫需要 node 解析 ES 模块图")
+
+    try:
+        legacy()
+    except Skipped:
+        pass
+    else:
+        pytest.fail("变异体应在 CI 里也静默 skip")
