@@ -112,6 +112,16 @@ def _check_changelog(root: Path) -> list[Violation]:
         violations.append(Violation("CHANGELOG.md", "最新版本块缺少 `### 已知限制（Known Limitations）`"))
     if "### 回滚" not in head:
         violations.append(Violation("CHANGELOG.md", "最新版本块缺少 `### 回滚（Rollback）`"))
+    # FORMAT RULES 规则 2（2026-11-13 审计 P2 #14 补闸）：每版至少一个变更小节。
+    # 只判**最新版本块**——规则 4 明确 v5.22.1 及更早的小节标题保留历史格式，
+    # 对历史正文追判会把「不要为统一而重写历史」这条自己破掉。
+    if not re.search(r"^###\s+(新增|修复|内部|文档)", head, re.MULTILINE):
+        violations.append(
+            Violation(
+                "CHANGELOG.md",
+                "最新版本块缺少 `### 新增/修复/内部/文档` 中至少一个变更小节（FORMAT RULES 规则 2）",
+            )
+        )
 
     hits = _emoji_hits(text)
     if hits:
