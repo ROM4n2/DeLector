@@ -86,6 +86,113 @@ jobs:
           name: DeLector-Windows-Portable
           path: dist/DeLector-*.zip
 
+  build-windows-installer:
+    name: Build Windows x64 Installer (Setup.exe)
+    # 独立 job（2026-11-13 决策）：装 Inno Setup + 下载 WebView2 bootstrapper +
+    # 跑一次静默安装并真启验包，约 +3~5 分钟，但**不碰** build-windows 的任何步骤
+    # ⇒ 主 CI 速度不受影响。
+    # 只在真 tag 或手动触发时跑：日常 CI 不为它花时间。
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    needs: build-windows
+    timeout-minutes: 20
+    runs-on: windows-latest
+    env:
+      PYTHONIOENCODING: "utf-8"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Download Windows Portable Artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: DeLector-Windows-Portable
+          path: portable/
+
+      - name: Extract Portable
+        run: |
+          $ErrorActionPreference = "Stop"
+          Expand-Archive -Path portable/DeLector-*-Windows-x64-Portable.zip -DestinationPath portable/ -Force
+          $dir = Get-ChildItem -Path portable -Directory -Filter "DeLector-*-Windows-x64-Portable" | Select-Object -First 1
+          if (-not $dir) { throw "解压后找不到便携版目录" }
+          $dir.FullName | Out-File -FilePath portable/dir.txt -Encoding utf8
+
+      - name: Install Inno Setup 7.1.1 (pinned)
+        # 固定 7.1.1（Inno 7.x 当前版，与本机实测一致）：`choco install innosetup` 装的是
+        # **最新版**，编译器大版本一变就可能在发版期炸掉。直链下载 + 校验体积，失败即红。
+        run: |
+          $ErrorActionPreference = "Stop"
+          $url = "https://github.com/jrsoftware/issrc/releases/download/is-7_1_1/innosetup-7.1.1-x64.exe"
+          $installer = "$env:RUNNER_TEMP\innosetup-7.1.1-x64.exe"
+          for ($i = 1; $i -le 3; $i++) {
+            try {
+              Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
+              break
+            } catch {
+              if ($i -eq 3) { throw "Inno Setup 下载失败：$($_.Exception.Message)" }
+              Start-Sleep -Seconds 10
+            }
+          }
+          $len = (Get-Item $installer).Length
+          if ($len -lt 3000000) { throw "Inno Setup 安装包大小异常（$len 字节）" }
+          $innoDir = "$env:RUNNER_TEMP\inno"
+          & $installer /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER "/DIR=$innoDir"
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup 安装失败（exit=$LASTEXITCODE）" }
+          if (-not (Test-Path "$innoDir\ISCC.exe")) { throw "找不到 ISCC.exe" }
+          "$innoDir\ISCC.exe" | Out-File -FilePath "$env:RUNNER_TEMP\iscc_path.txt" -Encoding utf8
+
+      - name: Download WebView2 Evergreen Bootstrapper
+        # 内嵌它：Win10 常缺 WebView2 运行时，装完即可用（见 installer/DeLector.iss 文件头约束 4）。
+        run: |
+          $ErrorActionPreference = "Stop"
+          $url = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
+          $out = "$env:RUNNER_TEMP\MicrosoftEdgeWebview2Setup.exe"
+          for ($i = 1; $i -le 3; $i++) {
+            try {
+              Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing
+              break
+            } catch {
+              if ($i -eq 3) { throw "bootstrapper 下载失败：$($_.Exception.Message)" }
+              Start-Sleep -Seconds 10
+            }
+          }
+          $len = (Get-Item $out).Length
+          if ($len -lt 1000000) { throw "bootstrapper 大小异常（$len 字节）" }
+          Write-Host "bootstrapper bytes=$len sha256=$((Get-FileHash $out -Algorithm SHA256).Hash)"
+
+      - name: Build Installer (ISCC)
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = python -c "from delector.core.version import APP_VERSION; print(APP_VERSION)"
+          $portable = (Get-Content portable/dir.txt -Raw).Trim()
+          $iscc = (Get-Content "$env:RUNNER_TEMP\iscc_path.txt" -Raw).Trim()
+          if (-not (Test-Path $iscc)) { throw "找不到 ISCC（Inno Setup 未装好？）" }
+          & $iscc "/DAppVersion=$version" "/DPortableDir=$portable" "/DWebView2Setup=$env:RUNNER_TEMP\MicrosoftEdgeWebview2Setup.exe" "installer\DeLector.iss"
+          if ($LASTEXITCODE -ne 0) { throw "ISCC 失败（exit=$LASTEXITCODE）" }
+
+      - name: Verify Installer (静默安装 + 真启一次)
+        # 复用便携版那道真启闸：装完拿安装目录喂给它，真起一次服务并断言健康与干净退出。
+        run: |
+          $ErrorActionPreference = "Stop"
+          $setup = Get-ChildItem -Path dist -Filter "DeLector-*-Windows-x64-Setup.exe" | Select-Object -First 1
+          if (-not $setup) { throw "未产出 Setup.exe" }
+          Write-Host "setup bytes=$((Get-Item $setup.FullName).Length)"
+          $installDir = "$env:RUNNER_TEMP\DeLectorInstall"
+          & $setup.FullName /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- "/DIR=$installDir" "/LOG=$env:RUNNER_TEMP\inno.log"
+          if ($LASTEXITCODE -ne 0) { throw "静默安装失败（exit=$LASTEXITCODE），日志见 inno.log" }
+          if (-not (Test-Path "$installDir\DeLector.exe")) { throw "安装目录缺 DeLector.exe" }
+          python tools/verify_windows_portable.py --artifact "$installDir"
+
+      - name: Upload Installer Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: DeLector-Windows-Installer
+          path: dist/DeLector-*-Windows-x64-Setup.exe
+
   build-linux:
     name: Build Linux x64 Portable
     runs-on: ubuntu-latest
@@ -555,7 +662,7 @@ jobs:
   publish-github-release:
     name: Publish GitHub Release
     timeout-minutes: 10
-    needs: [build-windows, build-linux, build-macos, build-android]
+    needs: [build-windows, build-windows-installer, build-linux, build-macos, build-android]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
@@ -566,6 +673,12 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: DeLector-Windows-Portable
+          path: dist/
+
+      - name: Download Windows Installer Artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: DeLector-Windows-Installer
           path: dist/
 
       - name: Download Linux Artifact
@@ -591,6 +704,7 @@ jobs:
         with:
           files: |
             dist/DeLector-*.zip
+            dist/DeLector-*-Windows-x64-Setup.exe
             dist/DeLector-*.tar.gz
             dist/DeLector-*.apk
           name: DeLector ${{ github.ref_name }} — 德语学术精读与备考工作台
@@ -609,6 +723,7 @@ jobs:
 
             ### 多平台下载与安装
             - **Windows x64 便携版**：`DeLector-${{ github.ref_name }}-Windows-x64-Portable.zip` —— 解压双击 `DeLector.exe` 打开**原生桌面窗口 + 系统托盘**（无浏览器标签）。需 **Win10+ 与 WebView2 运行时**（Win11 自带）；学习数据默认落在 `%LOCALAPPDATA%\DeLector`（升级时请勿删除该目录）。
+            - **Windows x64 安装版**：`DeLector-${{ github.ref_name }}-Windows-x64-Setup.exe` —— 免管理员的 per-user 安装（装到 `%LOCALAPPDATA%\Programs\DeLector`，自带开始菜单快捷方式与卸载器，支持 `/VERYSILENT` 静默安装）。**未做代码签名**：Windows SmartScreen 可能提示「未知发布者」，选「更多信息 → 仍要运行」即可。安装器内嵌 WebView2 bootstrapper：系统缺运行时且安装时具备管理员权限则自动补装，否则应用首次启动会提示并给出官方下载入口。学习数据始终在 `%LOCALAPPDATA%\DeLector`，**卸载不会删除它**。
             - **macOS 免安装包**：`DeLector-${{ github.ref_name }}-macOS.tar.gz` —— 解压后进入 `DeLector-${{ github.ref_name }}-macOS/`，运行其中的裸可执行文件 `./DeLector`（不是 `.app` 包）；正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`。包未做代码签名与公证，若被 Gatekeeper 拦截请右键「打开」，或执行 `xattr -d com.apple.quarantine DeLector`。
             - **Linux x64 便携版**：`DeLector-${{ github.ref_name }}-Linux-x64.tar.gz` —— 解压后进入 `DeLector-${{ github.ref_name }}-Linux-x64/`，运行 `./DeLector`（若权限丢失先 `chmod +x DeLector`）。在 CI 的 Ubuntu 环境构建，未在其他发行版验证。
             - **Android 独立单机版**：`DeLector-${{ github.ref_name }}-Android.apk` —— 内嵌 Python 运行时 + spaCy 离线模型 + 原生离线 TTS 桥接，arm64-v8a；CI 用 `keytool` 校验 SHA256 证书指纹一致（可覆盖升级），arm64 真机未验证。

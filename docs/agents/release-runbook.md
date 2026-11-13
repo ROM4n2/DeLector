@@ -2,7 +2,7 @@
 
 > 定位：`docs/README.md` §分层 的 `agents/` 常青运维文档 + 需逐项填写的实证记录模板。
 > 证据等级全文统一标注：**[仓内实证]** / **[私有笔记库 复盘实证]**（正式件在 私有笔记库，仓内不可检索）/ **[未实证]**。
-> 本 runbook 只描述恢复动作与判据，**不修改 CI 定义**（`.github/workflows/build-release.yml` 保持原样）。
+> 本 runbook 只描述恢复动作与判据；CI 定义以 `.github/workflows/build-release.yml` 为准（2026-11-13 起新增 `build-windows-installer` 独立 job，见 §1.1）。
 
 ## ⚠️ 未实证声明（MUST）
 
@@ -19,10 +19,10 @@
 | 事实 | 证据 | 等级 |
 |---|---|---|
 | `on: push.tags: "v*"` + `workflow_dispatch:`（无 inputs） | `.github/workflows/build-release.yml:3-7` | 仓内定义 |
-| `publish-github-release` 有 `needs: [build-windows, build-linux, build-macos, build-android]` 与 `if: startsWith(github.ref, 'refs/tags/v')` | `:555-560` | 仓内定义 |
+| `publish-github-release` 有 `needs: [build-windows, build-windows-installer, build-linux, build-macos, build-android]` 与 `if: startsWith(github.ref, 'refs/tags/v')` | `:555-560` | 仓内定义 |
 | Publish 用 `softprops/action-gh-release@v3`，`files: dist/DeLector-*.zip / *.tar.gz / *.apk`，`draft: false`，`name` 取 `github.ref_name` | `:589-620` | 仓内定义 |
 | dispatch 到**分支** ⇒ Publish 静默跳过，靠**移 tag** 补跑 | 私有笔记库 不随仓库分发，转引自 `docs/plans/archive/2026-10-12-release-pipeline-and-docs-consolidation.md:19` 与 `WORKMEMORY/archive/work-2026-10-12.log:27` | [私有笔记库 复盘实证] |
-| 某平台 job 红 ⇒ `needs` 不满足 ⇒ Publish `skipped` ⇒ tag 存在但无 Release；已发生三次：`v5.1.1`（2026-09，无人恢复）、`v5.17.0` 首次 tag（2026-10-11，删 tag 重打恢复） | `WORKMEMORY/archive/work-2026-10-12.log:21-27` | [仓内实证] |
+| 某平台 job 红（含 `build-windows-installer`）⇒ `needs` 不满足 ⇒ Publish `skipped` ⇒ tag 存在但无 Release；已发生三次：`v5.1.1`（2026-09，无人恢复）、`v5.17.0` 首次 tag（2026-10-11，删 tag 重打恢复） | `WORKMEMORY/archive/work-2026-10-12.log:21-27` | [仓内实证] |
 | 孤儿 tag `v5.1.1` 已按「删 tag + 记账、不补发」处置（`gh release view v5.1.1` → not found），理由：补发过期版本会让用户看到陈旧产物 | `docs/plans/archive/2026-10-12-release-pipeline-and-docs-consolidation.md:18`、`work-2026-10-12.log:23-24` | [仓内实证] |
 | 发布后 MUST 用 `gh release edit <tag> --notes-file <文件>` 覆盖逐版正文 | `build-release.yml:597-599`、`docs/agents/ops.md:233-237` | 仓内纪律 |
 | 是否已发布的**唯一判据是 release 清单 / 资产列表，永远不是 run 状态** | `docs/plans/archive/2026-10-12-release-pipeline-and-docs-consolidation.md:19`、`work-2026-10-12.log:27` | 复盘铁律 |
@@ -34,6 +34,25 @@
 | A | **孤儿 tag**：`v*` tag 已推送，但四个 build job 至少一个红 | `needs` 不满足 → `publish-github-release` `skipped` → tag 存在、Release 不存在 | [仓内实证] `v5.1.1` / `v5.17.0` 首次 tag |
 | B | **dispatch 到分支**（含 `gh workflow run build-release.yml` 默认 `--ref master` 或 `--ref <branch>`） | `github.ref = refs/heads/*` → `if` 为假 → 即使四平台全绿也静默跳过 Publish | [私有笔记库 复盘实证] |
 | C | **dispatch 到 tag**：`gh workflow run build-release.yml --ref <tag>` | 推测 `github.ref = refs/tags/v*` 可满足 `if` | **[未实证]**，见 §4 |
+
+### 1.1 Windows 安装器是**独立 job**（2026-11-13 起）
+
+`build-windows-installer`：`needs: build-windows`（复用已验过的便携版产物），
+`if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'`。
+
+- **不拖慢主 CI**：主 job（`build-windows`）一行未改；装包 job 只在真 tag 或手动触发时跑
+  （决策 2026-11-13：装包多花的几分钟单独占一个 job，不进日常 CI）。
+- **它也是发布的前置**：它在 `publish-github-release` 的 `needs` 里 ⇒ 它红则发布被跳过
+  （与形态 A 同形：tag 在、Release 无）。排查时先看它的 ISCC / 静默安装 / 真启验包三步日志，
+  **不要**因此去改主 job。
+- 编译器**钉死版本**（直链下载固定发行版，不用 `choco install innosetup`）：
+  Inno 已出 7.x，装最新版会让发版期被编译器大版本变化炸掉。
+- **[仓内实证]**：本机（Windows 11 + Inno Setup 7）实测——ISCC 编译 64MB 安装包 30s、
+  `/VERYSILENT` 静默安装 14s 退出码 0、对安装目录跑 `tools/verify_windows_portable.py`
+  **真启通过**（起服 11.6s、健康断言、干净退出、无孤儿进程）、卸载后用户数据目录
+  `%LOCALAPPDATA%\DeLector` 12 项逐条一致（**卸载不删数据**）。
+- **[未实证]**：CI 上这条路径（直链下载 → ISCC → 静默安装 → 真启验包）尚未跑过，
+  首次随真 tag 触发时才算实证；在此之前**不得**把「本地验过」写成「CI 验过」。
 
 **识别（只读，先取证再动手）**
 

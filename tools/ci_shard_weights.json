@@ -194,6 +194,7 @@
   "tests/test_wb_rate_probe.py": 0.2,
   "tests/test_wb_rtc_probes.py": 0.4,
   "tests/test_wb_source.py": 0.1,
+  "tests/test_windows_installer.py": 0.2,
   "tests/test_wordcard_ledger.py": 4.0,
   "tests/test_workbench_gates.py": 0.1,
   "tests/test_workbench_tokens.py": 0.1,

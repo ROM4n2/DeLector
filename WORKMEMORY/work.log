@@ -485,3 +485,21 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 Work done: 私有表述清理（123 文件）+ 两份交接包归档，PR #377 已合入 origin/master（`3468d14`）；残留扫描零命中、7 个静态闸全绿。
 Remaining work: 若要连**历史事件正文**里的私有表述也清掉，需要显式授权破例 PROTOCOL §1.3（追加制）；本轮未做。
 - 不做：不改写历史事件正文；不删已发布的 v5.23.5 tag。
+
+### 2026-11-13 22:17 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+新增 **Windows 安装版**（Inno Setup 6/7），独立分支 `feat/windows-installer`。
+- 形态：`installer/DeLector.iss` → `DeLector-v<版本>-Windows-x64-Setup.exe`（实测 64MB，LZMA2 实体压缩）。**per-user 安装**（`PrivilegesRequired=lowest` → `%LOCALAPPDATA%\Programs\DeLector`，免 UAC）、自带开始菜单与卸载器、支持 `/VERYSILENT`。**未做代码签名**（无证书预算）⇒ SmartScreen 会提示「未知发布者」，已在发布正文与 README 已知限制里如实写明。
+- **WebView2 内嵌**：打包带 Evergreen bootstrapper（约 1.8MB），按注册表 `pv` 判定是否已装；补装**失败不阻断安装**（应用自身还有检测与官方下载入口）。
+- **绝不删用户数据**：数据在 `%LOCALAPPDATA%\DeLector`，与安装目录分离；脚本里禁止出现 `[UninstallDelete]`（守卫钉住）。
+- **CI 独立 job**：`build-windows-installer`（`needs: build-windows` 复用已验过的便携版产物），**只在真 tag 或手动触发时跑** ⇒ 主 CI 速度不受影响（决策 2026-11-13）。编译器**钉 7.1.1 直链下载**（不用 `choco install innosetup`：它装最新版，Inno 已出 7.x/8.x 趋势，编译器大版本一变就可能在发版期炸）。
+- **[仓内实证]**（本机 Windows 11 + Inno Setup 7）：ISCC 编译 30s → 64MB；`/VERYSILENT` 静默安装 14s、退出码 0；对**安装目录**跑现成的 `tools/verify_windows_portable.py` **真启通过**（起服 11.6s、健康断言、干净退出、无孤儿进程、无 traceback）；卸载后用户数据目录 **12 项逐条一致 ⇒ 卸载不删数据**。
+- **[未实证]**：CI 上这条链路（直链下载 → ISCC → 静默安装 → 真启验包）还没跑过，要等首次真 tag 触发才算实证——已在 runbook §1.1 与守卫口径里标注，不得把「本地验过」写成「CI 验过」。
+- 守卫：`tests/test_windows_installer.py`（12 条，含 7 条变异自证：写死版本号 / 改成 admin 安装 / 加 `[UninstallDelete]` / 去掉 WebView2 判定 / 去掉 tag 门 / 把 Inno 塞进主 CI / 去掉未签名披露，均必须变红），已登记进 CI 分片。
+- 踩坑：① 第一次给 .iss 写「每条只留首句」式的**截断**没意义（这次没做）；② 改 YAML 时**插入文本被多加一个 CR**（`\r\r\n` 86 处）——git 只剥一层，若提交会把杂散 CR 带进仓库，已全量扫描并修掉；③ Git Bash 会把 ISCC 的 `/DPortableDir=...` 当成路径转换（`/data/local/tmp` 同款坑），须 `MSYS_NO_PATHCONV=1`；④ Inno 的 `/D` 与路径含空格会互相打架，故 CI 里所有传入路径都避开空格。
+
+### 2026-11-13 22:17 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: Windows 安装器（.iss + 独立 CI job + 守卫 + README/runbook 同步）本地真实验证通过，待 PR 合入 master。
+Remaining work: 首次真 tag 触发时验证 CI 链路（直链下载 → ISCC → 静默安装 → 真启验包），并把该次 run 的实证回写 runbook §1.1。
+- 不做：不买代码签名证书；不删便携 zip（双轨并存）；不发版（等下一个 tag）。
