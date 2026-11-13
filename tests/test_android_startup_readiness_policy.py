@@ -129,8 +129,14 @@ def _terminal_state_violations(src: str) -> list[str]:
         bad.append("预算耗尽后仍写「正在重试」：Java 侧已 return，属假进行中")
     # 只认带 lambda 的监听：终态块里还有 `setOnClickListener(null)`，
     # 光搜 `setOnClickListener` 会被那一行兜住（实测变异自证抓到的假绿）。
-    if "setOnClickListener(v ->" not in timeout or "pollServerReadiness(getFilesDir())" not in timeout:
-        bad.append("缺可点重试入口：点击没有重启 pollServerReadiness")
+    if "retryButton.setOnClickListener(v ->" not in timeout:
+        bad.append("重试没有挂在独立 Button 上（缺可点重试入口）")
+    if "statusTextView.setOnClickListener" in timeout:
+        bad.append(
+            "重试挂在可选中 TextView 上：首次触摸会被文本选择态吞掉（2026-11-13 真机实测，要点两下）"
+        )
+    if "pollServerReadiness(getFilesDir())" not in timeout:
+        bad.append("点击重试没有重启 pollServerReadiness")
     if "progressBar.setVisibility(View.GONE)" not in timeout:
         bad.append("indeterminate spinner 未停，仍是假进行中")
     if "setTextIsSelectable(true)" not in timeout:
@@ -152,8 +158,15 @@ def test_readiness_terminal_state_guard_rejects_regressions() -> None:
     """变异自证：四类回归逐一把同一判定器喂红，证明闸不是摆设（无需手改文件）。"""
     good = _main_source()
     mutations = (
-        ("假进行中文案", good.replace("已停止连接。点此重试。", "正在重试连接...")),
-        ("删可点重试", good.replace("statusTextView.setOnClickListener(v -> {", "if (false) {")),
+        ("假进行中文案", good.replace("已停止连接。", "正在重试连接...")),
+        ("删可点重试", good.replace("retryButton.setOnClickListener(v -> {", "if (false) {")),
+        (
+            "重试改回可选中 TextView",
+            good.replace(
+                "retryButton.setOnClickListener(v -> {",
+                "statusTextView.setOnClickListener(v -> {",
+            ),
+        ),
         ("spinner 不停", good.replace("progressBar.setVisibility(View.GONE);", "", 1)),
     )
     hook_start = good.index("private void notifyServerReadyInPage()")

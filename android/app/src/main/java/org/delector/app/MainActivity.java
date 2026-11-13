@@ -28,6 +28,7 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -57,6 +58,7 @@ public class MainActivity extends AppCompatActivity {
     private WebView webView;
     private LinearLayout splashLayout;
     private TextView statusTextView;
+    private Button retryButton;
     private ProgressBar progressBar;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private volatile boolean isServerReady = false;
@@ -462,10 +464,19 @@ public class MainActivity extends AppCompatActivity {
         statusTextView.setPadding(0, 24, 0, 0);
         statusTextView.setGravity(Gravity.CENTER);
 
+        // 终态专用的重试按钮：默认隐藏，只在就绪预算耗尽时出现。
+        // 不能把点击挂在 statusTextView 上 —— 它开了 setTextIsSelectable(true)（让用户能复制
+        // 错误去转述），而可选中文本在首次触摸时进入选择态并吞掉 onClick：2026-11-13 arm64
+        // 真机实测，点一次 `poll_begin` 不变、点第二次才重启轮询。
+        retryButton = new Button(this);
+        retryButton.setText("重试");
+        retryButton.setVisibility(View.GONE);
+
         splashLayout.addView(titleView);
         splashLayout.addView(subtitleView);
         splashLayout.addView(progressBar);
         splashLayout.addView(statusTextView);
+        splashLayout.addView(retryButton);
 
         root.addView(splashLayout, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -843,11 +854,15 @@ public class MainActivity extends AppCompatActivity {
             // 预算已耗尽：Java 侧不再轮询，必须给「可见终态 + 可点重试」，不能假进行中。
             progressBar.setVisibility(View.GONE);
             statusTextView.setTextIsSelectable(true);
+            // 文案保持可选中（用户要能把错误转述给开发者），但点击交给独立 Button：
+            // 可选中文本会吞掉首次触摸的 onClick，挂在它身上的重试等于要点两下才生效。
             statusTextView.setText(timeoutPort > 0
-                    ? "服务启动超时（端口 " + timeoutPort + "），已停止连接。点此重试。"
-                    : "服务启动超时，已停止连接。点此重试。");
-            statusTextView.setOnClickListener(v -> {
-                statusTextView.setOnClickListener(null);
+                    ? "服务启动超时（端口 " + timeoutPort + "），已停止连接。"
+                    : "服务启动超时，已停止连接。");
+            retryButton.setVisibility(View.VISIBLE);
+            retryButton.setOnClickListener(v -> {
+                retryButton.setOnClickListener(null);
+                retryButton.setVisibility(View.GONE);
                 statusTextView.setText("正在重新连接本地服务...");
                 progressBar.setVisibility(View.VISIBLE);
                 new Thread(() -> pollServerReadiness(getFilesDir())).start();
