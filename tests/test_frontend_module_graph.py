@@ -206,9 +206,9 @@ def _iter_code(src):
     状态机与 tests/wb_source.py::_iter_braces 同源（已核对其签名与 yield 形态：
     `_iter_braces(text, start)` 只 yield `(下标, '{'|'}', 扫描前深度, 扫描后深度)`）。
     这里额外逐字符 yield，才能在净深度 0 处只认真正的声明。
-    已知限制：不识别正则字面量里的未转义花括号（与 tests/wb_source.py 同源）。
-    当前含 window exposer 块的生产文件不触发该形态；若新增，
-    test_iter_code_depth_returns_to_zero_on_real_exposer_files 会立即变红。
+    已知限制：不识别正则字面量里的未转义花括号（与 tests/wb_source.py 同源）。
+    当前含 window exposer 块的生产文件不触发该形态；若新增，
+    test_iter_code_depth_returns_to_zero_on_real_exposer_files 会立即变红。
     """
     depth, modes, interp, i, n = 0, ["code"], [], 0, len(src)
     while i < n:
