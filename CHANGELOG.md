@@ -15,6 +15,45 @@
 5. README.md 的「版本历史」表只保留最近 3 版，旧版只进本文件。
 -->
 
+## v5.23.5 - 2026-11-13
+
+### 修复
+
+- **还原备份会抹掉并发写入**（2026-11-13 整体健康度审计 P1）：还原拆成 4 段独立事务，`_db_snapshot_guard` 的 `yield` 期间不持锁；任一步失败时整库回写快照，会把间隙里其它请求提交的合法写入（新存词卡、`PUT /api/wb/state`）一并抹掉。现在还原期间对所有 HTTP 请求置写屏障：新请求立即 503 + `Retry-After`（不排队），等在途请求排空后才开始；「检查屏障 + 登记在途」在同一把锁内原子完成，另加 owner 互斥保证同时只有一次还原，`finally` 无条件复位状态。
+- **数据目录迁移静默重建空进度库**（审计 P1）：迁移闸只看 `delector.db`，新位置已有非空主库就提前放行，`progress.db` 被留在旧位置，`study_log` / `quiz_log` / `exam_trials` 在新位置重建为空。现在逐库判定，缺任一库即 fail-loud 并打印可复制的拷贝命令。
+- **覆盖安装后可能跑旧前端资源**（审计 P1）：Service Worker 的 `networkFirst` catch 无条件 `caches.match`，会跨 cache 命中上一版本资源并当 200 交付。现在只从当前 `CACHE_NAME` 回落；导航请求仍回落应用外壳——实测 Android 首帧（≈0.5s）早于进程内服务就绪（≈1.4s），不回落会直接停在 `net::ERR_FAILED`。
+- **写路径事务边界**（审计 P2）：wb 投影 `SELECT → INSERT`、FSRS 复习 `SELECT → 计算 → UPDATE` 补显式 `BEGIN IMMEDIATE`；跨 `progress.db` 写失败改显式 500，不再静默半写；11 处裸 `with get_db()` 改为确定性 `close()`。
+- **导出失败不再假成功**：`exportAndReport` 外层补 try/catch，两个导出按钮的 click 链补 `.catch()`，失败一律走 `error` toast；写盘中途失败不再留下半截 JSON，500 的 detail 不再回传绝对路径。
+- **Android 启动失败终态**：就绪预算耗尽后文案改为「…已停止连接。」并给出独立「重试」按钮——此前重试监听挂在 `setTextIsSelectable(true)` 的文本上，首次触摸被文本选择态吞掉，用户要点两下才生效。
+- **阅读页状态机**：占位标题不再被自身写回成永久「⏳ 载入中…」；503 退避定时器保存句柄并在切换文章 / `pagehide` 时撤销；消费后端 `processed_stale` 显示「分词正在升级」提示。
+- **NLP 加载失败负缓存**：无下载加载失败后写 TTL 负缓存，TTL 内不再每个请求重跑三级回退。
+- **运行时静默降级**：`.env` 不再覆盖显式注入的环境变量（`override=False`）；实例锁降级为无互斥句柄时打可见告警。
+
+### 内部
+
+- 新增机械闸：`requirements.lock.txt` 可解性（`pip install --dry-run`）、`master` 直推范围闸、发布侧验包硬截止与心跳、pytest 分片注册补齐、空扫描面退 2、CHANGELOG 格式规则 2。
+- 判据从「字符串在场断言」改为行为探针：前端守卫 15 场景、模块图真链接整张图、wb 导出切片括号配平、Android 就绪策略；并补「删掉保护物必红」的变异自证。
+- 新增 `tools/install_apk.py`：真机安装时自动点掉 MIUI 的 USB 安装确认页（否则 `adb install` 恒报 `INSTALL_FAILED_USER_RESTRICTED: Install canceled by user`）。
+- Android 增加 **debug-only** 故障注入开关（`--ez delector_fake_stuck[_once] true`），用于点验启动失败终态与重试接线；release 包由 R8 折叠，不含该路径。
+- 依赖：`pydantic 2.14.2→2.14.3` 且 `pydantic-core 2.50.2→2.50.4`（2.14.3 要求 core 精确 2.50.4，lock 同步；Android 侧仍用 `pydantic<2.0.0`，不受影响）。
+- 删除跨进程量级比较的基准断言（同机相邻两次可差 2 倍，曾随机打红 `master`）、清理死代码、活文档版本/数字口径收口。
+
+### 已知限制（Known Limitations）
+
+- **Android 点检口径（本版实测）**：arm64 真机（Redmi Note 8 / Android 11）做了 `v5.23.4 → v5.23.5` 覆盖安装验证——不白屏、首页完整渲染、`ttfd` 3.6s、零 `FATAL` / `ERR_FAILED`、`ready_notify` 链路正常。**阅读页未在真机点开**：Android 侧文本导入受 `_require_localhost` 限制（设计如此），空库设备上没有可读文章；该页由 pytest 与 node 探针覆盖，**不算真机已验证**。
+- **Windows 冻结 exe（本版实测）**：打包产物能启动、渲染桌面版界面、`/api/health` 返回 `nlp: ready`、`POST /api/wb/backup/save` 真实落盘（77 字节，内容与请求一致）。**WebView2 中点击导出按钮的链路未驱动验证**；导出主路径已不经浏览器下载（走服务端落盘），只有 blob 兜底才涉及 WebView2 的下载处理器。
+- **macOS / Linux 未验证**（与历史版本一致）。
+- **首页 LIVE 演示卡冷启动时可能显示「本地引擎暂不可用」**：页面首帧（≈3.6s）早于 Python 服务就绪（≈12s），该卡自动请求必然失败。**v5.23.4 在同一设备上表现完全相同**（已对照确认），不是本版回归；待下一版定位。
+- **本地未跑全量 pytest**（按 2026-11-13 起的约束只跑对点）：README 徽章的 `3040 passed / 3054 collected` 仍是 **v5.23.4 时点**的实测记录，本版未复跑，不得当作本版实测。
+
+### 回滚（Rollback）
+
+- 代码回滚：`git revert` 本版合并提交，或检出 `v5.23.4` tag 重新打包。
+- 数据面：本版只改事务边界与迁移闸，**无 schema 变更、无 DDL**，回滚不需要数据库迁移。
+- 覆盖安装回滚：Android 上 `versionCode` 递减（52305→52304）会被系统拒绝，需 `adb install -r -d`（允许降级）或先卸载；**卸载会清数据**，优先用前者。
+
+---
+
 ## v5.23.4 - 2026-11-11
 
 ### 修复
