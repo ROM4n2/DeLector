@@ -469,3 +469,19 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 - **work.log 轮转**（`b7e91d0`）：97 事件 > 阈值 75（`HOT_RETENTION_EVENTS=50` × 1.5）。按 PROTOCOL §5/§5.1 只移动不改写：保留最新 50 条，最老 47 条（11-08 的 3 条 / 11-09 的 24 条 / 11-10 00:01~19:31 的 20 条）移入 `archive/work-2026-11-08|09|10.log`。移动前现读整文件、移动后按协议跑 union 对账（`grep '^### '` 前后 `diff` 无输出、末条头不变）。INDEX-topics 与 PROJECT_OVERVIEW 里「53 事件 < 阈值 75，未轮转」的过期口径已改。
 - **CHANGELOG 精简**（`13e3885`）：931 → 412 行。v5.23.0 及之后保留完整块（修复/内部/已知限制/回滚）；v5.22.x 及更早 15 个版本压成「版本/日期/里程碑」一行表格，里程碑**直接复用各版原有 `###` 小节标题**（不重写、不概括，避免压缩失真）。完整原文仍在 git 历史与各版 Release；附录「路线图/历史已完成清单」逐项保留（`- [x]` 79 项前后一致）。`tools/check_release_docs.py` 仍 exit 0。
 - Windows installer 只做**只读评估**（未动 CI / 未加脚本）：结论与代价见对话，待用户就「签名证书 / 是否保留便携 zip / WebView2 是否内嵌 bootstrapper」决策。
+
+### 2026-11-13 21:36 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+用户指出：仓库是 **PUBLIC**，而仓里带着个人私有知识库的表述（`Obsidian Vault 08-Projects/DeLector/01-ADR/` 等），不该上传。已清理并合入（PR #377，`5102465` → 合并提交 `3468d14`）。
+- **清理范围**（123 文件）：①「Obsidian / Vault」品牌词与 `08-Projects/`、`99-Inbox/`、`01-Rules/`、`01-ADR/` 等私有目录路径；②机器专属绝对路径（`d:/…/Coding/…`）与私有笔记文件名；③5 个 agent 配置文件（`CLAUDE.md` / `AGENTS.md` / `GEMINI.md` / `.agent-rules.md` / `.cursorrules`）里的私有库工作流段落 → 改成中性说明（仍可用本机 MCP，但仓库不含其路径与内容）。
+- **同时按 PROTOCOL §4 归档交接包**：`handoff_2026-11-10-project-pause.md` 与 `handoff_no-console-feedback-gaps.md` 移入 `WORKMEMORY/archive/`，INDEX.md 的 Active 段清空并在「已归档 handoffs」登记，PROJECT_OVERVIEW 入站链接改指 archive/。
+- **保留的三类（有意为之）**：① `WORKMEMORY/work.log` 与 `archive/work-*.log` 的**事件正文**——协议 §1.3 只追加，禁改写（其历史表述仍在 git 历史里）；② `/vault-save`、`vault-exec` 这类**本机命令名**（不含私有路径）；③ `docs/research/*` 里的「Obsidian Help / 对标 Obsidian」是**公开产品名**，误改才是回归。
+- **踩坑（自己犯的）**：第一遍用正则把 `Obsidian` 一刀切替换成「私有笔记」，把 research 文档里作为**竞品**出现的 Obsidian 也改了——这是误伤，已还原；这类替换必须带上下文判据，不能按品牌词全局替换。同理，`（私有笔记，未随仓库分发）` 这类嵌套括号是二次替换的产物，最后用「不随仓库分发」的统一措辞收口。
+- **校验**：`origin/master` 树上重扫（`obsidian|WIKI_PATH|08-Projects|99-Inbox|01-Rules|vault://|01-ADR/`）**零残留**；`docs_layout` / `release_docs` / `css_sync` / `index_html_sync` / `layer_invariants` / `mock_drift` / `frontend_api_contract` 全 exit 0（`src/css` 与 `static/style.css` 同步改动，css_sync 仍绿）。
+- 另：CHANGELOG 二次精简到 122 行（v5.23.5 / v5.23.4 保留完整块，其余 19 版一行表；路线图附录逐字移入 `WORKMEMORY/archive/changelog-legacy-roadmap.md`）与 `work.log` 轮转（97→50 事件，47 条按协议 §5.1 移入 archive 分片，事件集合守恒已对账）已在先前提交落地。
+
+### 2026-11-13 21:36 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 私有表述清理（123 文件）+ 两份交接包归档，PR #377 已合入 origin/master（`3468d14`）；残留扫描零命中、7 个静态闸全绿。
+Remaining work: 若要连**历史事件正文**里的私有表述也清掉，需要显式授权破例 PROTOCOL §1.3（追加制）；本轮未做。
+- 不做：不改写历史事件正文；不删已发布的 v5.23.5 tag。
