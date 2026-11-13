@@ -196,3 +196,251 @@ def test_reader_state_template_uses_only_declared_vars():
         "reader 状态模板引用了未声明的变量（运行时 ReferenceError，阅读页打不开）："
         + ", ".join(missing)
     )
+
+
+# ── T13：阅读页状态机残留（行为探针：node 真跑 + 内建变异自证）─────────────
+import json
+import shutil
+import subprocess
+
+from probe_runner import require_node
+
+_T13_NODE_PROBE = r"""
+const fs = await import('node:fs');
+const vm = await import('node:vm');
+const ROOT = process.cwd();
+const READER = fs.readFileSync(ROOT + '/static/js/reader.js', 'utf8');
+const STORE = fs.readFileSync(ROOT + '/static/js/article-store.js', 'utf8');
+const cases = [];
+const check = (name, ok, detail) => cases.push({ name, ok: !!ok, detail: ok ? '' : String(detail ?? '') });
+const delays = JSON.parse(STORE.match(/const RETRY_DELAYS_MS = (\[[^\]]*\]);/)[1]);
+const budget = Number(STORE.match(/const RETRY_BUDGET_MS = (\d+);/)[1]);
+
+function strip(src) {
+  const out = []; let inImport = false;
+  for (const line of src.split('\n')) {
+    if (!inImport && /^import\b/.test(line)) { inImport = !/;\s*$/.test(line); continue; }
+    if (inImport) { if (/;\s*$/.test(line)) inImport = false; continue; }
+    out.push(line);
+  }
+  return out.join('\n')
+    .replace(/^export\s*\{[^}]*\};?/gm, '')
+    .replace(/^export\s+/gm, '')
+    .replace(/^['"]use strict['"];\s*$/gm, '');
+}
+function el(id) {
+  const attrs = {};
+  return {
+    id, textContent: '', innerHTML: '', hidden: false, firstChild: null,
+    style: { setProperty() {} },
+    classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
+    dataset: {}, setAttribute(k, v) { attrs[k] = v; }, getAttribute(k) { return attrs[k]; },
+    querySelector() { return null; }, querySelectorAll() { return []; },
+    addEventListener() {}, appendChild() {}, insertBefore() {}, remove() {},
+    contains() { return false; }, getBoundingClientRect() { return { width: 0, height: 0 }; },
+  };
+}
+function clock() {
+  let now = 0, next = 0; const timers = new Map();
+  return {
+    now: () => now,
+    setTimeout(fn, ms) { const id = ++next; timers.set(id, { at: now + ms, fn }); return id; },
+    clearTimeout(id) { timers.delete(id); },
+    pending: () => [...timers.keys()],
+    async advance(ms) {
+      const target = now + ms;
+      for (;;) {
+        const due = [...timers.entries()].filter(([, t]) => t.at <= target)
+          .sort((a, b) => a[1].at - b[1].at)[0];
+        if (!due) break;
+        timers.delete(due[0]); now = due[1].at; due[1].fn();
+        await Promise.resolve(); await Promise.resolve();
+      }
+      now = Math.max(now, target); await Promise.resolve();
+    },
+  };
+}
+function sandbox(src) {
+  const c = clock();
+  const els = new Map();
+  const doc = {
+    getElementById(id) { if (!els.has(id)) els.set(id, el(id)); return els.get(id); },
+    querySelector() { return null; }, querySelectorAll() { return []; },
+    createElement: (tag) => el(tag), body: el('body'), documentElement: el('html'),
+    addEventListener() {},
+  };
+  const listeners = {};
+  const win = { show() {}, addEventListener(t, fn) { listeners[t] = fn; } };
+  const ctx = {
+    console: { warn() {}, log() {}, error() {} },
+    Date: { now: () => c.now() }, setTimeout: c.setTimeout, clearTimeout: c.clearTimeout,
+    localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    document: doc, window: win, state: { currentArticle: null },
+    esc: (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]),
+    jsAttr: (s) => JSON.stringify(String(s ?? '')), normalizeCefrPct: (p) => p || {},
+    notify() {}, ShadowPlayer: { reset() {}, seekSentence() {} }, playGermanAudio() {},
+    Companion: { celebrate() {} }, getActiveView: () => 'german',
+    fetchArticle: () => Promise.reject(new Error('fetchArticle 未注入')),
+    lookupVocab: () => Promise.resolve({}), lookupGrammar: () => Promise.resolve({}),
+    saveVocabCard: () => Promise.resolve({}), saveGrammarCard: () => Promise.resolve({}),
+    fetchCardCounts: () => Promise.resolve({ total: 0 }), fetchVocabLedger: () => Promise.resolve({}),
+    fetchArticleNotes: () => Promise.resolve([]), saveArticleNote: () => Promise.resolve({}),
+    removeNote: () => Promise.resolve({}), fetchNoteAssist: () => Promise.resolve({}),
+    saveSyntaxStats: () => Promise.resolve({}), fetchSyntaxStats: () => Promise.resolve({}),
+    vocabSaveOutcome: () => ({ created: true }), vocabSaveNotice: () => '',
+    articleStore: { subscribe() {}, getState: () => ({ items: [] }), loadArticles() {}, deleteArticle() {}, retryNow() {}, retryIfWaiting() {} },
+    isRetryableError: (e) => !!e && (Number.isFinite(e.status) ? e.status >= 500 : e.name === 'TypeError'),
+    RETRY_DELAYS_MS: delays, RETRY_BUDGET_MS: budget,
+    CEFR_LEVELS: [], safeCefr: (s) => s || 'A1', safeTokens: (t) => t || [],
+    renderMiniBar: () => '', renderFelderSpectrum: () => '', renderDetailedFelderGrid: () => '',
+    renderClauseTreeNode: () => '', computeArticleSyntaxStats: () => ({}), renderRadarSvg: () => '',
+  };
+  vm.createContext(ctx);
+  vm.runInContext(strip(src) + '\nglobalThis.__api = { openReader };', ctx, { filename: 'reader.js' });
+  return { ctx, c, listeners, el: (id) => doc.getElementById(id) };
+}
+const flush = async () => { for (let i = 0; i < 6; i += 1) await Promise.resolve(); };
+const ARTICLE = (id, extra = {}) => ({ id, title: 'Echter Titel ' + id, stats: {}, sentences: [], ...extra });
+const err503 = () => Object.assign(new Error('nlp_loading'), { status: 503 });
+const err404 = () => Object.assign(new Error('gone'), { status: 404 });
+
+// ① 占位标题：404 不可重试 ⇒ _renderReaderError ⇒ finally
+async function titleFailure(box, prev) {
+  box.el('reader-title').textContent = prev;
+  box.el('reader-content').innerHTML = '';
+  box.ctx.fetchArticle = () => Promise.reject(err404());
+  await box.ctx.__api.openReader(1);
+  return { title: box.el('reader-title').textContent, html: box.el('reader-content').innerHTML };
+}
+{
+  const r = await titleFailure(sandbox(READER), '⏳ 载入中…');
+  check('P1-占位标题残留时失败态复原为空且错误正文保留',
+    r.title === '' && r.html.includes('reader-state-error') && r.html.includes('这篇暂时打不开'),
+    JSON.stringify(r));
+  const n = await titleFailure(sandbox(READER), '上一篇真实标题');
+  check('N1-上一篇真实标题仍被复原',
+    n.title === '上一篇真实标题' && n.html.includes('reader-state-error'), JSON.stringify(n));
+  const buggy = READER.replace(
+    'const prevTitle = rawPrevTitle === READER_LOADING_TITLE ? "" : rawPrevTitle;',
+    'const prevTitle = rawPrevTitle;');
+  const mutated = buggy !== READER;
+  const m = mutated ? await titleFailure(sandbox(buggy), '⏳ 载入中…') : null;
+  check('M1-变异：去掉归一化后占位串被写回', mutated && !!m && m.title === '⏳ 载入中…',
+    mutated ? JSON.stringify(m) : '变异锚点缺失（归一化修复不在源码里，探针失效）');
+}
+
+// ② 503 退避：假时钟 + 切换文章 / pagehide
+async function backoff(box, { unload = false, switchArticle = false } = {}) {
+  let calls = 0;
+  box.ctx.fetchArticle = (id) => {
+    calls += 1;
+    return id === 2 ? Promise.resolve(ARTICLE(2)) : Promise.reject(err503());
+  };
+  void box.ctx.__api.openReader(1);
+  await flush();
+  const pendingAtBackoff = box.c.pending().length;
+  const htmlAtBackoff = box.el('reader-content').innerHTML;
+  if (unload && box.listeners.pagehide) box.listeners.pagehide();
+  if (switchArticle) await box.ctx.__api.openReader(2);
+  await flush();
+  const pendingAfter = box.c.pending().length;
+  await box.c.advance(delays[0] + 10);
+  await flush();
+  return { calls, pendingAtBackoff, pendingAfter, htmlAtBackoff,
+           htmlFinal: box.el('reader-content').innerHTML };
+}
+{
+  const sw = await backoff(sandbox(READER), { switchArticle: true });
+  const un = await backoff(sandbox(READER), { unload: true });
+  check('P2-切换与卸载均清除旧退避定时器且旧回调不复活',
+    sw.pendingAfter === 0 && sw.calls === 2 && un.pendingAfter === 0 && un.calls === 1,
+    JSON.stringify({ sw, un }));
+  const n = await backoff(sandbox(READER));
+  check('N2-未切换时退避照常触发且NLP提示保留',
+    n.pendingAtBackoff === 1 && n.calls === 2 && n.htmlAtBackoff.includes('正在准备德语分词模型'),
+    JSON.stringify(n));
+  const buggy = READER.replace(
+    'window.addEventListener("pagehide", _cancelReaderRetryTimer);', '');
+  const mutated = buggy !== READER;
+  const m = mutated ? await backoff(sandbox(buggy), { unload: true }) : null;
+  check('M2-变异：去掉pagehide监听后旧回调复活',
+    mutated && !!m && m.pendingAfter === 1 && m.calls === 2,
+    mutated ? JSON.stringify(m) : '变异锚点缺失（pagehide 修复不在源码里，探针失效）');
+}
+
+// ③ processed_stale：真解析渲染后的 DOM 节点
+async function renderArticle(box, extra) {
+  let calls = 0;
+  box.ctx.fetchArticle = () => { calls += 1; return Promise.resolve(ARTICLE(1, extra)); };
+  await box.ctx.__api.openReader(1);
+  await flush();
+  return { html: box.el('reader-content').innerHTML, title: box.el('reader-title').textContent, calls };
+}
+const tipRe = /<div class="reader-state-tip" role="status">([^<]*)<\/div>/;
+{
+  const r = await renderArticle(sandbox(READER), { processed_stale: true, nlp_state: 'loading' });
+  const m = r.html.match(tipRe);
+  check('P3-processed_stale显示分词升级提示且不自动重拉',
+    !!m && m[1].includes('分词正在升级') && r.calls === 1 && r.title === 'Echter Titel 1',
+    JSON.stringify(r));
+  const n = await renderArticle(sandbox(READER), {});
+  check('N3-无processed_stale不显示提示', !tipRe.test(n.html) && n.calls === 1, JSON.stringify(n));
+  const buggy = READER.replace('const staleTip = a.processed_stale',
+    'const staleTip = false && a.processed_stale');
+  const mutated = buggy !== READER;
+  const m3 = mutated ? await renderArticle(sandbox(buggy), { processed_stale: true }) : null;
+  check('M3-变异：去掉消费后提示消失', mutated && !!m3 && !tipRe.test(m3.html),
+    mutated ? JSON.stringify(m3) : '变异锚点缺失（staleTip 修复不在源码里，探针失效）');
+}
+console.log(JSON.stringify({ cases, failures: cases.filter((c) => !c.ok).length }));
+"""
+
+
+def _run_t13_probe() -> dict:
+    require_node()
+    node = shutil.which("node")
+    assert node is not None
+    res = subprocess.run(
+        [node, "--input-type=module", "-e", _T13_NODE_PROBE],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=str(ROOT), timeout=120,
+    )
+    assert res.returncode == 0, f"node 探针自身失败（不是用例结论）：{res.stderr[-2000:]}"
+    out = json.loads(res.stdout.strip().splitlines()[-1])
+    assert isinstance(out.get("cases"), list), f"探针输出形状异常：{out!r}"
+    return out
+
+
+def _assert_t13_group(out: dict, names: tuple) -> None:
+    cs = {c["name"]: c for c in out["cases"]}
+    missing = [n for n in names if n not in cs]
+    assert not missing, f"探针缺场景 {missing}；现有 {sorted(cs)}"
+    bad = [f"{n}: {cs[n]['detail']}" for n in names if not cs[n]["ok"]]
+    assert not bad, "T13 行为探针失败：\n" + "\n".join(bad)
+
+
+def test_t13_placeholder_title_not_written_back() -> None:
+    """① 阳性：残留占位串失败后不复写；阴性：真实标题仍复原；变异：去掉归一化 bug 复现。"""
+    _assert_t13_group(_run_t13_probe(), (
+        "P1-占位标题残留时失败态复原为空且错误正文保留",
+        "N1-上一篇真实标题仍被复原",
+        "M1-变异：去掉归一化后占位串被写回",
+    ))
+
+
+def test_t13_backoff_timer_cancelled_on_switch_and_unload() -> None:
+    """② 阳性：切换/pagehide 清 timer；阴性：正常退避照常 + NLP 提示保留；变异：旧回调复活。"""
+    _assert_t13_group(_run_t13_probe(), (
+        "P2-切换与卸载均清除旧退避定时器且旧回调不复活",
+        "N2-未切换时退避照常触发且NLP提示保留",
+        "M2-变异：去掉pagehide监听后旧回调复活",
+    ))
+
+
+def test_t13_processed_stale_shows_visible_hint() -> None:
+    """③ 阳性：可见提示且不自动重拉；阴性：无标记不显示；变异：提示消失。"""
+    _assert_t13_group(_run_t13_probe(), (
+        "P3-processed_stale显示分词升级提示且不自动重拉",
+        "N3-无processed_stale不显示提示",
+        "M3-变异：去掉消费后提示消失",
+    ))
