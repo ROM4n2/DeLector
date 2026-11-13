@@ -61,6 +61,12 @@ except Exception as exc:
 
 PROGRESS_DB_PATH = os.path.join(DATA_DIR, "progress.db")
 
+# 启动迁移闸要**逐库**判的库名清单。本模块是 db/ 最底层切片、顶层只依赖标准库，
+# 不能反向 import `delector.core.data_dir_bootstrap.DB_FILE_NAMES`；两份清单由
+# `tests/test_preflight_progress_db.py::test_preflight_db_manifest_matches_bootstrap_manifest`
+# 用现读集合相等钉死 —— 日后新增第三个库却只改一处，守卫必红。
+PREFLIGHT_DB_NAMES: tuple[str, ...] = ("delector.db", "progress.db")
+
 
 def _norm_path(path: str) -> str:
     """把路径规范化到「可直接比较」的形态：abspath（消解相对段）+ normpath（消解分隔符差异）。
@@ -118,42 +124,39 @@ def preflight_data_dir(data_dir: str, repo_root: str) -> None:
     No-Silent-Write：本函数**只读不写**，修数据由用户照消息里的 `cp` 自己做——启动路径上
     不做用户没要求的写操作。Idempotent：正常路径零输出、零日志，重复启动不重复报警。
     """
-    legacy_db = os.path.join(data_dir, "delector.db")
-    if os.path.isfile(legacy_db) and os.path.getsize(legacy_db) > 0:
-        return  # 新位置已有**非空**库：数据在位，闸无话可说（size 判据与条件③对称）
-    old_db = os.path.join(repo_root, "delector.db")
-    if not os.path.isfile(old_db):
-        return  # 旧位置也没有库文件：全新安装（或只剩 Docker 建的同名目录），诚实留空
-    if _norm_path(data_dir) == _norm_path(repo_root):
-        # 条件④ 的**净结果**在当前守卫顺序下与条件③冗余，但它**不是**"永远到不了这一行"：
-        # 两路径同地（`data_dir == repo_root`）时，①/② 看的是**同一个** `delector.db`，
-        # 能否走到本行取决于该共享文件是否 0 字节 ——
-        #   · 共享文件**非空** ⇒ ① 因 `size > 0` 提前 `return`，根本到不了这里；
-        #   · 共享文件是 **0 字节** ⇒ ① 因 `size == 0` **不**返回，② 因文件存在也**不**返回，
-        #     于是**真的到达**本行并由它 `return`（这正是条件① 加 `size > 0` 之前不存在的路径）。
-        # 此时条件③ 同样会对 0 字节 `return` ⇒ 本守卫"净结果冗余"的结论仍成立（能到这行的
-        # 场景，③ 本就会放行，两者结论一致）；但旧注释里"①（无库）与 ②（有库）互斥"的论断
-        # 已被 `size > 0` **证伪**，故删除。
-        # 判据明文要求四条件并列，故**保留**该守卫 —— 未来若重构调整守卫顺序（例如把
-        # ② 挪到 ① 之前），它是防止闸在「两路径同地」时误报的唯一拦阻，不得删。
-        return  # 桌面端默认：两路径同地，绝不误报
-    if os.path.getsize(old_db) <= 0:
-        return  # 0 字节空壳不算数据，不拦启动
+    same_place = _norm_path(data_dir) == _norm_path(repo_root)
+    for name in PREFLIGHT_DB_NAMES:
+        # 四条件**逐库**并列判定（2026-11-13 审计 P1 #2）：旧版只看 delector.db，
+        # 新位置已有非空主库就提前 return ⇒ progress.db 被留在旧位置，`init_db()`
+        # 在新位置静默重建空进度库（study_log / quiz_log / exam_trials 全空）。
+        # 两张库是独立 SQLite 文件，必须各自判一次；任一库缺失即 fail-loud。
+        legacy_db = os.path.join(data_dir, name)
+        if os.path.isfile(legacy_db) and os.path.getsize(legacy_db) > 0:
+            continue  # 该库在新位置已有**非空**数据：这一库无话可说
+        old_db = os.path.join(repo_root, name)
+        if not os.path.isfile(old_db):
+            continue  # 旧位置也没有该库：全新安装（或只剩 Docker 同名目录），诚实留空
+        if same_place:
+            # 条件④ 的净结果在当前守卫顺序下与条件③冗余，但判据明文要求四条件并列，
+            # 故**保留**：未来重排守卫顺序时，它是「两路径同地」不误报的唯一拦阻。
+            continue  # 桌面端默认：两路径同地，绝不误报
+        if os.path.getsize(old_db) <= 0:
+            continue  # 0 字节空壳不算数据，不拦启动
 
-    new_abs = os.path.abspath(legacy_db)
-    old_abs = os.path.abspath(old_db)
-    message = (
-        "检测到数据目录迁移未完成：数据库文件仍留在旧位置，但程序已指向新位置。\n"
-        "继续启动会在新位置重建一个**空库**（功能正常、数据全空），因此已拒绝启动。\n"
-        "数据文件本身**没有被删除**，照下面这条命令复制过去再重启即可恢复：\n"
-        f'  cp "{old_abs}" "{new_abs}"\n'
-        f"  旧位置（数据在此）：{old_abs}\n"
-        f"  新位置（程序要读）：{new_abs}\n"
-        "注意：上面这条 cp 的两个路径是**容器内**的绝对路径，请在容器里执行（或用\n"
-        "`docker compose cp`）；宿主机侧怎么搬见 README「数据目录与旧版迁移」一节。"
-    )
-    logging.getLogger("delector").error(message)
-    raise RuntimeError(message)
+        new_abs = os.path.abspath(legacy_db)
+        old_abs = os.path.abspath(old_db)
+        message = (
+            f"检测到数据目录迁移未完成：{name} 仍留在旧位置，但程序已指向新位置。\n"
+            "继续启动会在新位置重建一个**空库**（功能正常、数据全空），因此已拒绝启动。\n"
+            "数据文件本身**没有被删除**，照下面这条命令复制过去再重启即可恢复：\n"
+            f'  cp "{old_abs}" "{new_abs}"\n'
+            f"  旧位置（数据在此）：{old_abs}\n"
+            f"  新位置（程序要读）：{new_abs}\n"
+            "注意：上面这条 cp 的两个路径是**容器内**的绝对路径，请在容器里执行（或用\n"
+            "`docker compose cp`）；宿主机侧怎么搬见 README「数据目录与旧版迁移」一节。"
+        )
+        logging.getLogger("delector").error(message)
+        raise RuntimeError(message)
 
 
 def get_db_path(db_path: Optional[str] = None) -> str:
