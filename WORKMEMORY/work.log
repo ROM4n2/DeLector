@@ -771,3 +771,20 @@ Work done: arm64 真机覆盖安装点检（基线 → T4 → T14 三版连续�
 - 累计 13 个独立 PR + 1 个历史遗留混合分支，Ledger 16/16，工作树全干净、未 push / 未开 PR。
 Remaining work: T14 终态 UI 的真机点验（需要能构造「服务启动后卡住 36s」的故障注入，例如可配置的假服务端或调试开关）；其余计划内 Task 已全闭环。
 - 不做：不 push、不开 PR、不发版（均无显式授权）。
+
+### 2026-11-13 19:07 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+两个后续项都做完（一 PR 一事，分开提交）。
+- ① `feat/adb-install-helper` `26a1f39`：新增 `tools/install_apk.py`——把 MIUI 的 USB 安装确认流程固化成一条命令（后台 `adb install` → 轮询 `uiautomator dump` → `input tap` 点「继续安装」→ 按退出码判定）。判据 `parse_confirm_button()` 抽成纯函数；`tests/test_install_apk_helper.py` 5 条（真实 dump 片段阳性、拒绝按钮阴性、未布局节点阴性、抹掉 bounds 的变异自证、空 dump），分片已登记。**真机端到端验证**：`tapped_confirm=True succeeded=True`，包确实装上。净 diff 254 insertions。
+- ② `fix/failure-final-state` `1f8f411`（追加在 T14 PR 内，属同一主题的验证手段）：debug-only 故障注入开关 `--ez delector_fake_stuck true`——预算置 0 + 不发起首帧，让 splash 停住、终态分支可达。
+  - **既有守卫抓到我的回归**：`test_main_activity_uses_policy_instead_of_literals` 要求 `pollServerReadiness` 方法体内必须出现 `StartupReadinessPolicy.maxAttempts()`；我最初把它挪进 `readyAttempts()` 辅助方法 ⇒ 守卫红。改为方法体内联三元（`fakeStuckStart() ? 0 : StartupReadinessPolicy.maxAttempts()`），契约与注入两全。
+  - 新增守卫 `test_fault_injection_is_debug_only`（注入必须被 `BuildConfig.DEBUG` 短路，否则正式包等于带一个「让应用卡在 splash」的后门）+ 变异自证（去掉短路 ⇒ 红）。对点 19 passed、ruff 绿、arm64 包构建成功。
+- **T14 终态 UI 真机验证成功**（此前唯一未验证项）：注入态启动后 `uiautomator` 读到控件文本 `服务启动超时，已停止连接。点此重试。`，截图为 splash 终态且 indeterminate spinner 已停。
+- **仍未验证**：点「点此重试」之后的运行时行为。注入态下 `readyAttempts()` 恒 0，点击后必然立刻再次耗尽，UI 文案与截图无法区分「点了没反应」与「点了但立刻再失败」；logcat 也未捕获新的 `poll_begin`。该接线由 pytest 判据（`setOnClickListener(v ->` + `pollServerReadiness(getFilesDir())` + 变异自证）覆盖，真机行为未确认。
+- 设备已恢复：不带 extra 启动 → `ttfd` 3.5s、`settings_200`、`ready_notify "true"`、零 FATAL（注入开关默认关闭）。
+
+### 2026-11-13 19:07 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 上条 NOTE 的 2 项（安装工具 PR + 故障注入开关），T14 终态 UI 由「未验证」升级为「真机已验证」。累计 **14 个独立 PR** + 1 个历史遗留混合分支，Ledger 16/16，工作树全干净、未 push / 未开 PR。
+Remaining work: 仅「点击重试后的运行时行为」一项未在真机确认，判据层已覆盖。其余计划内 Task 与设备验证均闭环。
+- 不做：不 push、不开 PR、不发版（均无显式授权）。
