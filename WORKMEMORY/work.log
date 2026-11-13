@@ -788,3 +788,23 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 Work done: 上条 NOTE 的 2 项（安装工具 PR + 故障注入开关），T14 终态 UI 由「未验证」升级为「真机已验证」。累计 **14 个独立 PR** + 1 个历史遗留混合分支，Ledger 16/16，工作树全干净、未 push / 未开 PR。
 Remaining work: 仅「点击重试后的运行时行为」一项未在真机确认，判据层已覆盖。其余计划内 Task 与设备验证均闭环。
 - 不做：不 push、不开 PR、不发版（均无显式授权）。
+
+### 2026-11-13 19:11 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+收尾复验：14 个 PR 分支逐个复跑各自的对点守卫（同一轮实测，不是引用旧数字），全部通过。
+- `fix/register-new-guard-tests` `f2d260e` · 39 passed（分片注册 + pyyaml 测试期依赖）
+- `fix/lock-solvability-gate` `d041bb1`（T6）· 6 passed（lock 可解性真求解闸）
+- `fix/runtime-silent-degradation` `a74b024`（T8）· 4 passed（dotenv / 半截文件 / 锁降级告警）
+- `fix/setup-go-guard` `8728d46`（T10-①）· 3 passed（setup-go 结构化 uses 判据）
+- `fix/reader-state-machine` `af2fb71`（T13）· 12 passed（占位标题 / 退避定时器 / processed_stale）
+- `fix/model-load-negative-cache` `7bd24b6`（T15）· 4 passed（加载失败负缓存）
+- `fix/write-tx-boundaries` `0906bac`（T3）· 96 passed（写事务边界 / 连接生命周期）
+- `fix/release-runbook` `fb0ccd4`（T7）· `check_docs_layout` OK（发布恢复 runbook，含「未实证」声明）
+- `fix/wb-probe-slicer` `185a2e7`（T10-④）· 10 passed + node 探针 11/11
+- `fix/frontend-guard-probes` `8b3bbb6`（T10-②）· 20 passed + node 探针 15/15
+- `fix/module-graph-guards` `bbdc609`（T10-③）· 31 passed（模块图判据 + 正则深度漂移棘轮）
+- `fix/sw-cache-invalidation` `1e722b6`（T4）· 60 passed（SW 回落不跨 cache 版本）
+- `fix/failure-final-state` `1f8f411`（T14）· 19 passed（失败终态 + debug-only 故障注入开关）
+- `feat/adb-install-helper` `26a1f39` · 5 passed（真机安装自动点 MIUI 确认页）
+- 合计 **309 passed**，14 个工作树全部干净；Ledger 16/16、`active_task_id=null`；临时脚本与 patch 已清空。
+- 唯一仍未在真机确认的行为：T14「点此重试」点击后的运行时轮询（注入态下必然立刻再次耗尽，UI 无差异）；判据层已由 `setOnClickListener(v ->` + `pollServerReadiness` 的变异自证覆盖。
