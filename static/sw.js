@@ -1,6 +1,6 @@
 // 版本号只在这里维护一处，与 android/app/build.gradle 的 fallback 对齐
 // （test_writer_mobile.py 断言两者一致）。CACHE_NAME 一变，activate 就清掉旧缓存。
-const CACHE_NAME = "delector-static-v5.23.4";
+const CACHE_NAME = "delector-static-v5.23.5";
 
 // 缓存策略（2026-11-07 明确）：
 //   在线 ⇒ 永远以网络响应为准（network-first，且要求 HTTP 缓存回源校验）；
