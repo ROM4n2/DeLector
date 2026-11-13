@@ -199,11 +199,11 @@ def test_reader_state_template_uses_only_declared_vars():
 
 
 # ── T13：阅读页状态机残留（行为探针：node 真跑 + 内建变异自证）─────────────
-import json
-import shutil
-import subprocess
+import json  # noqa: E402
+import shutil  # noqa: E402
+import subprocess  # noqa: E402
 
-from probe_runner import require_node
+from probe_runner import require_node  # noqa: E402
 
 _T13_NODE_PROBE = r"""
 const fs = await import('node:fs');
@@ -276,7 +276,8 @@ function sandbox(src) {
     Date: { now: () => c.now() }, setTimeout: c.setTimeout, clearTimeout: c.clearTimeout,
     localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     document: doc, window: win, state: { currentArticle: null },
-    esc: (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]),
+    esc: (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;',
+      '>': '&gt;', '"': '&quot;' })[ch]),
     jsAttr: (s) => JSON.stringify(String(s ?? '')), normalizeCefrPct: (p) => p || {},
     notify() {}, ShadowPlayer: { reset() {}, seekSentence() {} }, playGermanAudio() {},
     Companion: { celebrate() {} }, getActiveView: () => 'german',
@@ -288,7 +289,8 @@ function sandbox(src) {
     removeNote: () => Promise.resolve({}), fetchNoteAssist: () => Promise.resolve({}),
     saveSyntaxStats: () => Promise.resolve({}), fetchSyntaxStats: () => Promise.resolve({}),
     vocabSaveOutcome: () => ({ created: true }), vocabSaveNotice: () => '',
-    articleStore: { subscribe() {}, getState: () => ({ items: [] }), loadArticles() {}, deleteArticle() {}, retryNow() {}, retryIfWaiting() {} },
+    articleStore: { subscribe() {}, getState: () => ({ items: [] }), loadArticles() {},
+      deleteArticle() {}, retryNow() {}, retryIfWaiting() {} },
     isRetryableError: (e) => !!e && (Number.isFinite(e.status) ? e.status >= 500 : e.name === 'TypeError'),
     RETRY_DELAYS_MS: delays, RETRY_BUDGET_MS: budget,
     CEFR_LEVELS: [], safeCefr: (s) => s || 'A1', safeTokens: (t) => t || [],
