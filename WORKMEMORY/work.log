@@ -665,3 +665,18 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 Work done: 上条 NOTE 的 2 个独立 PR；累计 6 个独立 PR + 1 个历史遗留混合分支，全部 PR-ready、工作树干净、未 push / 未开 PR。Ledger 11/16 completed、`active_task_id=null`。
 Remaining work: T3（方案已就绪，待落地）/ T4（需 Android 真机）/ T7（发布 runbook 实证需 GitHub 权限）/ T10 的 ②③④（前端探针 / 模块图判据 / wb 锚点配平，方案已产出）/ T14（前端 + Android，需模拟器）。继续按「一 Task 一分支一 PR、独立 worktree、只跑对点测试」推进。
 - 不做：不 push、不开 PR、不发版、不真机点检、不重写历史（均无显式授权）。
+
+### 2026-11-13 16:53 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+第四批（续跑）收口：并行派 2 个设计席位（T7 / T14，均 READ-ONLY，产出文档全文与 unified diff，明确不编造实测）；落地 2 个独立 PR。
+- ① `fix/write-tx-boundaries` `0906bac`（T3，5 处生产改动）：wb 投影与 FSRS 复习在 SELECT 前显式 `BEGIN IMMEDIATE`（WAL 只读仍并发）、跨 progress 库写失败改显式 500 而非静默 200、`companion_session.py` / `companion_proposal.py` 共 11 处裸 `with get_db()` 改 `db_conn()` 确定性 close。测试追加到 3 个既有文件（不新增，避免分片冲突）：RED 阶段投影/FSRS/跨库/连接四条全红；GREEN 7 passed；`ruff` 绿；两组父树物理变异（删投影 `BEGIN IMMEDIATE` / 吞掉跨库异常）均红→恢复绿。方案 8 个未解决点中「阴性校准用例在 RED 阶段也红」如实登记：探针捕获的是所有未 close 连接，校准作用未实现，但 GREEN 后两条都绿。
+- ② `fix/release-runbook` `fb0ccd4`（T7）：新增 `docs/agents/release-runbook.md`（Publish 被跳过 / 孤儿 tag 恢复路径），文档含 5 处「未实证」声明与实证记录模板，判据只认 release 资产清单，未把 `gh workflow run --ref <tag>` 写成已验证。`tools/check_docs_layout.py` 绿。
+- 纪律：全程只跑对点测试，未跑全量 pytest；每个 PR 独立 worktree + 独立分支（stacked，base 指向 `fix/register-new-guard-tests`），diff 只含自己这一件事；工作树全干净。
+- 备料：`T10` 的 ②③④ 完整方案在 `.git/t10full.txt`，`T14` 方案在 `.git/t14.txt`（短路径，规避 Windows 长路径读不到子代理持久化输出）。T14 需 Android 模拟器 x86_64 + arm64 真机点检，本轮不落地。
+
+### 2026-11-13 16:53 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 上条 NOTE 的 2 个独立 PR；累计 8 个独立 PR + 1 个历史遗留混合分支，全部 PR-ready、工作树干净、未 push / 未开 PR。Ledger 13/16 completed、`active_task_id=null`。
+Remaining work: `T4`（SW 旧缓存回落，4 条 CONFIRMED P1 中唯一未修，需 Android 真机覆盖安装验证，无真机不得声称已修）/ `T10` 的 ②③④（前端守卫探针 / 模块图判据 / wb 锚点配平，方案就绪）/ `T14`（失败终态，需模拟器）。继续按「一 Task 一分支一 PR、独立 worktree、只跑对点测试」推进。
+- 合并顺序：首批历史分支（或按主题拆分）→ `fix/register-new-guard-tests` → 其余 7 个 PR 可并行；合并后 rebase 到新 `master` 并把 PR base 改回 `master`。
+- 不做：不 push、不开 PR、不发版、不真机点检、不重写历史（均无显式授权）。
