@@ -112,8 +112,9 @@ function newSandbox(extra) {
 }
 
 /* ── 真源码切片（bootstrap 失败即红，且不再进 vm）── */
-let readerJs, cardsJs, coreJs, mainJs, cdStateJs, indexHtml;
+let readerJs, cardsJs, coreJs, mainJs, cdStateJs, indexHtml, satzJs;
 let openReaderFn, submitFn, reportFn, guardBlock, ensureFn, cardStateDecl;
+let satzFailureFn, notifyReadyFn;
 try {
   readerJs = read("static/js/reader.js");
   cardsJs = read("static/js/cards.js");
@@ -121,6 +122,7 @@ try {
   mainJs = read("static/js/main.js");
   cdStateJs = read("static/js/cd-state.js");
   indexHtml = read("static/index.html");
+  satzJs = read("static/js/satz-lab.js");
 
   openReaderFn = sliceFunctionBody(readerJs, "export async function openReader(");
   submitFn = sliceFunctionBody(cardsJs, "export async function submitCardReview(");
@@ -130,6 +132,8 @@ try {
   );
   ensureFn = sliceFunctionBody(mainJs, "function ensureGermanWorkbench(");
   cardStateDecl = sliceObjectDecl(cdStateJs, "export const cardState = ");
+  satzFailureFn = sliceFunctionBody(satzJs, "export function satzLabFailureView(");
+  notifyReadyFn = sliceFunctionBody(mainJs, "function notifyServerReady(");
 
   // 切片护栏：切歪/退化成签名即红，不许静默假绿
   if (!openReaderFn.includes("finally") || !openReaderFn.includes("_renderReaderError("))
@@ -138,6 +142,10 @@ try {
     throw new Error("submitCardReview 切片缺 finally 复位（切短了？）");
   if (!cardStateDecl.includes("reviewInFlight"))
     throw new Error("cd-state.js 的 cardState 真声明切片不含 reviewInFlight（切歪了？）");
+  if (!satzFailureFn.includes("booting"))
+    throw new Error("satzLabFailureView 切片缺 booting 分类（切到签名了？）");
+  if (!notifyReadyFn.includes("retryArticlesIfWaiting"))
+    throw new Error("notifyServerReady 切片缺文章补试（切短了？）");
 } catch (e) {
   check("probe_bootstrap", false, "源码切片/锚点失败：" + e.message);
 }
@@ -347,6 +355,57 @@ function scenarioSliceBalance() {
   check("slice_rejects_non_brace_after_paren", threw, "')' 后非 '{' 未具名报错");
 }
 
+/* ── F：首屏演示卡「服务未监听」与「服务回错」分开呈现 ─── */
+function scenarioSatzLabFailureView() {
+  function run(slice) {
+    const ctx = newSandbox({ esc: (v) => String(v) });
+    vm.runInContext(slice, ctx);
+    return ctx.satzLabFailureView;
+  }
+  const fn = run(satzFailureFn);
+  const net = fn(new TypeError("Failed to fetch"));
+  check("satz_lab_network_failure_is_booting_not_raw_error",
+    net.booting === true && !net.html.includes("Failed to fetch") && net.html.includes("正在启动"),
+    `booting=${net.booting} html=${net.html}`);
+  const http = fn(Object.assign(new Error("nlp_loading"), { status: 503 }));
+  check("satz_lab_http_error_keeps_status_detail",
+    http.booting === false && http.html.includes("nlp_loading"),
+    `booting=${http.booting} html=${http.html}`);
+  check("satz_lab_undefined_error_treated_as_booting", fn(undefined).booting === true,
+    "没有 err 对象时不该判成「服务回了错误」");
+
+  const mutated = replaceOnce(satzFailureFn, 'typeof err.status !== "number"', "false", "失败分类");
+  const m = run(mutated);
+  const mNet = m(new TypeError("Failed to fetch"));
+  check("mutation_satz_lab_network_failure_classification_removed_is_caught",
+    mNet.booting === false && mNet.html.includes("Failed to fetch"),
+    "删掉状态分类后网络失败仍判成 booting ⇒ 死测");
+}
+
+/* ── G：宿主就绪钩子必须替演示卡补一次 ─── */
+function scenarioNotifyServerReadyWiring() {
+  function run(slice, satzRetry) {
+    const ctx = newSandbox({
+      retryArticlesIfWaiting: () => false,
+      retrySatzLabIfPending: satzRetry,
+      navigator: { serviceWorker: { register: () => Promise.resolve() } },
+    });
+    vm.runInContext(slice, ctx);
+    return ctx.notifyServerReady();
+  }
+  check("notify_server_ready_retries_pending_satz_lab", run(notifyReadyFn, () => true) === true,
+    "演示卡有待重试时，就绪钩子没把它算进返回值");
+  check("notify_server_ready_ignores_idle_satz_lab", run(notifyReadyFn, () => false) === false,
+    "演示卡无待重试时，就绪钩子仍报已重试");
+
+  const mutated = replaceOnce(
+    notifyReadyFn, "retried = retrySatzLabIfPending() || retried;", "", "就绪钩子接演示卡"
+  );
+  check("mutation_satz_lab_retry_hook_removed_from_notify_is_caught",
+    run(mutated, () => true) === false,
+    "删掉接线后仍报已重试 ⇒ 死测");
+}
+
 async function main() {
   if (cases.some((c) => !c.ok)) return; // 静态/切片层已红 ⇒ MUST NOT 跑 node:vm
   await scenarioOpenReader();
@@ -354,6 +413,8 @@ async function main() {
   scenarioGlobalGuard();
   scenarioWorkbenchIframe();
   scenarioSliceBalance();
+  scenarioSatzLabFailureView();
+  scenarioNotifyServerReadyWiring();
 }
 await main();
 

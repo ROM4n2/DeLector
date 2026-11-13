@@ -24,7 +24,7 @@ const FIELDS = [
 const CASE_ZH = { Nom: "主格", Akk: "宾格", Dat: "与格", Gen: "属格" };
 const CASE_POS = new Set(["NOUN", "PRON", "PROPN"]);
 
-const labState = { active: 0, busy: false };
+const labState = { active: 0, busy: false, pendingRetry: false };
 const cache = new Map();
 
 export function initSatzLab() {
@@ -72,13 +72,52 @@ export async function runSatzLab(index = labState.active) {
       body: JSON.stringify({ text: sample.text }),
     });
     cache.set(safeIndex, data);
+    labState.pendingRetry = false;
     outputEl.innerHTML = renderAnalysis(data);
     bindTreeHighlight(outputEl);
   } catch (err) {
-    outputEl.innerHTML = `<div class="satz-lab-error">本地引擎暂不可用：${esc(err.message || String(err))} <button type="button" class="satz-lab-retry" data-retry>重试</button></div>`;
+    const view = satzLabFailureView(err);
+    labState.pendingRetry = view.booting;
+    outputEl.innerHTML = view.html;
   } finally {
     labState.busy = false;
   }
+}
+
+/**
+ * 失败视图：把「服务还没监听（网络层 TypeError）」与「服务回了错误」分开。
+ *
+ * 为什么要分：Android 上页面可能比 Python 服务早约 7s 就绪（2026-11-13 真机实测：
+ * 首帧 2.9s，uvicorn 9.7s 才 `Uvicorn running`；期间 `/api/*` 全部 `Failed to fetch`）。
+ * 那种失败是**启动顺序**造成的、必然自愈，不该给用户看英文 TypeError 加一个要手点的按钮。
+ *
+ * `booting=true` 的调用方 MUST 记下待重试状态，由宿主就绪钩子补一次
+ * （见 `retrySatzLabIfPending`）。
+ */
+export function satzLabFailureView(err) {
+  // 有数值 status ⇒ 服务确实回了响应（503/500/403 等），不是「还没起来」。
+  const booting = !err || typeof err.status !== "number";
+  if (booting) {
+    return {
+      booting: true,
+      html: '<div class="satz-lab-error">本地引擎正在启动，稍候自动重试… <button type="button" class="satz-lab-retry" data-retry>立即重试</button></div>',
+    };
+  }
+  return {
+    booting: false,
+    html: `<div class="satz-lab-error">本地引擎暂不可用：${esc(err.message || String(err))} <button type="button" class="satz-lab-retry" data-retry>重试</button></div>`,
+  };
+}
+
+/**
+ * 宿主就绪钩子（`window.notifyServerReady`）调用：上一轮若是「服务未监听」失败，
+ * 自动补一次。返回是否真的发起了重试（供钩子汇总返回值）。
+ */
+export function retrySatzLabIfPending() {
+  if (!labState.pendingRetry || labState.busy) return false;
+  labState.pendingRetry = false;
+  void runSatzLab(labState.active);
+  return true;
 }
 
 function syncChips() {
