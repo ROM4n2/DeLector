@@ -206,6 +206,9 @@ def _iter_code(src):
     状态机与 tests/wb_source.py::_iter_braces 同源（已核对其签名与 yield 形态：
     `_iter_braces(text, start)` 只 yield `(下标, '{'|'}', 扫描前深度, 扫描后深度)`）。
     这里额外逐字符 yield，才能在净深度 0 处只认真正的声明。
+    已知限制：不识别正则字面量里的未转义花括号（与 tests/wb_source.py 同源）。
+    当前含 window exposer 块的生产文件不触发该形态；若新增，
+    test_iter_code_depth_returns_to_zero_on_real_exposer_files 会立即变红。
     """
     depth, modes, interp, i, n = 0, ["code"], [], 0, len(src)
     while i < n:
@@ -1055,3 +1058,25 @@ def test_ci_loud_failure_mutation_proof(monkeypatch):
         pass
     else:
         pytest.fail("变异体应在 CI 里也静默 skip")
+
+
+def test_iter_code_depth_returns_to_zero_on_real_exposer_files() -> None:
+    """棘轮：真实生产 JS 上 `_iter_code` 扫描完深度 MUST 回到 0。
+
+    独立 reviewer R2：`_iter_code` 不识别正则字面量里的未转义花括号
+    （如 `/^[.,!?;:)\\}"]/`），会让 depth 漂移成负数，进而把函数体内局部
+    声明当顶层绑定 ⇒ 悬空标识符判据恒绿（审计 P2 #2 死测复活）。
+    当前唯一真正调用 `_module_local_bindings` 的生产文件是含
+    `Object.assign(window, {` 的 main.js；钉住它当前不触发该形态，
+    未来引入即红，而不是静默退化。
+    """
+    src = (JS_DIR / "main.js").read_text(encoding="utf-8")
+    events = list(_iter_code(src))
+    assert events, "_iter_code 没有产出任何代码字符，判据口径变了"
+    _last_i, last_ch, last_depth = events[-1]
+    after = last_depth + (1 if last_ch == "{" else -1 if last_ch == "}" else 0)
+    assert after == 0, (
+        f"main.js 扫描后花括号净深度为 {after}（应为 0）：正则字面量里的花括号"
+        "让状态机漂移，顶层声明判据不再可信。需给 _iter_code 加正则字面量分支，"
+        "或改掉该正则形态；不得直接放宽本断言。"
+    )
