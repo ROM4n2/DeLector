@@ -2,7 +2,7 @@
 
 > **Goal**: 按 ADR-0005 把 DeLector 前端从「场景工具混入 A1 考纲素材」重排为「场景工具 + 独立备考域（等级页签顶层、catalog 驱动）」，并落地目录/成绩第一刀，跑通 A1 全部练习在备考域内可用。
 > **Tech Stack**: Python 3.11 FastAPI + SQLite（server.py/database.py）；原生 ES Modules 前端（index.html 单文件 SPA + main.js 根 module）；node:vm 探针（仿 tools/wb_sync_probe.mjs）
-> **Spec Reference**: `d:/Obsidian/Coding/08-Projects/DeLector/01-ADR/0005-navigation-exam-domain-and-level-scalability.md`
+> **Spec Reference**: `（私有笔记库，不随仓库分发））`
 > **Global Constraints**:
 > - **分支/PR 流程 (用户指令, MUST)**：基线上 **master @ v5.1.1**（已推送远端）。Task 0 建分支 `feat/ia-nav-exam-domain`；**本计划全部 commit 只落在该分支**，严禁直接写 master；收口 Task 5 push 分支并在远端开 PR（`gh pr create` 或网页）合入 master。
 > - **范围边界**：本计划 = ADR §4 决策 1/2/3 的首刀（导航单源 + 备考域 + A1 四模块迁移 + catalog 目录第一刀 + 成绩泛化第一刀）。**不属于本计划**：听/读组件 level 参数化提取、写作判分提取、`/api/a1/*` 全量切 `/api/exams/{level}/{module}`、背词工作台 token 壳/词表契约——后述 §9 作为后继 sub-plan 触发点（建议 A2 立项或独立 short-plan 再排）。

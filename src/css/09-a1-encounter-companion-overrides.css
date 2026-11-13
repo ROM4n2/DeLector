@@ -1389,8 +1389,7 @@
 
 /* ── 遇见区 encounter (P0)：自 index.html #view-encounter 内联 <style> 迁入 ──
    视图/按钮/弹层/小复习/已背词高亮（A4–A6），逻辑归属见 static/js/encounter.js。
-   2026-09-08 视觉重做：Academic Modern Editorial（规范见 Vault
-   01-Rules/FRONTEND-DESIGN-PATTERNS）—— 纸张底 + 1.5px 印刷墨线 + 实体硬投影 +
+   2026-09-08 视觉重做：Academic Modern Editorial（规范见私有设计规范）—— 纸张底 + 1.5px 印刷墨线 + 实体硬投影 +
    社论台账列表 + 荧光笔高亮 + 和纸便签弹层；去掉原先的渐变与通用圆角。 */
 
 /* 局部字体栈：线上 webfont（Google Fonts）在国内网络 / 离线 WebView 常加载失败，

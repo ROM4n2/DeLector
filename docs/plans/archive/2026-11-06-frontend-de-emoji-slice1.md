@@ -76,7 +76,7 @@
 > Mode: AFK | Role: Docs
 > Goal: 为 `docs/adr/` 下 29 份 ADR 建一份只含状态的最小索引，能一眼看出哪些仍生效、哪些被取代。
 > Target Files: Create `docs/adr/INDEX.md`; Modify `docs/README.md`（`adr/` 行加一行指引）。
-> Constraints: 禁止修改任何 ADR 文件；状态归一为 Proposed / Accepted / Superseded by ADR-XXXX / Deprecated；索引顶部写明「本索引只反映仓内副本，正式件在 Vault」。
+> Constraints: 禁止修改任何 ADR 文件；状态归一为 Proposed / Accepted / Superseded by ADR-XXXX / Deprecated；索引顶部写明「本索引只反映仓内副本，正式件在 私有笔记库」。
 > Verify: `python -c "import pathlib;print(len(list(pathlib.Path('docs/adr').glob('*adr-*.md'))))"` 与索引数据行数一致；`python -c "print(open('docs/adr/INDEX.md',encoding='utf-8').read().count('| ADR-'))"` 等于该数。
 > Return: 摘要 + 文件行数 + 上述两条命令的原始输出与退出码。"
 

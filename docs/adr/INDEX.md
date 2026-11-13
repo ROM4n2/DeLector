@@ -1,6 +1,6 @@
 # ADR 状态索引
 
-> 本索引只反映**仓内副本**的状态，正式件在 Vault（`08-Projects/DeLector/01-ADR/`）。
+> 本索引只反映**仓内副本**的状态，正式件在 私有笔记库（不随仓库分发）。
 > 状态词表固定为四态：`Proposed` / `Accepted` / `Superseded by ADR-00XX` / `Deprecated`。
 > 原文写成 `stable` / `active` / `draft` / `ACCEPTED` 等变体的，本表**归一为四态**，并在「原写法」列保留原文，不修改 ADR 正文。
 > 新增 / 取代 / 废弃 ADR 时，同一 PR 更新本表（ADR-0029 §12.2 规则 3）。

@@ -9,7 +9,7 @@
 
 ## 0. 已闭项（对照，防重复劳动）
 
-裁判集扩充 8/8（`wortstellung`/`artikel`/`kasus`/`rektion`/`numerus` error 级 + `tempus` advisory）· 对照实验 8/8（60 局真跑，阴性对照 A2≡A3=0.974）· 内核接缝加固（dispatch 超时 / 同步裁判移出事件循环 / 不可达 except）· ADR-0023 §10/§11 与 ADR-0024 回写 · 非在途面评估 4 份报告 · 卫生修正批次 1（`.gitignore` 运行态产物缺口、`.superpowers/`、`.env.example`、`CLAUDE.md` 路由、`08-Inbox→99-Inbox` + 守卫测试）· 根目录陈旧库文件改名（`.db.bak-20261016-175607`，真实数据在 `%LOCALAPPDATA%\DeLector` 未动）· worktree 与已合并分支清理。
+裁判集扩充 8/8（`wortstellung`/`artikel`/`kasus`/`rektion`/`numerus` error 级 + `tempus` advisory）· 对照实验 8/8（60 局真跑，阴性对照 A2≡A3=0.974）· 内核接缝加固（dispatch 超时 / 同步裁判移出事件循环 / 不可达 except）· ADR-0023 §10/§11 与 ADR-0024 回写 · 非在途面评估 4 份报告 · 卫生修正批次 1（`.gitignore` 运行态产物缺口、`.superpowers/`、`.env.example`、`CLAUDE.md` 路由、`08-Inbox→私有笔记库 + 守卫测试）· 根目录陈旧库文件改名（`.db.bak-20261016-175607`，真实数据在 `%LOCALAPPDATA%\DeLector` 未动）· worktree 与已合并分支清理。
 
 **C 档全部闭项（2026-10-19 回填，逐条带 PR）**：C1 裁判结论回灌 #147 · C2 审计 P1-2~P1-5 #146 · C3 真轮次/真 token 回测 #148 · C5 架构解耦与巨石拆分 #157（计划）+ #158（实施）· C6 测试文件切分 #151（+ #154 后续收口）· C7 workbench.html 拆分 #152 + #153（+ #155/#156 遗留项）· C8 P2 批次 #149 · C9 终审 Y1~Y6 + mock 漂移闸 #150 · **C4 Android 真机点检仍 open（用户 2026-10-15 指示暂缓，非交付缺口）**。
 
@@ -29,7 +29,7 @@
 | ~~**A4**~~ **✅ 已闭（过期条目）** | 裁判 FP 三类修复 | **2026-10-16 核验：三类修复早已在 `39e6d79`（裁判集扩充 Task 3/4/5）落地** —— 本轮实跑 12/12 误报句零违规、7/7 负样本仍报、官方 10 篇 + 51 句硬门 + `tools/bench_judge_fp.py` 复跑一致、三组变异证明守卫有判别力、**净零改动**。⚠️ 本条是编排者写登记表时未核基线造成的**过期条目**（教训：登记"待修"前 MUST 先在基线复跑一次目标句） | — | **已闭** |
 | **A5** | **测试库落点改绝对路径**：`conftest.py:30-31` 与 `tests/test_get_endpoints_with_writes.py:37-38` 的裸相对文件名 ⇒ `tmp_path_factory`/显式临时目录；`tests/db_cleanup.py:72` 的 `ROOT_DB_NAMES` 扩为含 `test_*.db` | `docs/reviews/2026-10-16-repo-structure-and-docs-audit.md` P1-1。⚠️ 2026-10-16 只改了**症状**（根目录库改名），病因未修 ⇒ 下次任何人跑测试又会造出来 | 小。修完后「本地红 / CI 绿」分歧根治 | 无 |
 | **A6** | **文档三处漂移对齐**（纯文档，零代码）：① `docs/agents/ops.md:53-57` 数据目录口径与 v5.17.0 事实相反（且与本文件 47-51 自相矛盾）② `docs/agents/architecture.md:202/:93-94` 称 `POST /api/settings` 无鉴权（实测 `routes/main.py:1500-1502` 第一行就是 `_require_localhost`）③ 门禁基线与前端模块数改「现读口径」（实测 122 测试文件 / 1986→2135 条 / 探针 29 / `static/js` 23 个，停更在 2026-08/09 的 352/719/10 与 10~11 个） | 同报告 P1-2 / P1-3 / P1-4 | 小。②③ 会直接把后续 agent 引向错误动作（重复加固 / 漏验 19 个探针 / 漏整块前端模块） | 无 |
-| **A7** | **vault 两张草稿过 `/dfs-inbox-consolidate`**：`99-Inbox/2026-10-15-规则引擎硬门必须按「类」覆盖正样本…md`（附「自动化接线三证」「UNVERIFIED 逐条核销」两条既有规则的新实例）与 `99-Inbox/2026-10-15-bash-standards-§5.3-缺的一条…md`（嵌入 ASCII 双引号会提前闭合 `git commit -m` 参数） | 本会话沉淀产物；查重时确认两条规则本体已存在 ⇒ 草稿已注明「归档时并入对应规则，勿另立新规」 | 小 | 无 |
+| **A7** | **vault 两张草稿过 `/dfs-inbox-consolidate`**：私有笔记库/2026-10-15-规则引擎硬门必须按「类」覆盖正样本…md`（附「自动化接线三证」「UNVERIFIED 逐条核销」两条既有规则的新实例）与 私有笔记库/2026-10-15-bash-standards-§5.3-缺的一条…md`（嵌入 ASCII 双引号会提前闭合 `git commit -m` 参数） | 本会话沉淀产物；查重时确认两条规则本体已存在 ⇒ 草稿已注明「归档时并入对应规则，勿另立新规」 | 小 | 无 |
 | **A8** | **收尾簿记两件**：① `WORKMEMORY/INDEX.md` 里 status: closed 的 handoff 仍占位，与 `INDEX.md:16`「仅当存在活跃交接时才存在」矛盾 ⇒ 移入 `WORKMEMORY/archive/` 或补清理事件；② 根目录 4 个 `test_*.db` 残留清理（测试产物，`*.db` 已忽略，不影响门禁） | 结构 audit P2-8 | 极小 | 无 |
 
 ---

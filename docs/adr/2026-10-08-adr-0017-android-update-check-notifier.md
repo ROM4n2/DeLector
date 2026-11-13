@@ -1,6 +1,6 @@
 # ADR-0017: Android 更新可见性（检查 + 提示，不做应用内安装）
 
-> **正式件:** `08-Projects/DeLector/01-ADR/0017-android-update-check-notifier.md`（vault）。本文件是仓内副本，内容与正式件同源。
+> **正式件:** 不随仓库分发（vault）。本文件是仓内副本，内容与正式件同源。
 > **决策者:** Haoyu Xi ｜ **产出方式:** `/dfs-grill` 双镜拷问（product-ux + sre-resilience 席位）
 
 - **状态**: Accepted（2026-10-08）
@@ -8,7 +8,7 @@
 - **日期**: 2026-10-08
 - **领域**: 发布工程 / Android 分发 / 前端可用性 / 本地优先
 - **决策者**: Haoyu Xi
-- **关联**: ADR-0005（导航与备考域）、`WORKMEMORY/work.log` v5.16.0 发版事件、vault `08-Projects/DeLector/POST-MORTEM-V5.5.2-VERSION-NUMBER-SCATTER.md`（版本号散布必漏改）、红线 4/5/6/7/11
+- **关联**: ADR-0005（导航与备考域）、`WORKMEMORY/work.log` v5.16.0 发版事件、vault 不随仓库分发（版本号散布必漏改）、红线 4/5/6/7/11
 
 ---
 
@@ -228,4 +228,4 @@
 
 - **上游**：本 ADR 由 `/dfs-grill` 双镜拷问产出（`product-ux` 镜头：瓶颈定位在"不知道有新版"；`sre-resilience` 镜头：实核 manifest / workflow / MainActivity，给出 Option B 的信任锚与失败模式清单）。
 - **相关**：`docs/agents/architecture.md`（Android 独立单机版一节）、`docs/agents/ops.md`（打包与真机点检）、红线 4（versionCode 编码）、红线 6（缓存闸）、红线 9（import 期不联网）、红线 11（跨边界契约须行为探针验证）。
-- **知识**：vault `08-Projects/DeLector/POST-MORTEM-V5.5.2-VERSION-NUMBER-SCATTER.md`（版本号散布必漏改 ⇒ §6.1 的依据）。
+- **知识**：vault 不随仓库分发（版本号散布必漏改 ⇒ §6.1 的依据）。

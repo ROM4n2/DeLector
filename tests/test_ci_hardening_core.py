@@ -35,7 +35,7 @@ def test_ci_workflow_has_core_gates():
 
 
 def test_ci_setup_go_cache_is_boolean():
-    """setup-go 的 cache 必须是 boolean（99-Inbox 陷阱回归钉）。
+    """setup-go 的 cache 必须是 boolean（历史陷阱回归钉）。
 
     setup-go@v5 的 `cache:` 只接受 boolean；写成 `cache: "go"` 会被 runner
     拒绝。正确写法是 `cache: true`（配 cache-dependency-path）。
@@ -51,7 +51,7 @@ def test_ci_setup_go_cache_is_boolean():
     assert bad_literal not in text, (
         f"{CI_WORKFLOW} 出现了 setup-go 的字符串型 cache 写法："
         "setup-go 的 cache 参数是 boolean，字符串值会被 runner 直接拒绝"
-        "（99-Inbox 教训），请改回 `cache: true`。"
+        "（历史教训），请改回 `cache: true`。"
     )
 
 

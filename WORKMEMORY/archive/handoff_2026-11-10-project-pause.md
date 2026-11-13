@@ -29,7 +29,7 @@ DeLector（德语精读 / 歌德 A1–C1 与 TestDaF / DSH 备考的本地优先
 2. **Tests 徽章数字**：仍是 v5.22.1 的本地全量基线（3006 passed / 3009 collected）。下次本地全量 `pytest tests` + `--collect-only -q` 重跑后，**必须同时更新分子与分母**（README 注释已写明）。
 3. **词卡 Step 2/3**（方案稿 `docs/plans/2026-11-09-vocab-card-duplicate-merge.md`）：存量重复 G/S/M 统计与合并、Step 3 建 UNIQUE（届时需同步改写 `tests/test_vocab_identity_upsert.py` 的 PRAGMA 过渡护栏）、三套计数口径统一、`prep_saved` 缺 `refl`、备份还原 / wb 投影写锁统一。
 4. **宣传开闸四条门槛**：≥5 份真实三问反馈 / 新手「下载→打开→读到第一篇」无协助成功 / README 首屏 / Android 真机点检。产品演示类内容冻结至门槛全绿。
-5. **vault 蒸馏（协议 §6）**：本轮 PITFALL/DECISION 未入 vault，需 `WIKI_PATH` 可用时补（重点：CHANGELOG 顺序根因、UDF 全表扫描的性能结论、`rd-api.js` 导出面守卫）。
+5. **知识蒸馏（协议 §6）**：本轮 PITFALL/DECISION 未入私有笔记库，需私有笔记库可用时补（重点：CHANGELOG 顺序根因、UDF 全表扫描的性能结论、`rd-api.js` 导出面守卫）。
 6. **待办总入口**：`PROJECT_OVERVIEW.md`「开放待办」与 `docs/reviews/2026-10-16-open-items-backlog.md`。
 
 ## 风险与坑

@@ -35,7 +35,7 @@
 | # | 发现 | 证据 | 修法 |
 |---|---|---|---|
 | P2-1 | `CLAUDE.md` 是「缺路由的短桩」——15 行只有 vault 路径 + WORKMEMORY 读序，**无一处提到 `AGENTS.md`**，也无 architecture/ops 入口；而 `AGENTS.md:3` 自称「同 CLAUDE.md 形态」、`GEMINI.md:11` 却明确「读 AGENTS.md」。Claude Code 会话只自动加载 CLAUDE.md ⇒ 全程不知道 architecture/ops 存在 | 两席独立命中（**已合并**） | CLAUDE.md 加一行「文档路由见 `AGENTS.md` 的表格」，**别造第三份** |
-| P2-2 | **Inbox 路径两套写法**：`CLAUDE.md:9` 与 `GEMINI.md:17` 写 `d:\Obsidian\Coding\99-Inbox\…`，而 `.cursorrules:7` 与 `.agent-rules.md:7` 写 `…\08-Inbox\…` —— 同一件事四个文件两个地址，必有一错 | 结构席实测 | 统一成一个值，其余改为引用 |
+| P2-2 | **Inbox 路径两套写法**：`CLAUDE.md:9` 与 `GEMINI.md:17` 写 `d:\私有笔记库\Coding\私有笔记库\…`，而 `.cursorrules:7` 与 `.agent-rules.md:7` 写 `…\08-Inbox\…` —— 同一件事四个文件两个地址，必有一错 | 结构席实测 | 统一成一个值，其余改为引用 |
 | P2-3 | `docs/plans/archive/` 4 份文件违反命名规则（无 `<日期>-` 前缀，而 `docs/README.md:20` 规定 `plans/<日期>-<主题>.md`）：`workbench-scope-control-and-live-settings.md`、`workbench-progress-server-sync.md`、`workbench-core-words-mode.md`、`plan-companion-mascot.md`。归档判据「只进不出」本身是明示取舍（**不是疏漏**），但命名应一致 | 结构席 | 改名或在该节加豁免说明 |
 | P2-4 | `docs/design-system.md`（606 行）被 `docs/README.md:16` 列为**顶层常青规范**，但 `AGENTS.md` 路由表与 `README.md:39-50` 导航都**没有它** ⇒ 全仓零入口；且其 §4 token 表与 CSS 脱节：`--bone`、`--ink-blue`、`--paper-dark`、`--paper-dark-box`、`--rule-dashed`、`--shadow-exhibit`、`--reveal-delay` 七个 token 及 `#F7F1DE`/`#DDD2B6`/`#15140F`/`#2A528A`/`#C8BFA9` 五个色值，在 `static/style.css`、`static/css/tokens.css`、`static/german/` 里**逐个 grep 零命中** | 文档席逐个 grep 实测 | 要么补入口并同步 token 表现在值，要么把状态改成「历史设计稿（v3.0 · 2026-08，未随 tokens.css 同步）」——**不能继续既无人可达、又看起来是现行规范** |
 | P2-5 | `README.md:5` Python badge「3.10 丨 3.11」无任何事实支撑：`pyproject.toml:20`/`Dockerfile:1`/CI 6 处全钉 **3.11**，且 `FEATURES.md:295` 已明文点名过 README 的版本数字会漂 | 文档席 | 确认 3.10 是否真支持（无证据）；不支持就改成 3.11 |
@@ -63,4 +63,4 @@
 2. **P1-3/P1-4 同批**（文档与代码/实测对齐，把"手抄数字"改成"现读口径"）。
 3. P2 里 **P2-1/P2-2** 顺手修（入口桩与路径统一，纯收益）；**P2-4**（design-system 无人可达 + token 脱节）建议单独一次定夺；其余登记待办。
 
-**未核（UNVERIFIED）**：vault 侧文件（`01-Rules/*`、ADR-0023 正式件）本机不可达；`docs/design-system.md` 其余 500 行版式/组件章节未逐条比对 CSS；`android/` 与 `agent/` 的内部互相引用；`build/`/`dist/` 实际内容；archive 内各文件最后修改时间（判断是否仍在更新）。
+**未核（UNVERIFIED）**：vault 侧文件（私有规范、ADR-0023 正式件）本机不可达；`docs/design-system.md` 其余 500 行版式/组件章节未逐条比对 CSS；`android/` 与 `agent/` 的内部互相引用；`build/`/`dist/` 实际内容；archive 内各文件最后修改时间（判断是否仍在更新）。

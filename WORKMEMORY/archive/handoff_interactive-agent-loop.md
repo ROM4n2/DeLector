@@ -9,7 +9,7 @@ status: closed
 # Handoff: DeLector 交互层 agent 循环实施（Task 3~6 待做）
 
 ## 任务上下文
-依据 ADR-0023（vault `08-Projects/DeLector/01-ADR/0023-interactive-layer-verification-driven-agent-loop.md`，`accepted`，**§8 为定稿口径**）与实施计划 `docs/plans/2026-10-14-interactive-agent-loop.md`（在 master）。分支 **`feat/interactive-agent-loop`**（已推远端，**未开 PR**）。台账 `.vault-exec-ledger.json`：**2/7 完成**。
+依据 ADR-0023（vault 不随仓库分发，`accepted`，**§8 为定稿口径**）与实施计划 `docs/plans/2026-10-14-interactive-agent-loop.md`（在 master）。分支 **`feat/interactive-agent-loop`**（已推远端，**未开 PR**）。台账 `.vault-exec-ledger.json`：**2/7 完成**。
 
 ## 已完成（含证据：测试命令与结果）
 - **Task 0** `b76d45a`（CRV PASS）：门禁加身份校验（探 `GET /api/health`，**接受 200 与 503、只读 `app`/`version`**，与 Python 侧 `probe_identity` 契约对齐）+ 起服失败即 **fail-fast**（不再向被占端口发业务请求）+ 动态空闲端口替代硬编码 8001。**修的是一类假绿**：外来服务若答得对，门禁会替它背书（RED 实测 `Errno 10048 ×29` + 外来服务回 500）。

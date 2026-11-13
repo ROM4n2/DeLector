@@ -425,7 +425,7 @@ GET    /api/companion/context                   学情上下文摘要（生词�
 - **重连与兜底**：`connectionState` 失败/断开 → 去抖重建；连续失败超上限即降级，
   Stage A 的 HTTP 轮询始终在线兜底（保证「至少可达」）。
 - 详见 `docs/plans/archive/2026-09-03-lan-silent-sync-stage-b(-ledger).md` 与 ADR-0004
-  （`d:/Obsidian/Coding/08-Projects/DeLector/01-ADR/0004-lan-sync-webrtc-stage-b.md`）。
+  （`（私有笔记库，不随仓库分发））`）。
   **真机验证**：桌面↔桌面浏览器可验；Android APP 须等下次发版（旧版 APK 未内嵌 Stage A+B 代码）。
 
 ---
@@ -463,7 +463,7 @@ R(t, S) = (1 + (19/81) * (t / S))^(-0.5)
 - **vocab 模式**：挖 A2/B1/B2/C1 级 NOUN/VERB，每句最多 2 空
 - **ctest 模式**：从第 2 句起，每隔 1 个词截断后半部分（标准德福 C-Test）
 - 每个 item 含 `original`、`first_letter`、`hint`、`prefix`/`suffix`（ctest 专用）
-- `masked_text` 中空白格式为 `[[BLANK_N]]`，前端用 `split(/(\[\[BLANK_\d+\]\])/)` 解析（**不用 replace**）
+- `masked_text` 中空白格式为 `BLANK_N`，前端用 `split(/(\[\[BLANK_\d+\]\])/)` 解析（**不用 replace**）
 - **答案仅在服务端**，判分时服务端重新生成
 
 ---
@@ -513,7 +513,7 @@ R(t, S) = (1 + (19/81) * (t / S))^(-0.5)
 
 ## 分层架构声明与单向依赖规范
 
-> 依据 `01-Rules/LAYERED-ARCHITECTURE.md`，DeLector 后端采用严格的单向分层结构。
+> 依据 私有规范，DeLector 后端采用严格的单向分层结构。
 > 任何跨层调用与模块新增 MUST 遵循下述层序声明（由底层向顶层单向流动）。
 
 ### 1. 权威层序声明 (Layer Hierarchy)

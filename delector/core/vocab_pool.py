@@ -6,7 +6,7 @@
 ``vocab_cards``，**不 commit**（事务交调用方），便于与镜像 blob 写入同事务原子提交
 （Migration-Idempotency §2）。
 
-注入不变量（Vault 规则；违反即驳回）
+注入不变量（私有规范；违反即驳回）
 ====================================
 1. **按内容去重（禁计数对账）**：去重键 = ``(lemma_key, word_key)``
    （``vocab_identity(str(hw), str(hw))``，与写入侧 ``POST /api/cards/vocab`` 同一实现）。

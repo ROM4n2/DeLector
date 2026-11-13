@@ -2,12 +2,12 @@
 
 > **Goal**: 把"只在发版日才炸"的 CI 缺口补上——PR/push 即跑全量测试与 Go 门禁，依赖漂移由 dependabot 前置暴露，gofmt 清账让格式门禁可开。
 > **Tech Stack**: GitHub Actions / Python 3.11 (pytest) / Go 1.26 (-race) / YAML
-> **Spec Reference**: 99-Inbox `2026-09-09-github-actions-tag-发版三重陷阱…md`（setup-go cache 教训）、`…fastapi-starlette-无上界依赖漂移…md`（依赖 pin 教训）；Vault `PYTHON-STANDARDS` §8、`AUTOMATION-GOTCHAS` §5（反冻结集合断言）；项目背景见 `WORKMEMORY/PROJECT_OVERVIEW.md` 工程化短板 1/2/3。
+> **Spec Reference**: 私有笔记库 `2026-09-09-github-actions-tag-发版三重陷阱…md`（setup-go cache 教训）、`…fastapi-starlette-无上界依赖漂移…md`（依赖 pin 教训）；私有笔记库 `PYTHON-STANDARDS` §8、`AUTOMATION-GOTCHAS` §5（反冻结集合断言）；项目背景见 `WORKMEMORY/PROJECT_OVERVIEW.md` 工程化短板 1/2/3。
 > **Global Constraints**:
 > - 本计划**不引入新 Python 依赖**（守卫测试用仓库既有的字符串断言惯例，不用 pyyaml）。
 > - Ruff/Mypy 本期**不做**（存量告警未清，直接上 CI 必全红）——记为已知边界，另立计划。
 > - CI 只跑 **ubuntu 单平台**（Windows/macOS 留给 tag 的 build-release 矩阵），控制 PR 反馈时长 < 8min。
-> - setup-go 写法 MUST `cache: true` + `cache-dependency-path: agent/go.mod`（99-Inbox 教训，禁止 `cache: "go"`）。
+> - setup-go 写法 MUST `cache: true` + `cache-dependency-path: agent/go.mod`（私有笔记库 教训，禁止 `cache: "go"`）。
 > - 执行环境：`execute_command` 走 bash，Python 前加 `export PYTHONIOENCODING=utf-8`。
 > - 分支策略：本地特性分支 `feature/ci-hardening` 逐 Task 原子 commit，**CPE 禁 git commit，主线程负责 commit/push/PR**；maker-checker 由 CRV 验收。
 
@@ -28,7 +28,7 @@
 > Target Files: Create `tests/test_ci_hardening.py`。
 > TDD Steps:
 > 1. 写 `test_ci_workflow_has_core_gates()`：读 `.github/workflows/ci.yml` 文本，断言**必须包含**（子集防护，禁止冻结全文）：`pull_request` 触发、`push` + `branches: [master]`、`pytest` 命令、`gofmt -l`、`go vet ./...`、`go test -race ./...`、`concurrency` 取消组、`setup-go@v5`。
-> 2. 写 `test_ci_setup_go_cache_is_boolean()`：断言文件含 `cache: true` 且**不含** `cache: \"go\"`（99-Inbox 陷阱回归钉）。
+> 2. 写 `test_ci_setup_go_cache_is_boolean()`：断言文件含 `cache: true` 且**不含** `cache: \"go\"`（私有笔记库 陷阱回归钉）。
 > 3. 写 `test_dependabot_covers_active_ecosystems()`：断言 dependabot.yml 含 `pip`、`github-actions`、`gomod` 三个 `ecosystem`，且 `schedule.interval` 为 `weekly`。
 > 4. 断言方式用 `'pytest' in text` 风格的**关键要素子集断言**，绝不 `==` 全文比对（AUTOMATION-GOTCHAS §5：护栏不得阻挡演进）。
 > 5. 跑 `export PYTHONIOENCODING=utf-8 && python -m pytest tests/test_ci_hardening.py -q` 验证 **RED**（文件不存在断言失败）。
@@ -92,7 +92,7 @@
 >    c. `pip install -r requirements.txt` + `pip install pytest`（**不装 pyinstaller**，那是打包面）；
 >    d. `python -m spacy download de_core_news_sm`（测试需要模型，build-release.yml:33 同源）；
 >    e. `pytest -q`（全量门禁，预期 ~3-6min）；
->    f. `actions/setup-go@v5`（go-version \"1.26\"，**`cache: true`**，`cache-dependency-path: agent/go.mod`——禁止 `cache: \"go\"`，99-Inbox 教训）；
+>    f. `actions/setup-go@v5`（go-version \"1.26\"，**`cache: true`**，`cache-dependency-path: agent/go.mod`——禁止 `cache: \"go\"`，私有笔记库 教训）；
 >    g. Go 门禁三连：`cd agent && test -z \"$(gofmt -l .)\"`、`go vet ./...`、`go test -race ./...`。
 > 4. 全程**零密钥引用**（GITHUB_TOKEN 默认权限即可）。
 > 5. 验证 GREEN：`python -m pytest tests/test_ci_hardening.py -q` 全绿。
@@ -113,7 +113,7 @@
 
 **Interfaces:**
 - Consumes: Task 1 的 `test_dependabot_covers_active_ecosystems`（RED → GREEN 驱动）
-- Produces: pip / github-actions / gomod 三生态周更 PR（升级安全性由 Task 3 的 CI 兜底——这正是两篇 99-Inbox 教训的组合拳）
+- Produces: pip / github-actions / gomod 三生态周更 PR（升级安全性由 Task 3 的 CI 兜底——这正是两篇 私有笔记库 教训的组合拳）
 
 **Subagent Prompt Scaffold (for /vault-exec):**
 > "Implement Task 4: dependabot 配置。

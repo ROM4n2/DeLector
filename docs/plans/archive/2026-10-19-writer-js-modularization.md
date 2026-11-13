@@ -6,7 +6,7 @@
 > - `docs/plans/2026-10-18-index-html-split-and-modularization.md` §Fog of War Unknown 1（本计划的直接上游：index.html 拆分落地后，JS 业务逻辑下沉的下一步）
 > - `docs/plans/2026-10-18-c7-workbench-html-split.md`（**迁移模板的来源**：探针读取层 `tests/wb_source.py`、多文件 seam、变异自证纪律）
 > - `docs/agents/architecture.md`（前端拓扑 / 跨端契约）；`delector/routes/writing.py`（写作域 API 面）
-> - `01-Rules/LAYERED-ARCHITECTURE.md`（后端 Layer 0~5 层序；本计划为其**前端同构**）
+> - 私有规范（后端 Layer 0~5 层序；本计划为其**前端同构**）
 > **Global Constraints**:
 > - **入口路径不可迁移（MUST）**：`static/js/writer.js` 保留原路径与**全部既有具名导出**。它被 `static/js/main.js` 的 `from './writer.js'` 具名导入集合钉死（`tests/test_frontend_module_graph.py:341-363`），且经 `main.js` 的 `Object.assign(window, {...})` 暴露给 HTML 的 `onclick`。抽层 MUST 只改**内部实现来源**，对外导出面逐字不变。
 > - **零构建 / 零新依赖（MUST）**：不引入 webpack / vite / rollup / esbuild / npm 包。多文件原生 ES Module。

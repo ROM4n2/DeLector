@@ -5,7 +5,7 @@
 > **Spec Reference**: `docs/specs/2026-09-23-encounter-i1-content-and-selection-design.md`
 > **Global Constraints**:
 > - **known 判定永远本机**（ADR 红线）：服务端只提供「每篇的逐 token lemma 序列」，覆盖率一律前端算；**MUST NOT** 在服务端算覆盖率或改此语义
-> - **存量数据回填规范**（Vault `01-Rules/STORED-DATA-BACKFILL` / 项目红线 12）：补装 MUST 只增 + 只补空 + 幂等，MUST NOT 覆盖用户非空字段，MUST NOT 跨语义来源混用
+> - **存量数据回填规范**（私有规范 / 项目红线 12）：补装 MUST 只增 + 只补空 + 幂等，MUST NOT 覆盖用户非空字段，MUST NOT 跨语义来源混用
 > - **不改** `annotate` 端点及其「P0 直跑、禁缓存」策略；**不扩** `_ALLOWED_LEVELS`（B2/TestDaF 出范围）；不动 `workbench.html` / FSRS / 词库 12 字段契约
 > - **零新依赖**（仅 stdlib + spaCy 既有链路）；索引端点**只读**、无 DB 写入
 > - **mypy `--strict` 零 error**（`delector` + `tools`）；`ruff check .` 零告警
@@ -294,6 +294,6 @@
 
 - `docs/specs/2026-09-23-encounter-i1-content-and-selection-design.md`（本计划的设计出处）
 - `WORKMEMORY/PROJECT_OVERVIEW.md`（当前状态 / 红线速查）
-- `08-Projects/DeLector/01-ADR/0010-encounter-zone-layered-go-agent-producer.md`
-- `08-Projects/DeLector/01-ADR/0014-vocabulary-storage-boundary-and-a1-server-fetch.md`
-- `01-Rules/STORED-DATA-BACKFILL.md` / `01-Rules/TESTING-PATTERNS.md`
+- 不随仓库分发
+- 不随仓库分发
+- 私有规范 / 私有规范

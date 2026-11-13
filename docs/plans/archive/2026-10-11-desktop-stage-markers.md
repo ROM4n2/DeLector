@@ -103,7 +103,7 @@
 
 **Files:**
 - Modify: `docs/adr/2026-10-09-adr-0018-performance-measurement-before-runtime-swap.md`（§8 复核条）
-- Modify: `d:/Obsidian/Coding/08-Projects/DeLector/01-ADR/0018-...md`（vault 正式件，**正文逐行同源**）
+- Modify: `（私有笔记库，不随仓库分发））`（vault 正式件，**正文逐行同源**）
 - Modify: `WORKMEMORY/PROJECT_OVERVIEW.md`、`WORKMEMORY/work.log`
 
 **Interfaces:**

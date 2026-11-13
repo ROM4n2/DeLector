@@ -12,7 +12,7 @@
 2. 「不用 emoji 也显得活」在真实产品里主要靠 5 件事：**字号落差、留白节奏、颜色承载状态、焦点调暗、极快微反馈**；等宽小字与真实内容截图是两类低成本加成。没有一个是靠 emoji 实现的。
 3. **11/15 个实测条目正文 emoji 数为 0**：Readlang、Linear、Notion Help、Obsidian Help、Raycast、GitHub Docs、Stripe Docs、Vercel Docs、iA Writer、Bear、Anki。出现 emoji/插画的产品（LingQ、Migaku、Craft、Things 3）也没有把 emoji 当作唯一语义载体。
 4. 「呼吸感」可以量化成一组**代理指标**：首屏字号种数、section/content 间距比、首屏文字覆盖率、文字色数、行高区间、微动效时长、触控目标高度。它能用于验收「不挤、不乱、不吵」，但不能证明学习效果。
-5. 对 DeLector 最值得先借的不是视觉风格，而是 4 个机制：**字号阶梯 + 灰阶层级**（Linear/Obsidian）、**2–3.5 倍的 section/content 留白比**（Obsidian/Raycast）、**焦点调暗**（iA Writer）、**颜色状态语义 + 冗余编码**（LingQ/Anki）。游戏化、角色吉祥物、99px 高对比 hero、暗色主视觉、全站大衬线标题均不建议照搬。
+5. 对 DeLector 最值得先借的不是视觉风格，而是 4 个机制：**字号阶梯 + 灰阶层级**（Linear/私有笔记库）、**2–3.5 倍的 section/content 留白比**（私有笔记库/Raycast）、**焦点调暗**（iA Writer）、**颜色状态语义 + 冗余编码**（LingQ/Anki）。游戏化、角色吉祥物、99px 高对比 hero、暗色主视觉、全站大衬线标题均不建议照搬。
 
 ---
 
@@ -61,7 +61,7 @@
 | Notion Help | 帮助中心首页 | 14–16 | 54/56 | 7 | 8 | 4/8 | 0.2s | 0.185 | 0 | `[A]` |
 | Raycast | Manual 首页 | 15 | 60/75 | 4 | 6 | 4/8/pill | 0.15s | 0.215 | 0 | `[A]` |
 | Things 3 | 官网首屏 | 18 | 36/36 | 2 | 11 | 4.5–10.8 | 0 | 0.059 | 4 | `[A]` |
-| Obsidian Help | 帮助文档阅读页 | 15–16 | 41.6/49.9 | 6 | 4 | 0 | 0.14s | 0.366 | 0 | `[A]` |
+| 私有笔记库 Help | 帮助文档阅读页 | 15–16 | 41.6/49.9 | 6 | 4 | 0 | 0.14s | 0.366 | 0 | `[A]` |
 | Craft | 中文首页 hero | 16 | 66/66 | 2 | 12 | 4/14 | 0.2s | 0.075 | 12 | `[A]` |
 | iA Writer | 官网首屏 | 17–22 | 57.8/57.8 | 3 | 6 | 30 | 0.2s | 0.058 | 0 | `[A]` |
 | Bear | 官网首屏 | 16–22.4 | 51.2/56.3 | 5 | 7 | 3.8–8.6 | 0 | 0.103 | 0 | `[A]` |
@@ -201,10 +201,10 @@
 - **照搬会出什么问题**：留白过大降低信息效率；Android 小屏上会变成「一半屏幕是空的」；不适合需要同时看多个指标的备考界面。
 - **代价**：布局调整为主，不新增 token；成本低但需要克制使用。
 
-### 4.5 Obsidian Help — 帮助文档阅读页
+### 4.5 私有笔记库 Help — 帮助文档阅读页
 
-- **界面位置**：`help.obsidian.md` 的文档阅读页：左侧章节树、中间 704px 正文栏、右侧「On this page」与关系图。
-- **链接**：[help.obsidian.md](https://help.obsidian.md/)；截图 `obsidian-help.jpg`。证据：`[A]`。
+- **界面位置**：`help.私有笔记库.md` 的文档阅读页：左侧章节树、中间 704px 正文栏、右侧「On this page」与关系图。
+- **链接**：[help.私有笔记库.md](https://help.私有笔记库.md/)；截图 `私有笔记库-help.jpg`。证据：`[A]`。
 - **手法拆解**：
   - 字号：正文 16/24（1.5），侧栏 15/19.5（1.3），h1 41.6/49.9（1.2），h2 23.4/28.1（1.2）；首屏 6 种字号。
   - 栏宽：正文 704px，占 1440 视口的 49%；右侧信息栏不抢主线。
@@ -213,7 +213,7 @@
   - 首屏覆盖率 0.366（阅读页文字占比高是合理的，因为主体就是文本）。
 - **为什么显得活**：**只做三件事：收窄栏宽、拉开 section 间距、给一个强调色**。没有插画、没有 emoji、没有卡片阴影，但阅读节奏清楚。
 - **能搬到 DeLector 的哪一面**：阅读器正文栏宽、文章页、README、语法说明页。
-- **照搬会出什么问题**：Obsidian 的无限主题/插件生态不可复制；0 圆角与 DeLector 现有卡片语言可能冲突；704px 在 13 寸屏上偏窄。
+- **照搬会出什么问题**：私有笔记库 的无限主题/插件生态不可复制；0 圆角与 DeLector 现有卡片语言可能冲突；704px 在 13 寸屏上偏窄。
 - **代价**：低；主要是 `max-width`、段落间距、链接色三个变量。
 
 ### 4.6 Craft — 中文首页 hero
@@ -324,13 +324,13 @@
 
 #### 机制 2：留白节奏（section 间距是内容间距的 2–3.5 倍）
 
-- **实例**：Obsidian Help h2 上间距 40px / 段落 16px = **2.5 倍**；Raycast h2 前 44–52px / 后 16–20px = **2.2–3.3 倍**；Bear h2 下间距 41.6px / 段落 16px = **2.6 倍**；Things 3 首屏文字覆盖率仅 **0.059**。
+- **实例**：私有笔记库 Help h2 上间距 40px / 段落 16px = **2.5 倍**；Raycast h2 前 44–52px / 后 16–20px = **2.2–3.3 倍**；Bear h2 下间距 41.6px / 段落 16px = **2.6 倍**；Things 3 首屏文字覆盖率仅 **0.059**。
 - **机制**：段落内紧、段落间松，眼睛能自动分组；不需要分割线或卡片阴影。
 - **DeLector 用法**：阅读器 section 间距 32–40px，段落间距 12–16px；exam 卡内部 8–12px，卡片之间 16–24px；底栏分组之间 16px。
 
 #### 机制 3：颜色承载状态，而不是装饰
 
-- **实例**：LingQ 蓝（新词）/黄（LingQ）/白（已知），翻页后蓝转白；Anki deck 的 New/Learn/Due 三列数字用颜色区分；Linear 的彩色只出现在 issue 状态/内容区，UI chrome 是灰阶；Obsidian 全页只有 1 个紫色链接强调。
+- **实例**：LingQ 蓝（新词）/黄（LingQ）/白（已知），翻页后蓝转白；Anki deck 的 New/Learn/Due 三列数字用颜色区分；Linear 的彩色只出现在 issue 状态/内容区，UI chrome 是灰阶；私有笔记库 全页只有 1 个紫色链接强调。
 - **机制**：颜色一变，说明状态变了；用户不需要读图标。**颜色是信息，不是气氛**。
 - **DeLector 用法**：CEFR 五色已有语义，继续做「状态色」而不是「装饰色」；exam 卡三态用边框/底色 + 文字；阅读器生词状态用下划线/底色 + 图例。
 - **必须叠加冗余编码**：颜色 + 形状/下划线/文字标签至少两种，避免色盲不可辨。
@@ -370,7 +370,7 @@
 | 3 | 99px/900 高对比 hero | Migaku | 阅读界面需要低唤醒；深紫底 + 荧光渐变与纸感冲突；Android 低端机渲染成本高。 |
 | 4 | 全站 66px 衬线大标题 | Craft | 密集页面占空间；移动端换行；需要新增衬线字体与包体；exam 卡不适合。 |
 | 5 | 暗色主视觉 | Linear | DeLector 以纸感/阅读为主；CEFR 颜色语义要在暗底重做；Android WebView 对比度风险。 |
-| 6 | 无限主题/插件定制 | Obsidian | 维护负担大；破坏统一设计系统；与「三端一致」冲突。 |
+| 6 | 无限主题/插件定制 | 私有笔记库 | 维护负担大；破坏统一设计系统；与「三端一致」冲突。 |
 | 7 | 四色词状态叠加五色 CEFR | LingQ + DeLector 现状 | 超过 7 种颜色，色盲不可辨；必须改为「颜色 + 形状/下划线/文字」的冗余编码。 |
 | 8 | 大量产品截图/摄影堆叠 | Readlang 49 图、LingQ 60 图、Migaku 78 图、Craft 187 图 | Android 包体、首屏加载、离线可用性；截图会过期，维护成本高。 |
 | 9 | 三栏文档布局 | Stripe Docs | 移动端不可用；阅读器需要单栏专注；三栏会增加横向滚动风险。 |
@@ -386,15 +386,15 @@
 
 | # | 指标 | 测量方法 | 参考区间（本次实测） | DeLector 建议 |
 |---|---|---|---|---|
-| 1 | 首屏字号种数 | 首屏可见文本的不同 `font-size` 数 | Raycast 4、Things 2、iA 3、GitHub 6、Obsidian 6、Notion 7、Linear 10 | 应用内 ≤6；阅读器 chrome ≤4；营销/引导页 ≤8 |
-| 2 | 标题/正文比 | h1 字号 ÷ 正文字号 | Notion 3.9、Readlang 3.1、Craft 4.1、Linear 4.3–4.9、Obsidian 2.6、GitHub 3.0–3.4 | 首页/空态 ≥3.0；应用内 2.0–3.0；阅读器 1.8–2.4。分区间见 §6.3.1 |
+| 1 | 首屏字号种数 | 首屏可见文本的不同 `font-size` 数 | Raycast 4、Things 2、iA 3、GitHub 6、私有笔记库 6、Notion 7、Linear 10 | 应用内 ≤6；阅读器 chrome ≤4；营销/引导页 ≤8 |
+| 2 | 标题/正文比 | h1 字号 ÷ 正文字号 | Notion 3.9、Readlang 3.1、Craft 4.1、Linear 4.3–4.9、私有笔记库 2.6、GitHub 3.0–3.4 | 首页/空态 ≥3.0；应用内 2.0–3.0；阅读器 1.8–2.4。分区间见 §6.3.1 |
 | 3 | 行高 | `line-height ÷ font-size` | display 1.0–1.25；heading 1.1–1.35；UI 1.4–1.6；正文 1.5–1.7；长文 1.6–1.9 | 阅读器 1.6–1.8；exam 卡 1.4–1.5；UI 1.4–1.5 |
-| 4 | section/content 间距比 | 标题上方留白 ÷ 段落间距 | Obsidian 2.5、Raycast 2.2–3.3、Bear 2.6 | 2.0–3.5 |
+| 4 | section/content 间距比 | 标题上方留白 ÷ 段落间距 | 私有笔记库 2.5、Raycast 2.2–3.3、Bear 2.6 | 2.0–3.5 |
 | 5 | 首屏文字覆盖率 | 文字盒面积 ÷ 视口面积（上界） | 编辑/落地 0.058–0.103；文档 0.185–0.366；应用 mock 0.138–0.309 | 阅读器 0.25–0.40；应用内 0.12–0.25；首页/空态 0.05–0.15 |
-| 6 | 文字色数 | 去重后的 computed color | Obsidian 4、Anki 6、GitHub 7、Notion 8 | ≤4 中性 + ≤1 accent；CEFR 色不计入 accent |
+| 6 | 文字色数 | 去重后的 computed color | 私有笔记库 4、Anki 6、GitHub 7、Notion 8 | ≤4 中性 + ≤1 accent；CEFR 色不计入 accent |
 | 7 | 微动效时长 | `transition-duration` 频次 | Linear 0.1s、Raycast 0.15s、Anki 0.15s、Notion 0.2s、GitHub 0.08s | 80–160ms（微交互）；160–240ms（面板）；0 常驻动画（除 1 个伴读） |
 | 8 | 触控目标高度 | 按钮/链接的 `getBoundingClientRect().height` | Notion 28–36、Raycast 32、Vercel 36、Anki 56、Babbel 48 | 桌面 36–40；移动 ≥44（WCAG 2.5.8） |
-| 9 | 圆角种类 | 去重后的 `border-radius` | Obsidian 0、Notion 4/8、Linear 2/4/8/16/pill、Anki 32 | 每界面 ≤2 种；卡片 4/8；chip 用 pill |
+| 9 | 圆角种类 | 去重后的 `border-radius` | 私有笔记库 0、Notion 4/8、Linear 2/4/8/16/pill、Anki 32 | 每界面 ≤2 种；卡片 4/8；chip 用 pill |
 
 **验收规则（建议）**：
 
@@ -420,7 +420,7 @@
 | Anki | 48 | 20 | 2.4 |
 | Bear | 51.2 | 16–22.4 | 2.3–3.2 |
 | iA Writer | 57.8 | 17–22 | 2.6–3.4 |
-| Obsidian Help | 41.6 | 15–16 | 2.6–2.8 |
+| 私有笔记库 Help | 41.6 | 15–16 | 2.6–2.8 |
 | Migaku | 99（hero） | 18 | 5.5（若取正文标题 60 → 3.3） |
 
 | 工具/文档界面 | 标题 | 正文 | 比值 |
@@ -448,7 +448,7 @@
 
 | 产品 | 可比值 | 说明 |
 |---|---:|---|
-| Obsidian Help | 2.5 | 标题上方 40px ÷ 段落 16px |
+| 私有笔记库 Help | 2.5 | 标题上方 40px ÷ 段落 16px |
 | Bear | 2.6 | 标题下方 41.6px ÷ 段落 16px |
 | Anki | 0.8–1.5 | 标题下方 12px ÷ 段落 8–16px |
 | iA Writer | 0.8–1.0 | 标题上下 4–5px ÷ 段落 5px |
@@ -469,7 +469,7 @@
 
 | 类别 | 样本 | 区间 |
 |---|---|---|
-| 阅读/阅读器 | iA 200ms、Obsidian 140ms、Anki 100–200ms、Bear 0（无 transition）、Readlang 300ms×1、LingQ 150/300/400ms | **核心 140–200ms；0 与 300–400ms 均存在** |
+| 阅读/阅读器 | iA 200ms、私有笔记库 140ms、Anki 100–200ms、Bear 0（无 transition）、Readlang 300ms×1、LingQ 150/300/400ms | **核心 140–200ms；0 与 300–400ms 均存在** |
 | 工具/文档 | GitHub 80–300ms、Vercel 100ms、Stripe 100/150/240ms、Linear 100/160/400ms、Raycast 150ms、Notion 200ms、Craft 150/200ms | **微反馈 80–160ms；200–400ms 仅用于面板/大过渡** |
 
 **结论**：两类在 **140–160ms** 重叠。方案 A 的 **180ms 落在阅读类核心区间**，**260ms 属于阅读类的面板/展开档**，都不应拿工具类「80–160ms」去判错。真正该守的是：**密集列表的逐行 hover 反馈 ≤160ms；面板/抽屉可以 200–300ms；常驻动画只允许 1 个（伴读）且必须响应 `prefers-reduced-motion`**。
@@ -490,8 +490,8 @@
 
 | 优先级 | 手法 | 参考 | 对应 DeLector 的哪一面 | 为什么现在做 | 代价/风险 |
 |---|---|---|---|---|---|
-| 1 | 字号阶梯 + 4 档灰阶层级 | Linear、Obsidian | 底栏、exam 卡、卡片三态、伴读面板 | 零新资产、最高感知收益；能直接用现有字体近似 510/590 | 新增 2–3 档灰阶 token；需检查暗色/对比度 |
-| 2 | section/content 留白比 2–3.5 | Obsidian、Raycast、Bear | 阅读器、文章页、exam 卡 | 直接解决「挤」；只改 spacing 变量 | 低；需逐屏检查移动端 |
+| 1 | 字号阶梯 + 4 档灰阶层级 | Linear、私有笔记库 | 底栏、exam 卡、卡片三态、伴读面板 | 零新资产、最高感知收益；能直接用现有字体近似 510/590 | 新增 2–3 档灰阶 token；需检查暗色/对比度 |
+| 2 | section/content 留白比 2–3.5 | 私有笔记库、Raycast、Bear | 阅读器、文章页、exam 卡 | 直接解决「挤」；只改 spacing 变量 | 低；需逐屏检查移动端 |
 | 3 | 焦点调暗（当前句/段） | iA Writer | 阅读器、伴读面板、复习 | 不用图标就能建立「当前任务」焦点；与阅读场景高度契合 | 低；需显式开关、对比度与 reduced-motion |
 | 4 | 颜色状态语义 + 冗余编码 | LingQ、Anki | 阅读器词状态、exam 卡三态、图例 | 已有 CEFR 色，扩展语义即可；让进度「看得见」 | 中；色盲/对比度测试；颜色不得超过 7 种语义 |
 | 5 | 等宽小字做元数据 | Linear、Stripe、Vercel | 底栏计数、卡片元信息、进度、语法标签 | 低成本增加「工程/学术」质感；不依赖图标 | 低；只在 12–13px 使用，避免可读性下降 |
@@ -531,13 +531,13 @@
 - 每个页面等待 `document.readyState=complete` 后再等 3.5s，读取 `getComputedStyle`，并截首屏 JPEG。
 - 测量脚本位于临时目录，不提交仓库：`C:\Users\<user>\AppData\Local\Temp\del_research\measure.mjs`。
 - 原始数据：`_artifacts/2026-11-06-design-reference-shots/measured.json`。
-- 截图目录：`_artifacts/2026-11-06-design-reference-shots/`（含 `readlang.jpg`、`linear-home.jpg`、`notion-help.jpg`、`obsidian-help.jpg`、`things3.jpg`、`ia-writer.jpg`、`lingq.jpg`、`anki.jpg`、`migaku.jpg`、`stripe-docs.jpg`、`vercel-docs.jpg`、`github-docs.jpg` 等）。该目录与 `_artifacts/t5t6-20261106/` 同级，属仓库内未跟踪证据目录，**不提交进 git**。
+- 截图目录：`_artifacts/2026-11-06-design-reference-shots/`（含 `readlang.jpg`、`linear-home.jpg`、`notion-help.jpg`、`私有笔记库-help.jpg`、`things3.jpg`、`ia-writer.jpg`、`lingq.jpg`、`anki.jpg`、`migaku.jpg`、`stripe-docs.jpg`、`vercel-docs.jpg`、`github-docs.jpg` 等）。该目录与 `_artifacts/t5t6-20261106/` 同级，属仓库内未跟踪证据目录，**不提交进 git**。
 
 ### 9.2 主要链接
 
 - Linear: https://linear.app/ ；https://linear.app/docs
 - Notion Help: https://www.notion.com/help
-- Obsidian Help: https://help.obsidian.md/
+- 私有笔记库 Help: https://help.私有笔记库.md/
 - Raycast Manual: https://manual.raycast.com/
 - Things 3: https://culturedcode.com/things/
 - Craft: https://www.craft.do/zh-CN

@@ -21,11 +21,12 @@
 
 ## Active handoffs
 
-- 2026-11-10 → [`handoff_2026-11-10-project-pause.md`](handoff_2026-11-10-project-pause.md)（to: any · role: IMPLEMENT/REVIEW/VERIFY · status: open）— v5.23.0 发版收尾与项目阶段性暂停（接手必读）
-- 2026-10-14 → [`handoff_no-console-feedback-gaps.md`](handoff_no-console-feedback-gaps.md)（to: any · role: VERIFY/TEST · status: open）— 真机双击验收 + digest 归一历史 header
 
+- （当前无活跃交接；两份 2026-11-13 已关闭，见下方归档）
 ## 已归档 handoffs
 > 协议 §4：关闭后 MUST 移入 `WORKMEMORY/archive/`；`handoff_*.md` 只保留**活跃**交接。
+- 2026-11-13 → `archive/handoff_2026-11-10-project-pause.md`（**closed 2026-11-13**）— v5.23.0 发版收尾与项目阶段性暂停的接手包；内容保持原样，仍可作历史入口
+- 2026-11-13 → `archive/handoff_no-console-feedback-gaps.md`（**closed 2026-11-13**）— 早期「无控制台反馈缺口」交接；其中真机双击验收项已由后续真机点检覆盖
 - 2026-10-18 → `archive/handoff_c7-followups.md`（**closed 2026-10-18**）— C7 两项收尾遗留全闭环：① `--extract` 加 `--i-know-this-overwrites` 护栏 + 守卫（PR #155）；② `wb-rate.js` `doRate` 补充 node 动态行为探针与接线（PR #156）；全量 2360 passed 门禁全绿
 - 2026-10-18 → `archive/handoff_c7-workbench-html-split.md`（**closed 2026-10-18**）— C7 `workbench.html` 拆分全部完成：4730 → 2840 行、8 个模块、PR #152/#153（master `80dae6b`）；全量 2352 passed 与拆分前逐字相同；遗留 2 项已转 `handoff_c7-followups.md`
 - 2026-10-15 → `archive/handoff_judge-gaming-experiment.md`（**closed 2026-10-16**）— §4.3 第 8 条对照实验：60 局真跑 + 全景报告 + ADR-0024 签批 + PR #139 已合入 master。剩余边界（不是待办）：P1 本形态下无发生机制；回灌子计划见 ADR-0024 硬依赖

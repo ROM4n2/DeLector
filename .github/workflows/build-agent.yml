@@ -56,9 +56,9 @@ jobs:
           # 优先级：workflow_dispatch 手工注入 > tag（refs/tags/vX.Y.Z 去前缀）>
           # 留空交由 package_agent.py 回退读 main.go。dispatch 注入用于 CI 修复后
           # 补跑 tag 构建（tag 已指向不含修复的 commit，避免重打已发布的 tag）。
-          if [[ -n "${{ inputs.version }}" ]]; then
+          if  -n "${{ inputs.version }}" ; then
             echo "value=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
-          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+          elif  "${GITHUB_REF}" == refs/tags/v* ; then
             echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           else
             echo "value=" >> "$GITHUB_OUTPUT"
@@ -77,7 +77,7 @@ jobs:
           # artifact 名，天然含真实 os+arch（mac 为 arm64，自动吻合 runner）。
           f=$(ls dist/agent/DeLector-Agent-* | head -n1)
           base=$(basename "$f")
-          if [[ "$base" == *.tar.gz ]]; then
+          if  "$base" == *.tar.gz ; then
             name="${base%.tar.gz}"
           else
             name="${base%.zip}"

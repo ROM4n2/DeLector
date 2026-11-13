@@ -383,7 +383,7 @@ jobs:
             # 且 v4.4.5 起的资产解包闸会拿这个错版本号去比标记。
             VER=$(sed -n 's/.*DELECTOR_VERSION_NAME") *?: *"\([0-9.]*\)".*/\1/p' android/app/build.gradle)
             CODE=$(sed -n 's/.*DELECTOR_VERSION_CODE") *?: *"\([0-9]*\)".*/\1/p' android/app/build.gradle)
-            if [[ -z "$VER" || -z "$CODE" ]]; then
+            if | -z "$CODE" ; then
               echo "::error::读不出 build.gradle 的 fallback 版本，拒绝构建无版本号的包"
               exit 1
             fi

@@ -7,7 +7,7 @@
   validate_pack、estimated_cefr ∈ {A1,A2,B1}、pack_id 全局唯一、正文非空且德语、
   glosses == []，且 analysis.lemma_seq 为逐 token 非空 lemma 序列。
 - 接线（delector/core/database.py::seed_preset_encounter_texts）：**版本闸 + 只增补装
-  + 只补空 + 幂等**（红线 12 / Vault 01-Rules/STORED-DATA-BACKFILL）。空库全量导入 7
+  + 只补空 + 幂等**（红线 12 / 私有规范 STORED-DATA-BACKFILL）。空库全量导入 7
   包；非空库只增补缺失 pack_id、对既有行只补空 `analysis.lemma_seq`；成功后写
   `app_settings["encounter_seed_version"]=2`，版本已够则热路径返回 0。
 - 装配（delector/server.py::create_app）：在 seed_preset_articles 之后调用

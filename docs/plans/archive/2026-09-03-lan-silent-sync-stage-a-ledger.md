@@ -4,7 +4,7 @@
 > **Spec**：`docs/specs/2026-09-03-lan-silent-sync-design.md`
 > **执行模式（降级，如实注明）**：本环境**无写码子代理**（`task` 仅只读 code-explorer），
 > vault-exec 的 multi-subagent 派工在此降级为「编排者主线程直写 + TDD 纪律 + Maker-Checker
-> 由主线程自查（对照 01-Rules 与计划验收）+ 每 Task 原子提交」。逐条执行计划中的 RED→GREEN→commit。
+> 由主线程自查（对照私有规范与计划验收）+ 每 Task 原子提交」。逐条执行计划中的 RED→GREEN→commit。
 > **初始化日期**：2026-09-03
 
 ## 任务状态
@@ -20,7 +20,7 @@
 
 ## Maker-Checker 自查记录（降级替代 reviewer subagent）
 
-- 每 Task 完成后：对照计划验收点 + `AGENTS.md`/相关 `01-Rules`（本仓库以内存中的
+- 每 Task 完成后：对照计划验收点 + `AGENTS.md`/相关私有规范（本仓库以内存中的
   DELECTOR-DEV-RULES / CODING-UNIVERSAL 约束为准）逐条复核差异，再提交。
 
 ### Task 3 自查（checker：主线程，对照计划验收点）

@@ -2,7 +2,7 @@
 
 > **Goal**: 将伴学 Agent 对齐 Pi-Agent 与一线工业级智能体前沿工程设计，落地 Errors-as-Messages 自治自愈闭环、Turn 间主动上下文压缩流控、以及云端-本地双模型级联热备机制。
 > **Tech Stack**: Go 1.24+ / 1.26, go-openai v1.43.0, FastAPI, Python 3.11+
-> **Spec Reference**: `docs/adr/2026-10-31-adr-0025-companion-agent-native-tool-calling-and-streaming.md` · `08-Projects/Pi-Agent/GOTCHAS.md` · `hybrid-agent-runtime`
+> **Spec Reference**: `docs/adr/2026-10-31-adr-0025-companion-agent-native-tool-calling-and-streaming.md` · 不随仓库分发 · `hybrid-agent-runtime`
 > **Global Constraints**: Zero innerHTML, 测试严禁真实出网（100% httptest / MockTransport 隔离）, 四道机械门禁 100% 全绿，Go 单测 100% 全绿。
 > **Branch**: `feat/companion-study-agent`
 
@@ -10,8 +10,8 @@
 
 ## [NOTE] Decisions So Far
 - [ADR-0010 / ADR-0025](docs/adr/2026-10-31-adr-0025-companion-agent-native-tool-calling-and-streaming.md): Go 作为 Agent Runtime 统一编排中枢，Python 作为领域算法与本地微服务。
-- [Pi-Agent GOTCHAS §1.2](08-Projects/Pi-Agent/GOTCHAS.md): 确立 **Errors-as-Messages 原则**（工具异常不中断 Agent Loop，转为 Tool 消息送回模型自愈）。
-- [Pi-Agent GOTCHAS §1.4](08-Projects/Pi-Agent/GOTCHAS.md): 确立 **Turn 间主动上下文压缩**（Turn 结束时主动流控，而非等硬截断 OOM）。
+- [Pi-Agent GOTCHAS §1.2](私有笔记库): 确立 **Errors-as-Messages 原则**（工具异常不中断 Agent Loop，转为 Tool 消息送回模型自愈）。
+- [Pi-Agent GOTCHAS §1.4](私有笔记库): 确立 **Turn 间主动上下文压缩**（Turn 结束时主动流控，而非等硬截断 OOM）。
 
 ---
 

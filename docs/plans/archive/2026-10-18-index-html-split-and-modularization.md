@@ -2,7 +2,7 @@
 
 > **Goal**: 遵循 C7「探针先行 + 无损分段」模式，将 3,158 行的 `static/index.html` 前端大单体安全切分为结构化分块模板（`static/views/*.html` 与 `static/modals/*.html`），建设基于标准库的无损构建器与 CI 门禁，实现全仓 2,367 个测试与 26 个 DOM 探针 100% 绿灯守恒。
 > **Tech Stack**: 原生 HTML5 / CSS3, 原生 ES Modules, Python 3.11+ 标准库, Node.js MJS 探针
-> **Spec Reference**: [[99-Inbox/2026-10-18-契约探针驱动的单文件拆分：先现代化探针、再动产物]] · ADR-0005 · ADR-0006
+> **Spec Reference**: 私有笔记库/2026-10-18-契约探针驱动的单文件拆分：先现代化探针、再动产物 · ADR-0005 · ADR-0006
 > **Global Constraints**: 0 运行时新依赖，UTF-8 CRLF 卫生，严格双向所有权钉子，禁止异步运行时 HTML 拼接，CI 零破坏。
 > **Branch**: `refactor/index-html-split` — 从 `master` 切出，全套门禁通过后单 PR 合入。
 

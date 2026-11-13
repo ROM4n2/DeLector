@@ -2,7 +2,7 @@
 
 > **Goal**: 把「遇见区能读但没得读」补上——① 用自动化 E2E + 行为探针替代 A7 双端手工冒烟（取得读中环可用的持续证据）；② job#1 离线产一次分级短文本包随发布内置、首启空库幂等 seed，让真实用户在手机端 **0 操作**就有分级短文可读。
 > **Tech Stack**: Python 3.11 + FastAPI（`delector/` 包）/ SQLite `encounter_texts` / 原生 ES Module（`deck-bridge.js`）/ pytest + TestClient + node 探针
-> **Spec Reference**: ADR-0010（遇见区 i+1 阅读桥）· ADR-0004（LAN 同步，记为下一阶段）· `delector/data/corpus_dict.py::OFFICIAL_CORPUS`（预置素材源）· Vault `PYTHON-STANDARDS` §8.2（断言契约）/ `AUTOMATION-GOTCHAS` §5（反冻结集合）
+> **Spec Reference**: ADR-0010（遇见区 i+1 阅读桥）· ADR-0004（LAN 同步，记为下一阶段）· `delector/data/corpus_dict.py::OFFICIAL_CORPUS`（预置素材源）· 私有笔记库 `PYTHON-STANDARDS` §8.2（断言契约）/ `AUTOMATION-GOTCHAS` §5（反冻结集合）
 > **Global Constraints**:
 > - 不引入新第三方依赖；预置内容**零 LLM、零网络、字节可复现**。
 > - import 期不得联网/抛异常（红线 9）——生成模块须为**纯数据**。

@@ -7,7 +7,7 @@
 - **关联**：ADR-0026（读者沉浸式编辑流与 CEFR 噪声削减）、[第一轮调研](../research/2026-11-06-emoji-and-ai-tone-frontend-research.md)、[第二轮外部证据](../research/2026-11-06-emoji-round2-external-evidence-and-mapping.md)
 - **上游方案**：第一轮 P0/P1/P2 提案（本次被本 ADR 部分否决与重排）
 
-> 目录说明：本 ADR 写入仓库 `docs/adr/`，而不是 vault 的 `08-Projects/DeLector/01-ADR/`。原因是仓库序列已到 0028，vault 镜像停在 0026；把 0029 写进 vault 会产生两个不同步的真值源。vault 侧只保留调研草稿。
+> 目录说明：本 ADR 写入仓库 `docs/adr/`，而不是 vault 的 不随仓库分发。原因是仓库序列已到 0028，vault 镜像停在 0026；把 0029 写进 vault 会产生两个不同步的真值源。vault 侧只保留调研草稿。
 
 ---
 

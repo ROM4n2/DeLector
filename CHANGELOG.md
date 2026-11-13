@@ -2,7 +2,7 @@
 
 > 本项目**版本历史的正主（single source of truth）**：每次发版在此追加条目。
 > 桌面 / Android 四平台发布资产见 [GitHub Releases](https://github.com/ROM4n2/DeLector/releases)；
-> 开发决策细节见 `docs/plans/archive/` 与 Obsidian Vault `08-Projects/DeLector/01-ADR/`。
+> 开发决策细节见 `docs/plans/archive/` 与 `docs/adr/`。
 
 <!--
 格式规则（agent 与人类均 MUST 遵守；tests/test_release_docs_gate.py 机械校验 1-3 条）：

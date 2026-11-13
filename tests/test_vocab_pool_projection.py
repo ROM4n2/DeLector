@@ -7,7 +7,7 @@
 - **范围闸**：只投影「自建（``custom is True``）」或「已学（``reps > 0``）」的词条；自动加载的
   A1/A2/B1 种子词不入池，计入 ``skipped``。
 
-钉住注入不变量（Vault 规则）：
+钉住注入不变量（私有规范）：
 ① 首投影 ``inserted == len(words)``（**仅当全部词条可投影**；否则 ``inserted + skipped == len(words)``）；
 ② 二次同 payload ``inserted==0, updated==0, unchanged==N``，且**零写盘**（行快照不变）；
 ③ 已存在行**只补空、不覆盖**（用户手编 ``definition_zh`` 保持不变；空 ``sentence_context`` 被补）；

@@ -16,7 +16,7 @@
 - `FEATURES.md`：产品特性全览。
 - `CHANGELOG.md`：**版本历史正主**（每次发版追加条目）。
 - `docs/plans/`：在途实施计划；已交付的进 `docs/plans/archive/`（含 `-ledger.md` 执行台账）。
-- `docs/specs/`：设计稿（`<日期>-<主题>-design.md`）；`docs/adr/`：仓内 ADR 副本（正式件在 vault `08-Projects/DeLector/01-ADR/`）。
+- `docs/specs/`：设计稿（`<日期>-<主题>-design.md`）；`docs/adr/`：仓内 ADR 副本（正式件在私有笔记库，不随仓库分发）。
 - `WORKMEMORY/archive/handoff_audit-fixes-a-b.md`：**最近一份交接包**（closed 2026-10-17，含 12 条风险与坑 + 2026-10-17 进展补充）—— 新 agent 接手先看它。
 - `WORKMEMORY/cold/`：COLD 层月度蒸馏（**当前 `digest-2026-11.md`**，覆盖 2026-10-31~11-08 / v5.20.0~v5.22.0；历史另有 `digest-2026-10.md`（10 月全月）、`digest-2026-09.md`）；WARM 层 `archive/` 按 INDEX 主题索引按需加载；超限事件正文在 `notes/`。
 - `.vault-exec-ledger.json`：/dfs-exec 任务台账。
@@ -41,7 +41,7 @@
   - 内部：`model_loader.get_nlp_readiness()` 零副作用探针；`/api/health` 两分支同挂 `nlp` 字段；快退只在 `prewarm_started` 为真时生效（否则保留 single-flight 同步迁移通道）。
   - 验证：本地全量 pytest 3036 passed / 3043 collected（1 failed 为本机 GBK 控制台解码问题，master 同样红，与 CI 无关）；`check_release_docs` / `check_index_html_sync` / `check_css_sync` 通过；ruff + 两档 mypy 零错；进入本版的 PR #340 全部 CI 检查通过。
   - **最新版本：v5.23.5（2026-11-13）**：整体健康度修复落地（备份还原写屏障 / 数据目录迁移逐库判定 / SW 缓存不跨版本 / 写路径事务边界 / 判据族改行为探针）。
-- **项目状态：2026-11-10 起阶段性暂停**，短期内不再推进。接手先读 [`handoff_2026-11-10-project-pause.md`](handoff_2026-11-10-project-pause.md)。
+- **项目状态：2026-11-10 起阶段性暂停**，短期内不再推进。接手先读 [`handoff_2026-11-10-project-pause.md`](archive/handoff_2026-11-10-project-pause.md)。
 - **上一版 v5.23.0**：词卡写入幂等修复链收口 + Android 冷启动静态壳 + 桌面 B2 提前加载 + App 内已知限制。
 - **历史里程碑归档**：v5.22.1（文章响应体去重 / Android TTFD 口径）、v5.22.0（视觉材质、桌宠 P1–P4、复习台账、存量重算 3.6.0）、v5.21.1（伴学 SSE 跨 chunk 分帧修复）、v5.21.0（伴学页面级能力与 HITL 闭环）、v5.20.2（阅读排版与 CEFR 透视）、v5.20.1（Android 拖拽与 Apache 2.0）、v5.20.0（伴学 Agent 运行时）、v5.19.0 及更早版本演进详见 `CHANGELOG.md` 与 `WORKMEMORY/cold/digest-2026-10.md`。
 
@@ -58,7 +58,7 @@
 9. import 期不得联网、不得抛异常（Android 启动卡死的历史根因）。
 10. 切句只有 `syntax_tree.split_sentences_pure_python()` 一处实现，别造第二份。**登记例外**：`tools/bench_judge_fp.py` 内的离线切句用于 FP 标定基准，本条只约束生产运行时路径；不得把它当生产第二实现，也不得让它反向依赖生产切句（2026-11-13 审计 P2 #14 登记）。
 11. 跨边界契约（前端 body ↔ 后端模型）必须行为探针验证，字符串存在断言是死测（2026-09-02 事故）。
-12. 「上游 → 本地词表/精读生词」同步 MUST 只增 + 只补空 + 幂等，闸门按「能力」判定（MUST NOT 按历史来源标记）；补字段 MUST NOT 跨语义来源混用（生词原句 vs 官方例句）。详情见 `docs/agents/ops.md`「存量富字段回填规范」+ Coding Vault `01-Rules/STORED-DATA-BACKFILL`。
+12. 「上游 → 本地词表/精读生词」同步 MUST 只增 + 只补空 + 幂等，闸门按「能力」判定（MUST NOT 按历史来源标记）；补字段 MUST NOT 跨语义来源混用（生词原句 vs 官方例句）。详情见 `docs/agents/ops.md`「存量富字段回填规范」+ Coding 私有规范。
 13. **探针 / 守卫的「锚点 + 括号配平」切片有两型静默失效**，形态都是**判据看着在跑、实际恒真**：① 锚点只到函数名 ⇒ 切片里没有函数体（`ia_dom_mount_probe` 曾有 4 条守卫如此死了很久，与任何重构无关）；② 用 `[^{]*`「吃掉参数表」的写法遇解构参数 `f({a}={})` 会停在参数的花括号上 ⇒ 同样切出无体片段（修好①后曾以为解决，实测仍死）。MUST 配平到 `)` 之后**要求下一个字符是 `{`**，任一步失败 MUST 具名报错、MUST NOT 返回短切片；注入式变异的锚点同理 MUST `assert == 1`。另两条同源纪律：静态层已红 MUST NOT 再跑 `node:vm`（空源撞出的 `ReferenceError` 会埋掉真实问题）；沙箱 MUST NOT 同时留手写桩与真实源码切片两个真相源。详情见 `docs/agents/architecture.md`「前端模块分层契约」。
 
 ## 开放待办（活项）
@@ -70,13 +70,13 @@
 3. **README 首屏改造**（宣传线，**门槛③已交付，2026-11-03**）：首屏为「一句话价值 + 实拍双图 + 30 秒上手（普通用户双击运行 vs 开发者三步启动）」；真机截图已入库（`docs/images/readme-home-hero.jpg` 文稿库 hero、`readme-reader-b1.jpg` B1 沉浸阅读器：CEFR 光谱 + 考点高亮 + 影读播放条），存在性守卫 `test_readme_first_screen_images_exist` 红灯防裂图；Tests 徽章同步至 2962/2967（2026-11-08 v5.22.0 发布提交全量实测 2962 passed / 4 skipped / 1 xfailed，2967 collected；**本条是该时点的历史记录，不是当前值**——当前徽章 3040/3054 见 README 记录的 v5.23.4 全量实测，2026-11-13 审计未复跑全量）。WebView2 前置已在下载表注明。
 4. **预置包 LLM gloss 富化**：阻塞于 `DEEPSEEK_API_KEY` 缺失；`import_encounter_pack` 按 `pack_id` 幂等**不更新**既有行。
 5. **C 档已交付（2026-10-19 回填）**：`docs/reviews/2026-10-16-open-items-backlog.md` 的 C1~C9 均已交付（PR #143~#160，含 C9 终审与 mock 漂移闸 #150）；**C4 Android 真机点检仍暂缓**（见第 2 条，非交付缺口）。⚠️ ADR-0024 资产折旧：回灌（C1，PR #147，2026-10-17）已落地 ⇒ §4.3 实验（N=20 报告）的阈值与结论**只对"准入式裁判 + 无回灌"历史形态有效**。**已明确分域**（2026-11-03：`docs/reviews/2026-10-16-judge-gaming-control-experiment.md` 顶部适用域声明）；ADR-0024 D-2 四件工程前置**已于 2026-11-03 落地**（commit `c385ea7`：逐篇落盘+续跑 / temperature 钉定 / --real 连通预检 / 成本硬闸，均带测试）；重跑当前**仅阻塞于 `DEEPSEEK_API_KEY` 缺失**（未跑，重跑前报告仅作历史形态基线）。
-6. **递延项（未立项）**：tests `--strict`；`tools/vault-proactive-scan.py` 三条版本正则**已于 tests/test_app_version_source.py 补齐自动化守卫**；PWA 安装提示验证 / 192-512 PNG 图标（**图标已于 2026-11-03 补齐**：`static/icon-192.png`、`static/icon-512.png` + manifest 位图条目 + 尺寸守卫测试；安装提示仍待真机验证）；**桌面单实例与端口顺延已于 2026-10-22 交付**（见「当前状态」，勿再当待办）；发布链路 runbook（Publish 被跳过 / 孤儿 tag 的恢复路径：Vault v5.4.0 复盘 + **v5.1.1 孤儿 tag 在案**；`gh workflow run --ref <tag>` 理论可补发但**本仓未实证**，判据只能是 release 资产清单）。
+6. **递延项（未立项）**：tests `--strict`；（本机脚本） 三条版本正则**已于 tests/test_app_version_source.py 补齐自动化守卫**；PWA 安装提示验证 / 192-512 PNG 图标（**图标已于 2026-11-03 补齐**：`static/icon-192.png`、`static/icon-512.png` + manifest 位图条目 + 尺寸守卫测试；安装提示仍待真机验证）；**桌面单实例与端口顺延已于 2026-10-22 交付**（见「当前状态」，勿再当待办）；发布链路 runbook（Publish 被跳过 / 孤儿 tag 的恢复路径：私有笔记库 v5.4.0 复盘 + **v5.1.1 孤儿 tag 在案**；`gh workflow run --ref <tag>` 理论可补发但**本仓未实证**，判据只能是 release 资产清单）。
 
 
-7. **项目阶段性暂停（2026-11-10）**：v5.23.0 发版后短期内不再推进。接手入口 = [`handoff_2026-11-10-project-pause.md`](handoff_2026-11-10-project-pause.md)（含已完成证据、下一步、风险与坑）。**热层已轮转（2026-11-13）**：97 事件 > 阈值 75，保留最新 50 条，最老 47 条（11-08 的 3 条 / 11-09 的 24 条 / 11-10 00:01~19:31 的 20 条）移入 `archive/work-2026-11-08|09|10.log`，事件集合守恒已按协议 §5.1 对账；COLD digest 已增补至 v5.23.0（v5.23.1~v5.23.5 尚未蒸馏）。
+7. **项目阶段性暂停（2026-11-10）**：v5.23.0 发版后短期内不再推进。接手入口 = [`handoff_2026-11-10-project-pause.md`](archive/handoff_2026-11-10-project-pause.md)（含已完成证据、下一步、风险与坑）。**热层已轮转（2026-11-13）**：97 事件 > 阈值 75，保留最新 50 条，最老 47 条（11-08 的 3 条 / 11-09 的 24 条 / 11-10 00:01~19:31 的 20 条）移入 `archive/work-2026-11-08|09|10.log`，事件集合守恒已按协议 §5.1 对账；COLD digest 已增补至 v5.23.0（v5.23.1~v5.23.5 尚未蒸馏）。
 
 ## 工作方式
 
 - 提交 Conventional Commits；禁止 `--no-verify`。
-- 语义知识检索：`search_vault` MCP 或 `python \"$WIKI_PATH/scripts/search-vault.py\"`。
+- 语义知识检索：`search_vault` MCP 或 `python \"（本机知识库，不随仓库分发）`。
 - 会话事件按 `PROTOCOL.md` 记入本目录 `work.log`。

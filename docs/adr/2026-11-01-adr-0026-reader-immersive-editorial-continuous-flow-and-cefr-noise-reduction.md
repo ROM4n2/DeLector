@@ -4,9 +4,9 @@
 - **日期**：2026-11-01
 - **决策者**：席皓宇 (Haoyu Xi), Hermes Agent
 - **关联 ADR**：
-  - [[0007-reader-syntax-ghost-pill-explicit-trigger]] (前序：正文句法胶囊隐式触发)
-  - [[0006-workbench-zettelkasten-editorial-redesign]] (学术出版物设计规范)
-  - [[0025-companion-agent-native-tool-calling-and-streaming]] (伴学抽屉与分析流)
+  - 0007-reader-syntax-ghost-pill-explicit-trigger (前序：正文句法胶囊隐式触发)
+  - 0006-workbench-zettelkasten-editorial-redesign (学术出版物设计规范)
+  - 0025-companion-agent-native-tool-calling-and-streaming (伴学抽屉与分析流)
 
 ---
 

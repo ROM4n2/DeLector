@@ -4,11 +4,11 @@
 - **日期**：2026-11-09
 - **决策者**：席皓宇 (Haoyu Xi)
 - **关联 ADR**：
-  - [[0018-performance-measurement-before-runtime-swap]]（先测量、再换运行时；本 ADR 沿用其判据）
-  - [[0021-stay-on-python-language-choice-criteria]]（语言选择以运行时/交付为判据；本 ADR 不改语言）
-  - [[0027-nlp-model-sm-only]]（模型档位固定 `de_core_news_sm`）
-  - [[0028-android-main-path-spacy-lazy-load]]（惰性加载先例；本 ADR 不扩大其范围）
-  - [[0031-python-import-migration]]（方案 A：import 时点迁移；**已 Deprecated**，判负依据见 §3.1）
+  - 0018-performance-measurement-before-runtime-swap（先测量、再换运行时；本 ADR 沿用其判据）
+  - 0021-stay-on-python-language-choice-criteria（语言选择以运行时/交付为判据；本 ADR 不改语言）
+  - 0027-nlp-model-sm-only（模型档位固定 `de_core_news_sm`）
+  - 0028-android-main-path-spacy-lazy-load（惰性加载先例；本 ADR 不扩大其范围）
+  - 0031-python-import-migration（方案 A：import 时点迁移；**已 Deprecated**，判负依据见 §3.1）
 - **关联调研**：
   - `docs/research/2026-11-09-first-screen-startup-industry-research.md`
   - `docs/research/2026-11-09-android-webview-prestartup-negative-result.md`

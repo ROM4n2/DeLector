@@ -10,7 +10,7 @@
 | `plans/` | **在途**实施计划（vault-plan schema：Goal / Tech Stack / Spec Reference / Global Constraints + Task 拆分 + TDD 步骤） | 交付后 `git mv` 进 `plans/archive/` |
 | `plans/archive/` | 已交付的历史计划，含成对的 `-ledger.md`（vault-exec 执行台账）与 `-review.md`（评审子产物） | 只进不出 |
 | `specs/` | **设计稿**：统一命名 `<日期>-<主题>-design.md` | 无归档层（设计意图长期有效） |
-| `adr/` | **仓内 ADR 副本**：`<日期>-adr-XXXX-<主题>.md`（正式件在 Vault）；状态视图见 `adr/INDEX.md` | 无归档层 |
+| `adr/` | **仓内 ADR 副本**：`<日期>-adr-XXXX-<主题>.md`（正式件在私有笔记库，不随仓库分发）；状态视图见 `adr/INDEX.md` | 无归档层 |
 | `reviews/` | 审计 / 评审报告（一次性、带日期；分类导引见 `reviews/README.md`） | — |
 | `research/` | **可复用技术调研**（设计经验、外部产品对标、交互动效与排版实测、独立原型与模板） | 无归档层（调研经验长期有效） |
 | `agents/` | 面向 agent 的常青文档：`architecture.md`（架构与跨端契约）、`ops.md`（运维）、`ci-speed-budget.md`（CI 闸门成本/并发预算）、以及需人工/agent 逐项填写的复测清单 | — |
@@ -64,5 +64,5 @@
 
 - **发版历史**以根目录 `CHANGELOG.md` 为唯一正主（single source of truth）；本目录**不放**发布说明。
   - 2026-10-02 清理：v2.1 时代的一次性发布总结 `release-v2.1.md` 已移除——内容既已被 CHANGELOG 的 v2.1 路线图条目覆盖，又与现实矛盾（写着「测试 20/20」、Docker「挂载当前目录」，而 #69 已改为 `./data` 目录挂载）。原件在 git 历史里可取回。
-- **ADR 正式件**在 Obsidian Vault `08-Projects/DeLector/01-ADR/`；`adr/` 里的是**仓内副本**，便于随代码一起检索引证。
+- **ADR 正式件**在 `docs/adr/`；`adr/` 里的是**仓内副本**，便于随代码一起检索引证。
 - **计划/设计稿被代码、测试或注释引用**时，写**相对仓库根**的完整路径（如 `docs/plans/archive/2026-09-09-ci-hardening.md`），这样 `grep` 与「路径存在性校验」都能覆盖到。

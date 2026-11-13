@@ -3,7 +3,7 @@
 > **Goal**: 抽离主站 Academic Modern Editorial 共享设计 Token（`static/css/tokens.css`），在维持 iframe 物理沙箱隔离的前提下重塑背词工作台视觉体验（暖纸底色、深碳墨水、自然植物矿物记忆反馈色、衬线排印）；扩展顶栏范围选择器对接 CEFR 考纲词库契约，实现多等级/生词流无缝刷词，全程保持 10 个 Node.js 探针（尤其是 13 条切片护栏）100% 全绿。
 > **Tech Stack**: 原生 CSS（Custom Properties 设计 Token）、原生 JavaScript（单文件 SPA + iframe 容器）、FastAPI + SQLite（服务端词库端点）、node:vm 行为探针。
 > **Spec Reference**: [`docs/specs/2026-09-04-workbench-design-token-and-scope-contract-design.md`](file:///d:/Code/DeLector/docs/specs/2026-09-04-workbench-design-token-and-scope-contract-design.md)
-> **ADR Reference**: `d:/Obsidian/Coding/08-Projects/DeLector/01-ADR/0005-navigation-exam-domain-and-level-scalability.md` (§4.5 背词工作台形态与词表契约)
+> **ADR Reference**: `（私有笔记库，不随仓库分发））` (§4.5 背词工作台形态与词表契约)
 > **Global Constraints**:
 >
 > - **切片护栏红线 (MUST)**：`static/german/workbench.html` 必须严格保护 `tools/wb_queue_probe.mjs` 等探针依赖的代码切片。切片行与其内部实现绝不可随意破坏。改动前后必须运行探针。

@@ -2,7 +2,7 @@
 # Dependabot 依赖治理：pip / github-actions / gomod 三生态周更
 # =============================================================================
 #
-# 组合拳（99-Inbox 两篇教训：tag 发版三重陷阱 / fastapi-starlette 无上界
+# 组合拳（两篇历史教训：tag 发版三重陷阱 / fastapi-starlette 无上界
 # 依赖漂移）：dependabot 负责把依赖升级**前置暴露**为 PR，升级安全性由
 # ci.yml 兜底——每个升级 PR 都会自动触发 CI 全量门禁（pytest + gofmt /
 # vet / -race），不绿不合并，依赖漂移不攒到发版日。
@@ -29,7 +29,7 @@ updates:
     # fastapi 0.141 / starlette 1.6 的 `include_router` 改为嵌套路由后，路由守卫测试
     # `test_register_routes_covers_every_module_in_routes_package` 曾据**端点函数对象身份**
     # 比对，把全部路由误判为 missing（2026-09-09 v5.4.0 发版 CI 三平台全炸的根因；详见
-    # 08-Projects/DeLector/POST-MORTEM-V5.4.0-FASTAPI-DEPENDENCY-DRIFT.md）。
+    # （私有复盘笔记）。
     # 该守卫已于 2026-09-24 改为 **HTTP 语义键**（完整 path + METHOD，已注册侧取自
     # app.openapi()["paths"]）而免疫；2026-09-26 本地全量验证通过后升 fastapi 0.141.1，
     # 同时**撤销 ignore** —— 恢复由「dependabot 周更 + ci.yml 全量门禁」兜底。

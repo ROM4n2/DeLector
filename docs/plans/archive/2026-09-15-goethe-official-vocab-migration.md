@@ -2,7 +2,7 @@
 
 > **Goal**: 把用户制作的官方歌德 A1/A2/B1 词表（+A1 常用词 overlay）安全迁入 delector，并把当前「东一个西一个」的词表存储收敛为**统一主干 + 按来源分片 + 视图派生**的可扩展架构。
 > **Tech Stack**: Python 3.11（纯数据模块 + 核心层）；无 Go 改动。
-> **Spec Reference**: ADR-0011（词库单一真相化）、ADR-0005（多等级可扩展）、`01-Rules/DATABASE-MIGRATION-IDEMPOTENCY`；本计划产出 **ADR-0012（词汇主干分层与来源优先级）**。
+> **Spec Reference**: ADR-0011（词库单一真相化）、ADR-0005（多等级可扩展）、私有规范；本计划产出 **ADR-0012（词汇主干分层与来源优先级）**。
 > **Global Constraints**:
 > - **5 元组存储 schema 冻结**（ADR-0011 #6）：`lemma -> (cefr, pos, gender, plural, def_zh)` 不得加字段；扩展字段须另立 ADR。
 > - **id 只增不改**（ADR-0011 #7）：`vocab_id = f"{cefr.lower()}-{lemma.lower()}"`；改 cefr = 改 id = 进度孤儿。
@@ -355,7 +355,7 @@ Schema：`lemma -> {"ipa", "example_de", "example_zh", "topic"}`；常量 `OFFIC
 2. **IPA 统一为现有表示** ✅ → 落地为**去 tie-bar（U+0361）**：`t͡s→ts`、`p͡f→pf`、`t͡ʃ→tʃ`（252 条受影响）；不反向改 A1
 3. **IPA 质量门** ✅ → 产出**人工复核清单**（10 条空 IPA + artifacts 抽样），不做重质量门
 
-契约扩展决策落 **ADR-0013**（Vault `01-ADR/0013-rich-vocab-fields-output-contract.md`）：契约 9 → **11 字段**（新增 `ipa` / `example_zh`，`de` 语义统一为德语例句）。
+契约扩展决策落 **ADR-0013**（契约见 ADR-0013）：契约 9 → **11 字段**（新增 `ipa` / `example_zh`，`de` 语义统一为德语例句）。
 
 ### 10.5 Phase 2 任务分解（S1–S6，/vault-exec）
 
@@ -450,7 +450,7 @@ Schema：`lemma -> {"ipa", "example_de", "example_zh", "topic"}`；常量 `OFFIC
 
 | # | Task | 关键产物 | 相对原计划 |
 | --- | --- | --- | --- |
-| **R1** ✅ | ADR-0012 结构设计（先决策后编码） | Vault `08-Projects/DeLector/01-ADR/0012-vocabulary-backbone-and-source-priority.md` | **新增（前置，已完成 2026-09-15）** |
+| **R1** ✅ | ADR-0012 结构设计（先决策后编码） | 私有笔记库 不随仓库分发 | **新增（前置，已完成 2026-09-15）** |
 | **R2** | 官方分片模块化 | `delector/data/official_vocab.py` + `tests/test_official_vocab.py` | 同原 T1 |
 | **R3** | 主干加载器 `delector/core/lexicon.py`（分片注册表 + provenance + 优先级） | `LEXICON` + `tests/test_lexicon_priority.py` | **替换原 T2** |
 | **R4** | 查询层接入 `sources` 过滤 + 备考域改「仅官方」 | 改 `get_vocab_by_cefr` / `exam_catalog.count_fn` / `routes/a2.py` | **新增** |

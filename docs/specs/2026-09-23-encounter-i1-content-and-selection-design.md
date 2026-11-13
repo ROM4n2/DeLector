@@ -4,7 +4,7 @@
 - **状态**：设计已定，待 `/vault-plan` 生成实施计划
 - **类别**：Architectural（既有子系统能力补齐，两阶段）
 - **前置决策**：ADR-0010（遇见区分层与 Go Agent 内容生产）、ADR-0014（词表存储边界与 A1 取数统一）
-- **前置规范**：Coding Vault `01-Rules/STORED-DATA-BACKFILL`（读取期派生 / 只增 + 只补空 + 幂等 / 禁跨语义来源混用）；项目侧 `WORKMEMORY/PROJECT_OVERVIEW.md` 红线 12
+- **前置规范**：Coding 私有规范（读取期派生 / 只增 + 只补空 + 幂等 / 禁跨语义来源混用）；项目侧 `WORKMEMORY/PROJECT_OVERVIEW.md` 红线 12
 - **来源**：`/vault-spark` 2026-09-23 方向裁定（先 A 后 B）
 
 ---
@@ -101,7 +101,7 @@ lemma_seq = [tok["lemma"] for s in parsed["sentences"] for tok in s["tokens"] if
 
 **问题**：`seed_preset_encounter_texts` 现有语义是**空库守卫**——`count != 0` 直接返回 0，且 docstring 明写"预置内容只是首次启动的默认供给，不是每次启动都要补齐的资材"。真实用户与作者的设备都是**非空库**，因此**永远不会**拿到新增的 B1 三篇。
 
-**决策**：把空库守卫升级为**版本闸 + 只增补装**，语义严格遵循 `01-Rules/STORED-DATA-BACKFILL`：
+**决策**：把空库守卫升级为**版本闸 + 只增补装**，语义严格遵循 私有规范：
 
 ```python
 PRESET_SEED_VERSION = 2   # delector/core/database.py 模块级常量（不放进生成物数据模块）
@@ -276,7 +276,7 @@ rate = knownTokens / entry.total_tokens;
 - `docs/plans/archive/2026-09-23-encounter-i1-content-and-selection.md`（实施计划）
 - `docs/plans/archive/2026-09-10-encounter-content-supply.md`（预置内容供给侧首建：本设计的直接前身）
 - `docs/specs/2026-09-05-a2-vocab-expansion-design.md`（等级扩展的先例形态）
-- `08-Projects/DeLector/01-ADR/0010-encounter-zone-layered-go-agent-producer.md`
-- `08-Projects/DeLector/01-ADR/0014-vocabulary-storage-boundary-and-a1-server-fetch.md`
-- `01-Rules/STORED-DATA-BACKFILL.md`（存量数据回填规范：本设计 A 阶段语义的规范出处）
-- `01-Rules/TESTING-PATTERNS.md`（行为探针 / 变异验证纪律）
+- 不随仓库分发
+- 不随仓库分发
+- 私有规范（存量数据回填规范：本设计 A 阶段语义的规范出处）
+- 私有规范（行为探针 / 变异验证纪律）

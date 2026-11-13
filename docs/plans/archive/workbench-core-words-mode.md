@@ -2,7 +2,7 @@
 
 > **Goal**: 在德语背词工作台（Workbench）中加入"核心词模式"——在现有 684 个种子词基础上，通过 tag 标记 + 过滤的方式，提供一个约 235 词的核心词子集视图，切换模式不影响 FSRS 进度。
 > **Tech Stack**: Vanilla JavaScript (ES5+), single HTML file (`static/german/workbench.html`, 3326 lines), localStorage, FSRS-6
-> **Spec Reference**: ADR-0001: `d:/Obsidian/Coding/08-Projects/DeLector/01-ADR/0001-workbench-core-words-mode.md`
+> **Spec Reference**: ADR-0001: `（私有笔记库，不随仓库分发））`
 > **Global Constraints**: 不引入外部依赖；不破坏现有 wb-sync/wb-full 导入导出格式；词有且只有一条 FSRS 记录；所有计数动态计算不硬编码
 
 ---

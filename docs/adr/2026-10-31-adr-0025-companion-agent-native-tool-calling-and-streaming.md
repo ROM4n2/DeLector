@@ -4,9 +4,9 @@
 - **日期**：2026-10-31
 - **决策者**：席皓宇 (Haoyu Xi), Hermes Agent
 - **关联 ADR**：
-  - [[0023-interactive-layer-verification-driven-agent-loop]] (前序：验证驱动交互 Agent 闭环定案)
-  - [[0010-encounter-zone-layered-go-agent-producer]] (伴学 Agent 协议中立性)
-  - [[0009-python-package-restructure-deletion-test-and-tool-contract]] (工具契约)
+  - 0023-interactive-layer-verification-driven-agent-loop (前序：验证驱动交互 Agent 闭环定案)
+  - 0010-encounter-zone-layered-go-agent-producer (伴学 Agent 协议中立性)
+  - 0009-python-package-restructure-deletion-test-and-tool-contract (工具契约)
 
 ---
 

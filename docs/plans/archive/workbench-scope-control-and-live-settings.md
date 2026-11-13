@@ -2,7 +2,7 @@
 
 > **Goal**：把核心词模式切换从词库工具栏提到顶栏常驻，并让「每日新词上限」「新词顺序」改动即时作用于当前队列而不丢复习位置。
 > **Tech Stack**：Vanilla ES（零构建，单文件 `static/german/workbench.html`）+ Python 3.11 pytest 静态契约测试 + Node 动态探针
-> **Spec Reference**：`d:\Obsidian\Coding\08-Projects\DeLector\01-ADR\0002-workbench-scope-control-and-live-settings.md`
+> **Spec Reference**：`docs/adr/2026-09-01-adr-0002-workbench-scope-control-and-live-settings.md`
 > **Baseline**：HEAD `c52ecf0`，410 tests green，v4.9.0 已发布
 
 ---
@@ -63,7 +63,7 @@
 > "Implement Task 1: 顶栏范围分段控件 + 徽标模式前缀。
 > Goal: 把核心词模式切换提到 `<header class="top">` 同一 flex 行常驻可见，徽标文案改为 `⭐核心 · 今日待学 12` / `全部 · 今日已完成 ✓`。
 > Target Files: Modify `static/german/workbench.html`，Test `test_german_workbench.py`。
-> 先读 ADR `d:\Obsidian\Coding\08-Projects\DeLector\01-ADR\0002-workbench-scope-control-and-live-settings.md` 第 3.1 节。
+> 先读 ADR `docs/adr/2026-09-01-adr-0002-workbench-scope-control-and-live-settings.md` 第 3.1 节。
 > 约束：
 > - 控件插进**已有的** `<header class="top">` flex 行（`workbench.html:276-281`），不新建一行容器；`header.top` 已是 `flex-wrap:wrap`，窄屏换行是接受的代价。
 > - 点击 handler 必须复用既有链路：写 `wordFilters.scope` → `refilterReviewQueueForScope()` → `renderWords()` → `renderHeaderBadge()`。**不要**调 `buildReviewQueue()`（它 `revIdx=0` 会跳回第一张）。

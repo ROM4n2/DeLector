@@ -9,7 +9,7 @@
 ## 0. 结论先行
 
 1. **10 个页面实测完成，9 个可用 A 级数据。** Medium 被 Cloudflare 拦（只拿到 33 个元素与加载环），按预案改用 NN/g 文章；Duolingo 首页 8/8 样式表跨域不可读，降为 `[A 受限]`，补测了 `duolingo.com/approach`。
-2. **阅读面的动效不是「少」，是「只做一次、只做 opacity / 底色」。** Obsidian Help 126 个元素有 transition，其中 37 个只过渡 `opacity`，正文本身没有位移；NN/g 文章页只有 4 个元素、150ms；Things 3 只有 5 个元素、100–200ms。**阅读界面接近零动效也能成立。**
+2. **阅读面的动效不是「少」，是「只做一次、只做 opacity / 底色」。** 私有笔记库 Help 126 个元素有 transition，其中 37 个只过渡 `opacity`，正文本身没有位移；NN/g 文章页只有 4 个元素、150ms；Things 3 只有 5 个元素、100–200ms。**阅读界面接近零动效也能成立。**
 3. **功能面把 hover 预算花在颜色上，不花在位移上。** GitHub 326 条 hover 规则，抽样 80 条里只有 2 条带 `transform`，73 条只改颜色/阴影/边框；Stripe Docs 22 条 hover 全部不含 `transform`；GitHub 主时长 80ms。
 4. **营销面的「生动」= stagger + 长时长。** Raycast 438 个 transition 元素，185 个 400ms、177 个 300ms；扩展卡以 **80ms 递增、单卡 700ms** 入场（第 7 张延迟 580ms）。Linear changelog 234 个 transition 元素、54 个 keyframes。这套节奏不能搬进阅读器。
 5. **只有 3 件事值得抄进 DeLector**：hover 只改色/阴影（80–180ms）、选中态 2px 色条 `scaleY`（260ms）、数字首现一次性计数（400–600ms）。其余（700ms stagger、3D 按钮唇边、渐变光晕）列为反例。
@@ -50,7 +50,7 @@ node C:\Users\<user>\AppData\Local\Temp\del_motion\measure.mjs d:\Code\DeLector\
 
 ### 1.3 证据边界
 
-- 跨域样式表无法读取 `cssRules`（Obsidian、NN/g、Duolingo 首页均有），所以「hover 规则数」在这些页面偏低甚至为 0；computed transition 仍然有效。
+- 跨域样式表无法读取 `cssRules`（私有笔记库、NN/g、Duolingo 首页均有），所以「hover 规则数」在这些页面偏低甚至为 0；computed transition 仍然有效。
 - **hover 没有被真实触发**：结论来自「CSS 规则 + computed style」，不是鼠标事件后的差值。凡是需要区分「hover 前后」的数值，都标为推断。
 - JS 内联动画（Web Animations API）只通过 `getAnimations()` 抓到正在运行的部分，静态写在 JS 里的时长可能漏采。
 - Medium 为 `[U]`，其 `medium.jpg` 是 Cloudflare 验证页，不能作为视觉证据。
@@ -62,7 +62,7 @@ node C:\Users\<user>\AppData\Local\Temp\del_motion\measure.mjs d:\Code\DeLector\
 | 页面 | 类别 | 元素 | 有 transition | 主时长 | 主 easing | keyframes | hover 规则（抽样） | reduce 后仍在动 | 证据 |
 |---|---|---:|---:|---|---|---:|---|---:|---|
 | Readlang | 阅读 | 412 | 10 | 0.3s ×10 | ease ×9 | 11 | 22（1 带 transform） | 0 | A |
-| Obsidian Help | 阅读 | 571 | 126 | 0.14s ×96 / 0.1s ×29 | ease-in-out ×126 | 0 | 0（跨域） | 2（`node-inserted`，0s） | A |
+| 私有笔记库 Help | 阅读 | 571 | 126 | 0.14s ×96 / 0.1s ×29 | ease-in-out ×126 | 0 | 0（跨域） | 2（`node-inserted`，0s） | A |
 | NN/g 文章 | 阅读（替代 Medium） | 698 | 4 | 0.15s ×4 | ease-out ×4 | 0 | 0（跨域） | 0 | A |
 | Things 3 | 阅读基线 | 465 | 5 | 0.1s ×4 / 0.2s ×1 | ease-out ×5 | 0 | 49（4 带 transform） | 0 | A |
 | GitHub 仓库 | 功能 | 2824 | 31 | 0.08s ×22 / 0.2s ×5 | `cubic-bezier(.65,0,.35,1)` ×19 | 43 | 326（抽样 80：2 transform） | 0 | A |
@@ -80,7 +80,7 @@ node C:\Users\<user>\AppData\Local\Temp\del_motion\measure.mjs d:\Code\DeLector\
 
 ### 3.1 应用内阅读面：动效预算几乎为零，且只碰「外壳」
 
-**Obsidian Help（571 元素 / 126 transition）** `[A]`
+**私有笔记库 Help（571 元素 / 126 transition）** `[A]`
 
 - 126 个元素全部 `ease-in-out`；96 个 140ms、29 个 100ms。
 - 过渡属性以 `opacity` 为主（37 个采样），`transform` 只有 3 个，`background/box-shadow/border` 各 1。
@@ -370,7 +370,7 @@ export function countUp(el, to, { duration = 520, format } = {}) {
 2. **Duolingo 应用内界面**（登录后的 XP、连胜、关卡）不可访问；只能测营销页。`[U]`
 3. **hover 前后差值**未真实触发，所有 hover 结论来自 CSS 规则 + computed style。`[A，推断]`
 4. **JS 内联动画**只抓到运行中的部分，未做运行时代码注入，可能漏采。`[U]`
-5. **跨域样式表**（Obsidian、NN/g、Duolingo 首页）的 hover 规则读不到，规则数为 0 不代表没有。`[A，受限]`
+5. **跨域样式表**（私有笔记库、NN/g、Duolingo 首页）的 hover 规则读不到，规则数为 0 不代表没有。`[A，受限]`
 6. **Vercel 的 reduce 后 9 个元素**是探针误报（`animation-name: none`），没有据此下结论。`[A，已排除]`
 7. **Raycast 的 reduce 降级不完整**（20 个元素仍挂入场动画）是基于 `getAnimations()` 的一次采样，未做完整交互路径验证。`[A，单次]`
 8. **计数动画**在 10 个样本里都没有采到；模板的 400–600ms 来自阅读类动效档位与工程经验，不是实测值。`[U]`
@@ -386,7 +386,7 @@ export function countUp(el, to, { duration = 520, format } = {}) {
 - 采集脚本：`C:\Users\<user>\AppData\Local\Temp\del_motion\measure.mjs`（临时，不入库）
 - 主要页面：
   - https://readlang.com/
-  - https://help.obsidian.md/
+  - https://help.私有笔记库.md/
   - https://www.nngroup.com/articles/animation-usability/
   - https://culturedcode.com/things/
   - https://github.com/ROM4n2/DeLector

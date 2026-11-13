@@ -215,5 +215,5 @@ EXAM_CATALOG: Dict[str, Dict[str, Any]] = {
 
 - [x] **零 TODO / TBD 占位符**：数据源明确为 `CORE_VOCAB_DB` 974 词条，UI 与路由定义明确。
 - [x] **无跨域污染**：不修改 spaCy 标注逻辑，不破坏 `tokens.css` 墨水纸张设计系统。
-- [x] **严格防范数据集污染**：遵从 `01-Rules/DATASET-HYGIENE-PATTERNS.md`，名词冠词按性数格规则严格对齐，不生造机械错误例句。
+- [x] **严格防范数据集污染**：遵从 私有规范，名词冠词按性数格规则严格对齐，不生造机械错误例句。
 - [x] **切片探针兼容**：`inScopeWord` 扩展严格保留既有断言特征（`_SCOPE_IS_CORE` 与 `core` includes 判定）。

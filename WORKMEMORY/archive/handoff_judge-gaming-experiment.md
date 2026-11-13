@@ -26,7 +26,7 @@ status: open
 - **编排者已逐篇实测（物理证据，替代死亡 maker 的报告）**：20/20 篇 `sig=1 / probe≥3 / 生产分流 v0=1`（signal 的 rule 分布：kasus×9 / artikel×8 / praeposition×3）；ruff 全绿；`mypy --strict delector` 68 files 0；CRLF lone_LF=0。
 - **测试断言三层**：接口层（五类名/20 篇/两类各≥10/frozen+slots）· 字符串层（wrong/right 计数复算 + **双向回放** text↔clean 差异恰好是注入）· held-out 层（真实 nlp 三重差分：rule 计数多重集相等 + span 不落 wrong 区间 + 逐处回退后仍相等）+ **信号层**（每篇恰 1 signal + 生产分流 v0==1 + probe 不进计数 + 区间不重叠）。检测器 `error_type` 集合**从源码现读**（≥6 下限防正则失效假绿）。
 - **计划/设计稿的"信号注入"修订**已落盘（本包一起提交）。
-- **沉淀已完成**（99-Inbox 两张）：① `2026-10-15-规则引擎硬门必须按「类」覆盖正样本…`（含两条既有规则的新证据实例：自动化接线三证 / UNVERIFIED 逐条核销）；② `2026-10-15-bash-standards-§5.3-缺的一条：嵌入的-ascii-双引号…`。
+- **沉淀已完成**（私有笔记库两张）：① `2026-10-15-规则引擎硬门必须按「类」覆盖正样本…`（含两条既有规则的新证据实例：自动化接线三证 / UNVERIFIED 逐条核销）；② `2026-10-15-bash-standards-§5.3-缺的一条：嵌入的-ascii-双引号…`。
 
 ## 三、未完成与下一步（按序）
 
@@ -40,7 +40,7 @@ status: open
 ## 四、风险与坑（都实测过）
 
 1. **子代理派单不稳**：本会话中断 **6 次**（10003×2 / 10006×3 / 10101 / 6004）。6004 那次死前落盘且状态完好（本包已核）。**给 maker 的 prompt MUST 带反挂死纪律**（所有 sleep 有 `wait_for`/固定次数兜底、禁 join、禁无界 while、单用例 <5s、连续两次跑不完就停手报告）。
-2. **提交信息禁 inline `-m`**（中文 + 引号/反引号会截断或静默缺字）—— 一律 `git commit -F <file>`，消息文件用 `python - <<'PYEOF'`（**定界符带引号**）生成；详见 99-Inbox 那张 BASH 草稿。
+2. **提交信息禁 inline `-m`**（中文 + 引号/反引号会截断或静默缺字）—— 一律 `git commit -F <file>`，消息文件用 `python - <<'PYEOF'`（**定界符带引号**）生成；详见 私有笔记库 那张 BASH 草稿。
 3. **判决量纪律**：`score_uncovered` 只算 `kind=="probe"`；signal 绝不进判决（它只是"点火器"）。LLM rater 只进 `auxiliary`（`AGENT-EVALUATION-HARNESS` §1 + `AGENT-CONDUCT` §10.2 两条 MUST）。
 4. **生产分流下散文的 `a1_greeting_missing` 不计数**（格式族被 prose 过滤）—— 上一个 maker 曾用 `collect_violations` 口径误报 v0=1，**必须用 `routes.main.violations_for + _text_kind` 口径**。
 5. **既有网络型 flaky**：`tests/test_server.py::test_get_audio_tts_returns_mp3` 走 Edge TTS（单跑绿、批跑偶发 500）—— 与本实验无关，别追。

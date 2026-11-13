@@ -38,7 +38,7 @@ review_status: unreviewed
 | ② 服务端 | `delector/core/database.py:1699` `_load_a1_workbench_words()` **用正则解析 workbench.html** 的三个 `const` JSON 字面量；`:1809` `_load_a2_vocab_words()` 读 `CORE_VOCAB_DB` | 精简 `{id, hw, pos, de, zh, core, cefr}`（A2 另带 `gender/plural`，`de` 恒空串） |
 | ③ 数据层 | `CORE_VOCAB_DB = core_dict.py`（~440 手工）⊕ `core_dict_ext.py`（AI 生成 3969） | `lemma -> (cefr, pos, gender, plural, definition_zh)`；实测 A1:459 / A2:974 / B1:1712 / B2:860 / C1:406 |
 
-运行时持久化：localStorage `wb.words.v1` + IndexedDB mirror；`saveWords()` 末尾 `wbsync.push()` → 800ms 防抖 `PUT /api/wb/state`（X-WB-Key）；启动 + 5s 轮询做 stable-diff 后 `applyMerge`（[[08-Projects/lover-instance/LOCAL-FIRST-SHAREABLE-SINGLE-FILE-REPORT]]，远端仅为镜像）。
+运行时持久化：localStorage `wb.words.v1` + IndexedDB mirror；`saveWords()` 末尾 `wbsync.push()` → 800ms 防抖 `PUT /api/wb/state`（X-WB-Key）；启动 + 5s 轮询做 stable-diff 后 `applyMerge`（私有笔记库，远端仅为镜像）。
 
 ### 1.2 问题
 
@@ -56,7 +56,7 @@ review_status: unreviewed
 
 - **产品镜**：A1→B2 多等级必须可低成本扩张（用户实际水平在推进）；权威词表要有明确落点；各级卡片信息量应大致对齐。
 - **工程镜**：消灭"前端文件即数据库"的反模式与静默回退；判定逻辑去分支化，使"加一级 = 改数据"；权威数据进数据模块，前后端同源。
-- **复用阶梯（MUST）**：`format_vocab_headword` 单一装饰点、5-tuple schema、分级惰性加载、[[01-Rules/STORED-DATA-BACKFILL]] + 幂等合并、`SEED_ID_ALIASES` 迁移 —— 全部保留复用，不重写。
+- **复用阶梯（MUST）**：`format_vocab_headword` 单一装饰点、5-tuple schema、分级惰性加载、私有规范 STORED-DATA-BACKFILL + 幂等合并、`SEED_ID_ALIASES` 迁移 —— 全部保留复用，不重写。
 - **硬约束**：**id 稳定性**——`wb.cards.v1` / `wb.wrong.v1` 以词 id 为键，任何收敛动作不得改变既有 id（否则 FSRS 进度全丢，违反 ADR-0002 的"进度零丢失"）。
 
 ## 3. 备选方案 (Considered Options)
