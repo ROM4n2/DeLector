@@ -57,6 +57,7 @@ public class MainActivity extends AppCompatActivity {
     private WebView webView;
     private LinearLayout splashLayout;
     private TextView statusTextView;
+    private ProgressBar progressBar;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private volatile boolean isServerReady = false;
     /** Python 侧抛异常后服务永远不会就绪，用它让轮询与重载立刻停手并保留错误信息 */
@@ -443,7 +444,7 @@ public class MainActivity extends AppCompatActivity {
         subtitleView.setPadding(0, 12, 0, 36);
         subtitleView.setGravity(Gravity.CENTER);
 
-        ProgressBar progressBar = new ProgressBar(this);
+        progressBar = new ProgressBar(this);
         progressBar.setIndeterminate(true);
 
         statusTextView = new TextView(this);
@@ -656,13 +657,10 @@ public class MainActivity extends AppCompatActivity {
                 + " ? String(window.notifyServerReady()) : 'missing';}catch(e){return 'err';}})()";
         webView.evaluateJavascript(js, value -> {
             StartupProbe.markNav("ready_notify", value);
-            if ("\"missing\"".equals(value)) {
+            // 'missing'（不是我们的页面）/ 'err'（页面 JS 抛异常）/ null 都要复位 CAS：
+            // 否则这个一次性标记会让 onPageFinished 的兜底注入永远不再发生，失败无终态。
+            if (value == null || "\"missing\"".equals(value) || "\"err\"".equals(value)) {
                 readyHookInjected.set(false);
-                // 文档已经加载结束，却连 window.notifyServerReady 都没有 ⇒ 这不是我们的页面。
-                // 典型成因：SW 的 network-first 在服务 listening 前导航，fetch 被拒（SW 发起的
-                // 请求不经过 shouldInterceptRequest），Chromium 换成错误页，而 URL 仍是应用
-                // origin、onReceivedError 也不为 SW 请求回调主帧 —— 旧判据因此一直 skip_reload。
-                // 此刻服务已就绪，补载一次即可恢复；只补一次，防止抖动成循环。
                 if (!reloadedForMissingPage && serverPort > 0) {
                     scheduleMissingPageCheck();
                 }
@@ -787,9 +785,18 @@ public class MainActivity extends AppCompatActivity {
         }
         final int timeoutPort = serverPort;
         mainHandler.post(() -> {
+            // 预算已耗尽：Java 侧不再轮询，必须给「可见终态 + 可点重试」，不能假进行中。
+            progressBar.setVisibility(View.GONE);
+            statusTextView.setTextIsSelectable(true);
             statusTextView.setText(timeoutPort > 0
-                    ? "服务启动超时（端口 " + timeoutPort + "），正在重试连接..."
-                    : "服务启动超时，正在重试连接...");
+                    ? "服务启动超时（端口 " + timeoutPort + "），已停止连接。点此重试。"
+                    : "服务启动超时，已停止连接。点此重试。");
+            statusTextView.setOnClickListener(v -> {
+                statusTextView.setOnClickListener(null);
+                statusTextView.setText("正在重新连接本地服务...");
+                progressBar.setVisibility(View.VISIBLE);
+                new Thread(() -> pollServerReadiness(getFilesDir())).start();
+            });
             if (timeoutPort > 0 && timeoutPort != APP_PORT) {
                 // 页面已在 8000 上加载时不再二次导航：留在快照 + 重试 UI 上。
                 StartupProbe.navZero();

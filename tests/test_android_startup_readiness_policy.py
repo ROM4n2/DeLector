@@ -105,3 +105,63 @@ def test_policy_behaviour_with_javac(tmp_path: Path):
     assert f"checks={EXPECTED_CHECKS} failed=0" in output, (
         f"用例数不是 {EXPECTED_CHECKS}（可能被删改）:\n{output}"
     )
+def _terminal_state_violations(src: str) -> list[str]:
+    """切出「预算耗尽 post 块」与「ready hook 回调块」，按局部控制流裁决。
+
+    判据不是全文子串 `in src`：先切到具体分支，再验证分支内的调用关系；
+    变异自证把坏副本喂给同一个判定器，证明每类回归都能变红。
+    """
+    bad: list[str] = []
+    try:
+        timeout = src.split("final int timeoutPort = serverPort;", 1)[1].split(
+            "private void checkAndReloadServer", 1
+        )[0]
+        hook = src.split("private void notifyServerReadyInPage()", 1)[1].split(
+            "private void scheduleMissingPageCheck", 1
+        )[0]
+        callback = hook.split("evaluateJavascript(js, value -> {", 1)[1].split(
+            "\n        });", 1
+        )[0]
+    except IndexError as exc:
+        return [f"切不到终态/CAS 分支（结构被改）：{exc}"]
+
+    if "正在重试" in timeout:
+        bad.append("预算耗尽后仍写「正在重试」：Java 侧已 return，属假进行中")
+    # 只认带 lambda 的监听：终态块里还有 `setOnClickListener(null)`，
+    # 光搜 `setOnClickListener` 会被那一行兜住（实测变异自证抓到的假绿）。
+    if "setOnClickListener(v ->" not in timeout or "pollServerReadiness(getFilesDir())" not in timeout:
+        bad.append("缺可点重试入口：点击没有重启 pollServerReadiness")
+    if "progressBar.setVisibility(View.GONE)" not in timeout:
+        bad.append("indeterminate spinner 未停，仍是假进行中")
+    if "setTextIsSelectable(true)" not in timeout:
+        bad.append("终态错误不可选中，用户无法把失败转述给开发者")
+
+    branch = callback.split("if (", 1)[1].split("\n            }", 1)[0] if "if (" in callback else ""
+    if '"\\"err\\"".equals(value)' not in branch or "readyHookInjected.set(false)" not in branch:
+        bad.append("ready hook 的 err 分支未复位 readyHookInjected CAS")
+    return bad
+
+
+def test_readiness_budget_exhaustion_has_visible_terminal_state() -> None:
+    """阳性 + 阴性：耗尽后是终态而非假进行中，含可点重试、停 spinner、err 复位 CAS。"""
+    violations = _terminal_state_violations(_main_source())
+    assert violations == [], violations
+
+
+def test_readiness_terminal_state_guard_rejects_regressions() -> None:
+    """变异自证：四类回归逐一把同一判定器喂红，证明闸不是摆设（无需手改文件）。"""
+    good = _main_source()
+    mutations = (
+        ("假进行中文案", good.replace("已停止连接。点此重试。", "正在重试连接...")),
+        ("删可点重试", good.replace("statusTextView.setOnClickListener(v -> {", "if (false) {")),
+        ("spinner 不停", good.replace("progressBar.setVisibility(View.GONE);", "", 1)),
+    )
+    hook_start = good.index("private void notifyServerReadyInPage()")
+    cas_at = good.index("readyHookInjected.set(false);", hook_start)
+    mutations += ((
+        "err 分支不复位 CAS",
+        good[:cas_at] + good[cas_at:].replace("readyHookInjected.set(false);", "", 1),
+    ),)
+    for label, mutated in mutations:
+        assert mutated != good, f"变异 {label} 没改动源码（替换串失效）"
+        assert _terminal_state_violations(mutated), f"变异 {label} 没被拦住"

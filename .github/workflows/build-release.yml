@@ -601,6 +601,8 @@ jobs:
           body: |
             ## DeLector ${{ github.ref_name }} 正式发布
 
+            > **请勿使用 v5.23.1 / v5.23.2**：v5.23.1 全平台白屏、v5.23.2 阅读页点开无反应，两版均已废弃，请勿下载或回退到这两个版本。本警示是自动 Release 正文的静态内容；若发版后用 `gh release edit <tag> --notes-file ...` 人工覆盖了正文，覆盖后的正文是否保留本警示需另行核对，本工作流不作保证。
+
             面向德语精读与歌德（Goethe A1–C1）、德福（TestDaF）、DSH 备考者的本地优先学术级伴读工作台。**三种形态共用同一后端**：原生桌面窗口 / 便携版（Windows · macOS · Linux）/ Android 独立单机版。
 
             > 逐版完整变更（含门禁与回滚说明）见仓库 [`CHANGELOG.md`](https://github.com/ROM4n2/DeLector/blob/master/CHANGELOG.md)；完整能力清单见 [`FEATURES.md`](https://github.com/ROM4n2/DeLector/blob/master/FEATURES.md)。
