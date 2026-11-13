@@ -48,7 +48,7 @@ propcache==0.5.4
 proxy-tools==0.1.0
 pycparser==3.12
 pydantic==2.14.3
-pydantic-core==2.50.2
+pydantic-core==2.50.4
 pygments==2.21.0
 pyinstaller==6.22.3
 pyinstaller-hooks-contrib==2026.9
