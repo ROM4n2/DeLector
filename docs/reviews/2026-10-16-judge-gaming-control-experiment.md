@@ -1,7 +1,7 @@
 # §4.3 第 8 条对照实验 —— 主实验（N=20）全景评估报告
 
 > **生成时间**：2026-10-16  
-> **依据规范**：`docs/specs/2026-10-15-judge-gaming-control-experiment-design.md` · **ADR-0024**（第 8 条对照实验判决量与结论边界）· ADR-0023 §4.3 · `01-Rules/AGENT-EVALUATION-HARNESS.md` · `01-Rules/AGENT-CONDUCT.md`
+> **依据规范**：`docs/specs/2026-10-15-judge-gaming-control-experiment-design.md` · **ADR-0024**（第 8 条对照实验判决量与结论边界）· ADR-0023 §4.3 · 私有规范 · 私有规范
 
 > ⚠️ **适用域声明（2026-11-03 补记，落实 ADR-0024 §5「资产折旧登记」）**：本报告全部阈值与结论**只对「准入式裁判 + 裁判结论不回灌」形态有效**（即实验日 2026-10-16 的生产形态）。2026-10-17 C1「裁判结论回灌（verifier-in-the-loop）」已落地（PR #147，merge `ca3eb22`），裁判 violations 自此进入 `messages`，A3 臂自变量强度由「1 位（收/不收）」变为「可持续注入的方向信号」——**本报告数据不得再引用于当前生产形态**。当前形态的等效结论需按新口径重跑；重跑前置（ADR-0024 D-2）：逐篇落盘+续跑 / `temperature` 钉定并记录 / `--real` 连通预检 / 成本硬闸，且需 `DEEPSEEK_API_KEY`。重跑完成前，本报告定位为**历史形态基线**。
 

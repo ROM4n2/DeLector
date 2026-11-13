@@ -2,9 +2,9 @@
 
 > **Goal**: 把 `ai-polish` 循环的裁判从「6 条书信格式/字数浅规则」扩到 **A1 真实评分维度的语法层**，从而抬掉 ADR-0023 §4.3 的「裁判集未扩到位之前不得宣称已实现」门槛；同时把循环的真实迭代价值面从「仅 A1 书信体」扩到**任意德语文本**。
 > **Tech Stack**: Python 3.11 / spaCy 3.8.16 + `de_core_news_sm` / pytest（本仓无 pytest-asyncio）
-> **Spec Reference**: ADR-0023（vault `08-Projects/DeLector/01-ADR/0023-…md`，`accepted`，§8 为定稿口径）—— **本子计划 = §8.5 施行顺序的第 ④ 步**；前序计划 `docs/plans/2026-10-14-interactive-agent-loop.md`（Task 0~6 已合入 master，PR #136）
+> **Spec Reference**: ADR-0023（vault 不随仓库分发，`accepted`，§8 为定稿口径）—— **本子计划 = §8.5 施行顺序的第 ④ 步**；前序计划 `docs/plans/2026-10-14-interactive-agent-loop.md`（Task 0~6 已合入 master，PR #136）
 > **Global Constraints**:
-> - **禁止 LLM 裁判**：vault `01-Rules/AGENT-CONDUCT.md:249` 的三层校验明确 LLM-as-a-Judge **只用于无法形式化定义的开放语言**、**严禁参与物理真值判断**。语法维度是可形式化的 ⇒ MUST 确定性规则。LLM 辅助若将来要加，只能落在 advisory（`level=warning`）且不得阻止收敛（见 Fog of War）。
+> - **禁止 LLM 裁判**：vault 私有规范 的三层校验明确 LLM-as-a-Judge **只用于无法形式化定义的开放语言**、**严禁参与物理真值判断**。语法维度是可形式化的 ⇒ MUST 确定性规则。LLM 辅助若将来要加，只能落在 advisory（`level=warning`）且不得阻止收敛（见 Fog of War）。
 > - **误报（FP）是一等公民**：每条新规则 MUST 同时具备①正样本零误报 ②负样本能报 ③边界不报 三条用例；**官方 `A1_SCHREIBEN_TEIL2` 的 10 篇 `sample_email` 在扩后裁判下 `violations == 0` 是硬门**（连官方范文都报错 ⇒ 规则过严 ⇒ 循环永不可能收敛）。
 > - **静默降级 = 静默假收敛（红线 1）**：`analyze_a1_email` 现为**纯规则、不依赖 spaCy**。接入语法维度后，若运行时无 spaCy ⇒ 语法违规会**静默消失**，裁判会判出「零违规」。故裁判输出 MUST 带引擎标记（如 `judge_engine` / `degraded`），且**端点 MISS 把降级状态带到返回体**（不得让"没检查"看起来像"检查通过"）。
 > - **接线缝 MUST 显式登记（评审 RED#1）**：任何"裁判能力"的改动 MUST **同时指名"谁把它送进循环"**。本次固化 = 端点 `_run_polish` 注入 `judge=`（含 nlp 来源）。**禁止**只改 `writing.py` 就让 7 个任务的测试全绿 —— 那是 dead-green（生产路径上语法裁判恒不生效，而 §4.3 判据表还能被打勾解除）。
@@ -309,7 +309,7 @@
 - **[Unknown C] 裁判变严对收敛率的影响**：error 级违规变多后，**官方范文仍必须 `v == 0`**（Task 2 起的硬门）；但真实用户文本的 `v` 分布会整体上移 ⇒ `max_turns=3` 是否够、`no_improvement` 是否会变成常态，须在有 Key 后回测（与 ADR §6 Unknown 2 同一笔账）。
 - **[Unknown D] B1/B2 维度**：本计划只做 A1。跨等级复用（`syntax_score` 的 7 维难度 / `detect_*` 是否可参数化到 B1）不在此评估。
 - **[Unknown F] Android 上 `try_load_nlp_no_download()` 到底能不能加载成功（真机未验证）**：`processor.py:192-198` 的**导入期** Android 分支显式 `nlp=None`，但新助手走的是 `_load_spacy_model()` 的**路径回退**（glob `{name}-*`，`processor.py:61-72`）—— 而 Android 的模型正是"裸源码目录拷进 Chaquopy"。⇒ **若回退命中，Android 也能拿到 `rules+spacy`（比预期更好）；若失败，则 `rules_only` + 可见提示**。② 已知副作用（评审黄卡）：该助手**不读** `_android_runtime`，失败时也不写全局 ⇒ Android 上模型缺失会**每次润色都重试本地加载**（无记忆、重复耗时）。**验证归属**：Android 真机点检（用户 2026-10-15 指示暂缓）；若届时确认恒失败，再决定是"加 `if _android_runtime: return None`"还是"加进程内失败记忆"。
-- **[Unknown E] Pi 式分层重构（已拍板：日后单独做，本计划不做）**：目标形态 = ① **层间类型三态递进**（`Tool` 名片 → `AgentTool extends Tool` 工人 → `ToolDefinition` 产品组件，**只加不改**）；② **依赖单向**（消掉实测到的两组双向耦合：`core ⇄ nlp_engine`、`services ⇄ tools`）；③ **层序声明**（当前仓内**零处**声明，导致 `LAYERED-ARCHITECTURE §1` 连"违规"都无法判定）；④ 把业务知识（A1 提示词 / 默认裁判）从机制内核提到产品层。**判据来源**：`01-Rules/LAYERED-ARCHITECTURE.md`（实证对象 = Pi-Agent 的 `pi-ai`/`pi-agent-core`/`pi-coding-agent`）+ 2026-10-15 双席位评审（code-reviewer/layering + sre-resilience）。**为什么现在不做**：三态递进需先有「第二个实现」才有内容（现只有一个工具面、一个裁判）——提前定接口正是 §2 反模式；且本子计划的目标是抬 §4.3 门槛，与分层重构正交。**将来启动时的前置**：先落层序声明，再做 ①②③④（顺序见评审报告）。
+- **[Unknown E] Pi 式分层重构（已拍板：日后单独做，本计划不做）**：目标形态 = ① **层间类型三态递进**（`Tool` 名片 → `AgentTool extends Tool` 工人 → `ToolDefinition` 产品组件，**只加不改**）；② **依赖单向**（消掉实测到的两组双向耦合：`core ⇄ nlp_engine`、`services ⇄ tools`）；③ **层序声明**（当前仓内**零处**声明，导致 `LAYERED-ARCHITECTURE §1` 连"违规"都无法判定）；④ 把业务知识（A1 提示词 / 默认裁判）从机制内核提到产品层。**判据来源**：私有规范（实证对象 = Pi-Agent 的 `pi-ai`/`pi-agent-core`/`pi-coding-agent`）+ 2026-10-15 双席位评审（code-reviewer/layering + sre-resilience）。**为什么现在不做**：三态递进需先有「第二个实现」才有内容（现只有一个工具面、一个裁判）——提前定接口正是 §2 反模式；且本子计划的目标是抬 §4.3 门槛，与分层重构正交。**将来启动时的前置**：先落层序声明，再做 ①②③④（顺序见评审报告）。
 
 ## 🚫 Out of Scope
 

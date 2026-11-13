@@ -13,7 +13,7 @@ status: accepted
 audience:
   - architect
   - agent
-source: "用户提案「不换主体语言，能不能加入agent元素？」+ 会话实测（5 处 LLM 调用点物理读取 + Go 集成门禁真跑取红卡）+ 2026-10-14 `/dfs-grill` Track 2 双镜审讯（product-ux + sre-resilience 席位，逐条对表库内 `01-Rules/AGENT-SDK-PATTERNS` 的 Pi 模式与 `02-Distilled/AGENT-GOVERNANCE-SECURITY`）+ 用户拍板（Q1-B / Q2-A / Q3-A / Q4-A）"
+source: "用户提案「不换主体语言，能不能加入agent元素？」+ 会话实测（5 处 LLM 调用点物理读取 + Go 集成门禁真跑取红卡）+ 2026-10-14 `/dfs-grill` Track 2 双镜审讯（product-ux + sre-resilience 席位，逐条对表库内 私有规范 的 Pi 模式与 `02-Distilled/AGENT-GOVERNANCE-SECURITY`）+ 用户拍板（Q1-B / Q2-A / Q3-A / Q4-A）"
 authority: synthetic
 claim_risk: medium
 review_status: unreviewed
@@ -96,7 +96,7 @@ DeLector 的反常之处：它手里有**确定性验证器**（§1.3 末三行�
 | **D** | 用 Go 重写交互层 agent runtime | 👍 单一静态二进制、原生并发。<br>👎 **ADR-0021 §4.1 已否决**（spaCy 无等价物、Android 无落地路径、削减交付物自省）；且违反 ADR-0010 §5 红线。 |
 | **E**（审讯新增） | 单次生成 + **终局验证守卫**（verify-on-stop），不做循环 | 👍 token 成本最低、延迟最可预测；行业证据：`06-Sources/Papers/HARNESS-ENGINEERING-ELEVEN-SYSTEMS.md:74` 记录 Hermes 用退出守卫"以极低 token 代价达成同等效果"。<br>👎 放弃"模型驱动探索"（Q1-B 的目标）⇒ 不满足 §1.2 条件 2。**部分吸收**：其守卫形态并入 Q3-A 的「收尾终审」；独立的 E（完全不做循环）被否。 |
 
-> **2026-10-14 审讯补充**：表内 **B** 被采纳，但其**实现形态**经审讯修正（流转改由模型驱动、工具面收窄为任务级白名单、收尾必须过裁判终审）—— 见 §4.2 与 §8。原提案的 B 形态（**代码驱动**的回炉重试）按库内 `01-Rules/AGENT-SDK-PATTERNS` 模式 1 的分类属于 **Workflow**，流转由代码预定义 ⇒ **不满足 §1.2 条件 2**，因此不足以兑现"agent 语义"这一立论。
+> **2026-10-14 审讯补充**：表内 **B** 被采纳，但其**实现形态**经审讯修正（流转改由模型驱动、工具面收窄为任务级白名单、收尾必须过裁判终审）—— 见 §4.2 与 §8。原提案的 B 形态（**代码驱动**的回炉重试）按库内 私有规范 模式 1 的分类属于 **Workflow**，流转由代码预定义 ⇒ **不满足 §1.2 条件 2**，因此不足以兑现"agent 语义"这一立论。
 
 ---
 
@@ -127,10 +127,10 @@ LLM 生成 ──┤  无工具调用 ⇒ 收尾请求
                         达轮次上界 / 违规数不降 ⇒ 返回最优候选（argmin）+ 显式原因码
 ```
 
-- **裁判**：`analyze_a1_email`（`services/writing.py:607`），已存在、已测试、零 LLM。**收尾必须过它**（verify-on-stop 守卫）—— 模型无权在无裁决的情况下终止（依据：`01-Rules/AGENT-SDK-PATTERNS.md:47` 的"需外部裁判的任务 ⇒ 必须由人类定义的安全阀兜底"）。
+- **裁判**：`analyze_a1_email`（`services/writing.py:607`），已存在、已测试、零 LLM。**收尾必须过它**（verify-on-stop 守卫）—— 模型无权在无裁决的情况下终止（依据：私有规范 的"需外部裁判的任务 ⇒ 必须由人类定义的安全阀兜底"）。
 - **有界**：轮次上界默认 3；**并加循环级 `{max_tokens_total, deadline_s}`**，每轮前置检查，任一超支即 `break` —— 轮次 ≠ token/时间上界，且 `deadline_s` MUST 严格小于外层请求超时（到点次序）。
 - **工具面（任务级最小权限，MUST）**：本任务只暴露**只读且相关**的工具（`writing_check` + 形态/词形类）；`ingest`（拉外网）/ `export`（读库）/ `tts` **一律不暴露** —— 润色输入是用户粘贴的文本，可能夹带注入指令（防上下文投毒）。工具面作为**循环参数**注入，不是全局 `TOOL_REGISTRY`。`_require_localhost` 管"谁来调"、管不了"模型能调什么"，两者 MUST 分开对待。
-- **工具调用落点**：**同进程直接调用**工具函数（HTTP 自环 = 额外故障面 + 序列化开销 + 闸语义错位）；权限 / 审计闸重定位为**工具调用前置钩子**（`01-Rules/AGENT-SDK-PATTERNS.md:90` 模式 2 要点 5）。
+- **工具调用落点**：**同进程直接调用**工具函数（HTTP 自环 = 额外故障面 + 序列化开销 + 闸语义错位）；权限 / 审计闸重定位为**工具调用前置钩子**（私有规范 模式 2 要点 5）。
 
 ### 4.3 ⚠️ 关键保留：工程量在「扩裁判集」，不在「写循环」
 
@@ -189,14 +189,14 @@ LLM 生成 ──┤  无工具调用 ⇒ 收尾请求
 
 - **ADR-0021**（stay-on-python 判据 · §5 判据边界「日后可另开 ADR 评估」）· **ADR-0010**（§5 交互层留 Python 红线 · Go 只管批处理）· **ADR-0001**（§1 零框架 · §2.1 确定性反馈）· **ADR-0018**（§4 D5 Python 不可移除）
 - 代码锚点：`delector/routes/main.py:2363`（`_ai_polish_call`）· `delector/services/writing.py:607`（`analyze_a1_email`）· `delector/routes/tools.py`（工具分发）· `agent/integration_encounter_test.go:107`（红灯 ①）· `agent/integration_test.go:57`（红灯 ②）
-- `08-Projects/DeLector/GO-PYTHON-HYBRID-ARCHITECTURE.md`（Go/Python 边界与进程坑）
-- `08-Projects/native-agent/01-ADR/0001-native-go-workspace-agent-architecture.md`（Go 侧零框架 harness，**0 行代码**，本 ADR 判定其暂不启动）
+- 不随仓库分发（Go/Python 边界与进程坑）
+- 不随仓库分发（Go 侧零框架 harness，**0 行代码**，本 ADR 判定其暂不启动）
 
 ---
 
 ## 8. 本次审讯的修正与定稿（2026-10-14 · `/dfs-grill` Track 2）
 
-> 审讯方式：双镜并行席位（**product-ux** 用户价值层 + **sre-resilience** 韧性层）+ 逐条对表库内 `01-Rules/AGENT-SDK-PATTERNS`（Pi 六模式）与 `06-Sources/Papers/HARNESS-ENGINEERING-ELEVEN-SYSTEMS`。**本节与正文冲突之处，以本节为准。**
+> 审讯方式：双镜并行席位（**product-ux** 用户价值层 + **sre-resilience** 韧性层）+ 逐条对表库内 私有规范（Pi 六模式）与 `06-Sources/Papers/HARNESS-ENGINEERING-ELEVEN-SYSTEMS`。**本节与正文冲突之处，以本节为准。**
 
 ### 8.1 拍板记录（用户四问）
 
@@ -246,7 +246,7 @@ LLM 生成 ──┤  无工具调用 ⇒ 收尾请求
 | --- | --- | --- | --- |
 | **交互层 agent 循环**（本篇） | **Python** | `ai-polish` 的验证驱动循环 | §4.2；裁判 `analyze_a1_email` 在 `delector/services/writing.py:607`（Python） |
 | **批处理层 agent** | **Go（已在跑）** | encounter zone 内容生产 | `agent/go.mod`：`go 1.26` + `github.com/sashabaranov/go-openai` + `spf13/cobra`，含 `cmd/` `internal/` 与 integration 测试 |
-| **Go 原生 agent harness** | Go（**0 行代码**） | 独立工作台 agent（零框架 + 原生并发） | vault `08-Projects/native-agent/01-ADR/0001-native-go-workspace-agent-architecture.md` |
+| **Go 原生 agent harness** | Go（**0 行代码**） | 独立工作台 agent（零框架 + 原生并发） | vault 不随仓库分发 |
 
 ⇒ 「Go 能不能用」的答案是：**已经在用，且用的正是它最适合的那一层**（边界由 ADR-0010 §5 红线划定：交互请求不加 Go 代理跳）。
 
@@ -267,13 +267,13 @@ LLM 生成 ──┤  无工具调用 ⇒ 收尾请求
 | 产物自省（运维） | ✅ 数 DLL / `unzip -l` 读 APK / 探针 | ❌ blob（`strings`/`nm`） | 本仓多数事故靠读产物发现 |
 | LLM 接入 | httpx 裸 HTTP ×5（正在收口） | ✅ `go-openai` 已在用 | 两边都有现成路径 |
 | 框架依赖 | 零框架自研 | 零框架自研 | 一致 |
-| **模式层损失** | — | — | **零**：`01-Rules/AGENT-SDK-PATTERNS` 明说六模式"不绑定特定 API，可应用于任何基于 LLM 的 Agent 系统"（pi 是 TS 写的，我们蒸馏的是模式不是代码） |
+| **模式层损失** | — | — | **零**：私有规范 明说六模式"不绑定特定 API，可应用于任何基于 LLM 的 Agent 系统"（pi 是 TS 写的，我们蒸馏的是模式不是代码） |
 
 ### 9.4 结论与可复用判据
 
 1. **对交互层循环（本篇）**：Python 不是偏好而是必然 —— **裁判（spaCy/规则集）与交付面（Desktop/Android/便携包）都在 Python 侧**；换 Go 会让循环**失去裁判**，而裁判正是 §1.4 立论的前提。
 2. **想用 Go 写 agent，已有正当落点**：批处理层（在跑）+ `native-agent`（设计已审、0 行代码）。启动后者是**产品/精力决策，不是技术阻塞**。
-3. **可复用判据（今日新增，建议将来晋升 `01-Rules`）**：**先问「裁判在哪、交付物在哪」，再问「用哪种语言」** —— 这两问的答案决定语言，而不是反过来。
+3. **可复用判据（今日新增，建议将来晋升私有规范）**：**先问「裁判在哪、交付物在哪」，再问「用哪种语言」** —— 这两问的答案决定语言，而不是反过来。
 4. **要改这条边界**：门槛在 ADR-0021 §5 已写明 —— 三条翻盘条件（① 剔除 spaCy 与 IO 后解释器开销占 p95 >50%；② 热点下沉压不下去；③ Android 双运行时给出可接受体积与首启数据）**缺一不可，且需另开 ADR**。
 
 ---
@@ -313,7 +313,7 @@ LLM 生成 ──┤  无工具调用 ⇒ 收尾请求
 - **DeepSeek 默认输出上限**：仍 UNVERIFIED，但**已不再是风险面** —— payload 现在必带显式 `max_tokens`。
 - **`converged` 不在返回契约**：已闭合（见 10.3）。
 
-### 10.6 两条执行期教训（可复用，建议晋升 `01-Rules`）
+### 10.6 两条执行期教训（可复用，建议晋升私有规范）
 
 1. **SSE 的断连收尸必须放 `try/finally` 的同步 `cancel()`**，不能只在生成器里 `await is_disconnected()` 轮询：uvicorn 0.54 的 HTTP scope `spec_version="2.3"` ⇒ starlette `StreamingResponse.__call__` 会**同时**跑 `listen_for_disconnect`，它**抢先**取消生成器 ⇒ 轮询路径（真实周期是 `sleep(0.02)`）几乎永远输给它，在途请求继续烧配额。变体陷阱：只迭代 `resp.body_iterator` 的测试**绕开了 `__call__`**，因此测不到这个抢先 —— 取消用例必须自造 `receive`/`send` 驱动真响应对象。
 2. **"只读"这类声称必须带前提**：`analyze` 被写成"模型缺失时降级、不下载"，实测 `nlp_engine/processor.py:95-114` 在桌面且模型缺失时会真跑 `spacy.cli.download`（出网 + 起 pip 子进程；Android 与打包产物不会走到）。修法是把它写成**条件式**（"本运行时模型可用"）+ 一条**非真空测试**（模型不可用时该测试红），而不是删掉声称。
@@ -332,7 +332,7 @@ LLM 生成 ──┤  无工具调用 ⇒ 收尾请求
 
 ### 11.1 开工前的双席位评审救了一次（值得晋升规则）
 
-按 `01-Rules/LAYERED-ARCHITECTURE.md`（实证对象 = Pi-Agent 三层）+ `AGENT-SDK-PATTERNS` 评审本计划，最重要的发现是 **dead-green**：计划 7 个任务里**没有任何一个写"谁把 `nlp` 交给裁判"**，而生产路径 `_run_polish` 从不传 `judge=`、Out-of-Scope 又禁改内核 ⇒ **语法裁判在生产恒不生效，而全部任务测试仍会绿**、§4.3 判据表还能被打勾解除。⇒ 把「能力」与「接线缝」合并为**原子变更**，并新增**端点级**回归用例（变异自证：端点不传 `judge=` ⇒ 该用例红）。
+按 私有规范（实证对象 = Pi-Agent 三层）+ `AGENT-SDK-PATTERNS` 评审本计划，最重要的发现是 **dead-green**：计划 7 个任务里**没有任何一个写"谁把 `nlp` 交给裁判"**，而生产路径 `_run_polish` 从不传 `judge=`、Out-of-Scope 又禁改内核 ⇒ **语法裁判在生产恒不生效，而全部任务测试仍会绿**、§4.3 判据表还能被打勾解除。⇒ 把「能力」与「接线缝」合并为**原子变更**，并新增**端点级**回归用例（变异自证：端点不传 `judge=` ⇒ 该用例红）。
 **可复用规则**：**任何"新增判据/能力"的任务，MUST 在同一变更里指名"谁把它送进生产链路"，并有走完整链路的用例** —— 只测单元函数就是 dead-green 的温床。
 
 ### 11.2 本子计划最值钱的产出：三次「误报类」返工 + 硬门加宽

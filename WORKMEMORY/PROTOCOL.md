@@ -2,7 +2,7 @@
 > protocol-version: 1
 
 > 本文件是协议本体，所有能读写文件的 AI agent（Claude Code / Codex / OpenCode / Antigravity / Gemini CLI / CodeBuddy / …）一律遵守。
-> 协议铁律的规范层见 vault：`$WIKI_PATH/01-Rules/CROSS-AGENT-MEMORY.md`。
+> 协议铁律的规范层属于**本机私有知识库**，不随仓库分发；仓库内只保留本文的工程约定。
 
 ---
 
@@ -41,7 +41,7 @@
 | `WORK_START` | 开始一段有明确目标的任务；收尾时必须有配对 `WORK_END`。推荐附「不做范围」一行（本任务明确排除的功能/重构/顺手修改），对抗 scope creep |
 | `WORK_END` | 任务收尾：做了什么、验证方式（测试命令+结果）、产出物路径。推荐做「回写检查」：稳定结论已回写（vault/模块文档/INDEX）？临时产物（日志/真实数据/凭据/截图）未入库？ |
 | `DECISION` | 架构/实现决策，MUST 含 why 一句话 |
-| `PITFALL` | 踩坑：现象 + 根因 + 解法各一句；成熟后走 vault 蒸馏 |
+| `PITFALL` | 踩坑：现象 + 根因 + 解法各一句；成熟后走 知识蒸馏 |
 | `HANDOFF` | 交接包已写：指向 `handoff_<topic>.md` |
 | `HANDOFF_RECEIVED` | 接收方确认收到并响应 |
 | `NOTE` | 其他一切（并行声明、补充、勘误） |
@@ -119,8 +119,8 @@ status: open
 
 ## 6. 与 vault 的蒸馏联动
 
-- WORKMEMORY 只存**状态与轨迹**；vault（`$WIKI_PATH`）只存**规范与结论**。
-- 会话收尾（`/vault-save` 或 agent 主动判定）时：work.log 中成熟的 PITFALL/DECISION → 按 vault 摄取流程沉淀（`save_inbox_draft` 或直写 99-Inbox）→ 在 INDEX.md 蒸馏登记节标注 `vault://<vault 路径>`（用 `vault://` 前缀说明性文字，不写 Obsidian wikilink，避免跨库断链）。
+- WORKMEMORY 只存**状态与轨迹**；vault（（本机知识库，不随仓库分发）
+- 会话收尾（`/vault-save` 或 agent 主动判定）时：work.log 中成熟的 PITFALL/DECISION → 按 vault 摄取流程沉淀（`save_inbox_draft` 或直写 私有笔记库）→ 在 INDEX.md 蒸馏登记节标注 `私有笔记库`（用 `私有笔记库` 前缀说明性文字，不写 私有笔记库 wikilink，避免跨库断链）。
 - 反向：vault 规范更新若影响本项目工作方式，当前 agent 记一条 `NOTE` 指向 vault 路径。
 
 ## 7. 多机 / 云同步附录（默认不启用）

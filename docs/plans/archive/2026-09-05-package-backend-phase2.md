@@ -8,7 +8,7 @@
 > - **绝对 import**：包内统一 `from delector.xxx import ...`，不用相对 import（PyInstaller / Chaquopy / tools / tests 四处行为一致）。
 > - **数据目录语义必须等价**：`DATA_DIR` 默认值迁移前后都必须是「仓库根」，不得变成 `delector/`（否则 `delector.db` / `progress.db` 搬家，用户数据表现为全部消失）。
 > - 根目录保留：`start.py`（入口）、`package_windows.py`（打包工具）、`conftest.py`（pytest 需要，注释里「Phase 2 后可删」是错的，本次一并更正）。
-> - 本环境未挂载 Coding Vault（无 `omni_search` / `get_code_template`），且**无写码子代理**：`Subagent Prompt Scaffold` 仅作模板，实际主线程直写 + TDD + 每 Task 原子提交。
+> - 本环境未挂载 Coding 私有笔记库（无 `omni_search` / `get_code_template`），且**无写码子代理**：`Subagent Prompt Scaffold` 仅作模板，实际主线程直写 + TDD + 每 Task 原子提交。
 > - 全量 `pytest` 会触发 safe-delete 守卫（pytest 清自己的临时目录，累计 >750 文件），统计行拿不到时**用进度条点数推算**（每行 72 个点）。
 > - APK 真机验证挂下次发版；本地只做全量 pytest + 可选 PyInstaller 烟测。
 

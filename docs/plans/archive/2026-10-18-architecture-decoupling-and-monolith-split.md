@@ -2,7 +2,7 @@
 
 > **Goal**: 消除 DeLector 核心子模块的循环与跨层反向依赖，引入自动化分层机械闸，并将后端最大巨石单体 `delector/routes/main.py`（3,201 行）按业务领域完全切分收敛。
 > **Tech Stack**: Python 3.11.8 (FastAPI, spaCy, pytest, mypy strict, ruff) / Go 1.24+
-> **Spec Reference**: `docs/agents/architecture.md` (Layer 0~5 层序声明) · `01-Rules/LAYERED-ARCHITECTURE.md` · `ADR-0008` (分域路由架构)
+> **Spec Reference**: `docs/agents/architecture.md` (Layer 0~5 层序声明) · 私有规范 · `ADR-0008` (分域路由架构)
 > **Global Constraints**: 严禁引入任何新三方库；全量测试用例数严格守恒（或仅允许新增反向依赖门禁单测）；文件编码严格 UTF-8 CRLF（0 lone LF）；保持 FastAPI 路由注册优先级与公开 API 契约 100% 字节兼容。
 > **Branch**: `refactor/decoupling-and-monolith-split` — opened from `master` before Task 1, landed via PR.
 

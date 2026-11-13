@@ -4,8 +4,8 @@
 - **状态**：设计已定，待 `/vault-plan` → `/vault-exec`
 - **类别**：Architectural（两项工程债收口；不改任何业务行为）
 - **前置**：
-  - `08-Projects/DeLector/POST-MORTEM-V5.4.0-FASTAPI-DEPENDENCY-DRIFT.md`
-  - Vault `01-Rules/AUTOMATION-VERIFICATION-THREE-PROOFS.md`（门禁「三证」：活性证 / 判别力证 / 成本证）
+  - 不随仓库分发
+  - 私有笔记库 私有规范（门禁「三证」：活性证 / 判别力证 / 成本证）
 - **来源**：`/vault-spark` 2026-09-24 排查 dependabot PR #48 时发现（两处均为既有缺陷，非本轮引入）
 
 ---
@@ -17,7 +17,7 @@
 | # | 假门 | 取证 | 危害 |
 |---|---|---|---|
 | **A** | 路由守卫测试**对上游语义漂移零免疫** | `tests/test_server.py:4452` 建 `{r.endpoint for r in probe.routes}`，`:4465` 用 `route.endpoint not in registered` 判缺 —— **端点函数对象身份**比对。starlette ≥1.6（随 fastapi ≥0.141 漂移进来）后 `include_router` 生成的路由**不再保持原函数对象引用** → **全部路由**误判 missing（CI run `35883141059` 实测复现） | ① **fastapi 升级被永久禁用**（`requirements.txt` pin `==0.136.3` + 本次刚加的 `dependabot.yml ignore`）；② 真漏挂 `include_router` 时**也**报"全部 missing" → 报警噪音淹没信号、无法定位真问题 |
-| **B** | `mypy --strict` **静默漏检 6 个文件** | `pyproject.toml` 的 `exclude` 正则含**裸子串 `build`** → `tools/build_*.py` 等 6 个文件在**目录模式**下被跳过：`mypy --strict tools` 报 `no issues found in 5 source files`，而 `tools/` 实有 **11** 个 `.py`。用**显式文件清单**绕过 exclude 后实测 **47 errors in 4 files**（裸 `set`/`dict`/`list` 缺参数 + 缺函数签名） | 该门禁对 6 个产包/生成脚本**零覆盖**——本地全绿、错误永不被发现，与 Vault `AUTOMATION-VERIFICATION-THREE-PROOFS` 记载的"假门"同型 |
+| **B** | `mypy --strict` **静默漏检 6 个文件** | `pyproject.toml` 的 `exclude` 正则含**裸子串 `build`** → `tools/build_*.py` 等 6 个文件在**目录模式**下被跳过：`mypy --strict tools` 报 `no issues found in 5 source files`，而 `tools/` 实有 **11** 个 `.py`。用**显式文件清单**绕过 exclude 后实测 **47 errors in 4 files**（裸 `set`/`dict`/`list` 缺参数 + 缺函数签名） | 该门禁对 6 个产包/生成脚本**零覆盖**——本地全绿、错误永不被发现，与 私有笔记库 `AUTOMATION-VERIFICATION-THREE-PROOFS` 记载的"假门"同型 |
 
 **用户价值**：
 - **A 的产出**：解除 fastapi/starlette 升级禁区（并让守卫在真漏挂时**精确定位到具体 path**，而不是"全量 missing"）。
@@ -253,7 +253,7 @@ Android 侧是否需要同步（以及那条 `<0.100.0` 是否仍必要）需单
 ## 6. 关联索引
 
 - `docs/plans/archive/2026-09-24-toolchain-guard-truth.md`（实施计划）
-- `08-Projects/DeLector/POST-MORTEM-V5.4.0-FASTAPI-DEPENDENCY-DRIFT.md`（A 的历史根因）
-- `01-Rules/AUTOMATION-VERIFICATION-THREE-PROOFS.md`（门禁三证；本计划即其执行）
+- 不随仓库分发（A 的历史根因）
+- 私有规范（门禁三证；本计划即其执行）
 - `docs/plans/archive/2026-09-13-mypy-cleanup.md` / `docs/specs/2026-09-18-mypy-strict-annotation-sweep-design.md`（B 的历史脉络）
 - `.github/dependabot.yml`（本次刚加的 `ignore`，A 完成后视条件撤销）

@@ -4,9 +4,9 @@
 - **日期**：2026-11-09
 - **决策者**：席皓宇 (Haoyu Xi)
 - **关联 ADR**：
-  - [[0018-performance-measurement-before-runtime-swap]]（先测量，再换运行时；本 ADR 沿用其「先量后改」口径）
-  - [[0027-nlp-model-sm-only]]（模型档位固定 `de_core_news_sm`，本 ADR 不改档位）
-  - [[0028-android-main-path-spacy-lazy-load]]（惰性加载先例；§5 引用其**反面**数字）
+  - 0018-performance-measurement-before-runtime-swap（先测量，再换运行时；本 ADR 沿用其「先量后改」口径）
+  - 0027-nlp-model-sm-only（模型档位固定 `de_core_news_sm`，本 ADR 不改档位）
+  - 0028-android-main-path-spacy-lazy-load（惰性加载先例；§5 引用其**反面**数字）
 - **关联调研**：
   - `docs/research/2026-11-09-first-screen-startup-industry-research.md`（1.2s import 的分段归因）
   - `docs/research/2026-11-09-android-webview-prestartup-negative-result.md`（同环境基线 4016ms；并行化≠削减的实测）
@@ -170,7 +170,7 @@ ADR-0028 §4.2 记录：把 spaCy 惰性化之后，**冷启到首次分析完�
 
 - 优先评估 **方案 B**：它只重排启动顺序，不改变引擎可用性语义，验收边界最清晰。
   > 2026-11-09 已实测：方案 B 判负（TTFD 改善 <100ms，seed 单项仅 72ms/110ms），
-  > 数字见 [[0032-python-off-first-screen-path]] §3.2；分支 `perf/adr-0031-plan-b` 不合并。
+  > 数字见 0032-python-off-first-screen-path §3.2；分支 `perf/adr-0031-plan-b` 不合并。
 - **方案 A / C** 无论何时实施，都必须先交付 §3 的状态机与红线 1 回归测试，再谈收益。
 - 实施必须走独立 PR，按 §2 的双指标验收；未达标即回滚，不留「部分受益」的中间态。
 

@@ -12,7 +12,7 @@
 
 既有 `test_audit_hardening.py::test_sw_pwa_update_is_gentle_not_force_reload` 只断言
 「`main.js` 里出现 `location.reload()`」这类**字符串存在**——只能证明"绑了"，
-证明不了"点得到/关得掉"（Vault 红线 11：字符串存在断言是死测）。
+证明不了"点得到/关得掉"（私有笔记库 红线 11：字符串存在断言是死测）。
 
 本文件把这两条可用性契约变成可执行断言：
 - 更新提示必须是**可点**的（其承载元素不得落在 pointer-events:none 的规则下）；

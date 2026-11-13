@@ -266,7 +266,7 @@
 - **慎抄**：极简到隐藏控件，新用户找不到字号/主题入口；我们的读者需要「字号、行距、译文」常在可见处，不能学到「全部收进菜单」。
 - **移动端**：可用，但 Focus Mode 在小屏上收益有限，且隐藏式控件在触摸端更难发现。
 
-#### Obsidian —— 「CSS 变量即主题 API」
+#### 私有笔记库 —— 「CSS 变量即主题 API」
 
 - **解决的问题**：让用户与主题作者在不改源码的情况下重绘整个应用。
 - **值得抄（官方数字）** `[官方]`：编辑区 `--font-text-size: 16px`；正文 `--line-height-normal: 1.5`，紧凑处 `1.3`；UI 字号固定为 `12 / 13 / 15 / 20px`。这套「正文 16px + 1.5 行高 + UI 12–15px」的分离，正是我们 `--reader-fs: 1.125rem`（18px）与全局 16px 可以对齐的参照。
@@ -333,14 +333,14 @@
 
 | 结论 | 来源 | 落成什么 |
 | --- | --- | --- |
-| 正文 ≥16px、行高 1.5–1.7；辅助字 ≥12px，不用 10px | Obsidian、Apple、Fluent、Carbon | `--fs-body` 16px、`--lh-body` 1.6；辅助字号下限 12px |
+| 正文 ≥16px、行高 1.5–1.7；辅助字 ≥12px，不用 10px | 私有笔记库、Apple、Fluent、Carbon | `--fs-body` 16px、`--lh-body` 1.6；辅助字号下限 12px |
 | 行宽 ≤80 字符（德语 18px ≈ 680–720px） | Primer、通行排版经验 | 阅读器限宽从 760px 收到约 700px（P2 验证） |
 | 展示字体与正文字体分工，展示字不小于 30px | Duolingo | `--serif-display` 只用于标题；正文用 `--serif-body` |
 | 间距用 4px/8px 刻度 | Carbon、Fluent | 新增 `--space-1..8`（4/8/12/16/24/32/40/48） |
 | 语义不只靠颜色 | Polaris、Apple | CEFR 五色必须加下沿/形状第二编码 |
 | 暗色不用纯黑，语义色映射，正文 4.5:1、小字争取 7:1 | M3、Apple | 若做暗色，先建 `--surface-*` 语义层 |
 | 动效 150–300ms 为主，退场快于进场 | M3、M1 | 现有 100/180/360ms 已在区间内，不新增 500ms 常驻 |
-| 主题靠 CSS 变量，但变量要收敛 | Obsidian | 只开放语义 token，不开放组件内部变量 |
+| 主题靠 CSS 变量，但变量要收敛 | 私有笔记库 | 只开放语义 token，不开放组件内部变量 |
 
 ### 8.5 收束：回到我们自己的三件事
 
@@ -491,7 +491,7 @@
 - [Primer – Typography](https://primer.style/foundations/typography)
 - [Polaris – Typography](https://polaris-react.shopify.com/design/typography)；[Typography tokens](https://polaris-react.shopify.com/design/typography/typography-tokens)
 - [Duolingo Brand Guidelines – Typography](https://design.duolingo.com/identity/typography)
-- [Obsidian – Typography CSS variables](https://docs.obsidian.md/Reference/CSS+variables/Foundations/Typography)
+- [私有笔记库 – Typography CSS variables](https://docs.私有笔记库.md/Reference/CSS+variables/Foundations/Typography)
 - [Notion Help – Customize and style your content](https://www.notion.com/en-gb/help/customize-and-style-your-content)
 - [Ulysses – Customize the Editor](https://help.ulysses.app/dive-into-editing/editor-customization-guide)
 - [LingQ Settings Guide（第三方）](https://lingtuitive.com/blog/ultimate-lingq-settings)

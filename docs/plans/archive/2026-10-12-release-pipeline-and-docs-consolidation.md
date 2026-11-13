@@ -2,7 +2,7 @@
 
 > **Goal**: 把 `/dfs-team` 三席评估（2026-10-12）出的 7 条发现收敛为可执行任务：补齐发布链路的超时/测试护栏，收口文档里的重复副本与口径错，并让"真实用户反馈"这个开闸门槛从不可启动变为可启动。
 > **Tech Stack**: GitHub Actions YAML / Python 3.11（`package_windows.py`）/ pytest 守卫（`tests/test_ci_hardening.py`）/ Markdown 文档治理。
-> **Spec Reference**: `/dfs-team` 评估报告（seats: code-reviewer / sre-resilience / product-ux + skeptic 复核）；`WORKMEMORY/work.log:596` 的 2026-10-12 DECISION（宣传延后 + 四条开闸门槛）；Vault `08-Projects/DeLector/POST-MORTEM-V5.4.0-GITHUB-ACTIONS-TRIPLE-TRAP.md`（dispatch/移 tag 的历史实证）。
+> **Spec Reference**: `/dfs-team` 评估报告（seats: code-reviewer / sre-resilience / product-ux + skeptic 复核）；`WORKMEMORY/work.log:596` 的 2026-10-12 DECISION（宣传延后 + 四条开闸门槛）；私有笔记库 不随仓库分发（dispatch/移 tag 的历史实证）。
 > **Global Constraints**:
 > - **零新依赖**：只用现有工具链（gh CLI / pytest / yaml）。
 > - **门禁不许削弱**：`ruff check .` / `mypy --strict delector tools` / `mypy --follow-imports=skip tests` / `mypy --platform win32 --strict --follow-imports=skip desktop.py package_windows.py conftest.py start.py` / `pytest -q` 全绿；`test_ci_hardening.py` 的既有断言**只扩不缩**（超时上界、打包面清单、闸顺序）。
@@ -16,7 +16,7 @@
 ## 🏛️ Decisions So Far
 
 - **孤儿 tag `v5.1.1` 的处置 = 删 tag + 记账，不补发**：该 tag 从未产生 Release（`gh release view v5.1.1` → not found），版本已过期一个月；**补发一个过期版本的 Release 会让用户看到陈旧产物**。删 tag 后把事故模式记入 work.log。真正要修的是"再生产它"的结构（Task 1/2），不是补发这一个。（若你反对，改为补发：见人工前置动作 B。）
-- **补发路径存在文档冲突，按"两路候选 + 清单判据"处理**：Vault v5.4.0 复盘实证「dispatch 到**分支** ⇒ publish 被静默跳过」，其修法是**移 tag**；怀疑者据 `gh workflow run --help`（`--ref` 接受 branch **or tag**）推断 dispatch 到 **tag** 可满足 `if: startsWith(github.ref,'refs/tags/v')`。后者在本仓**从未实证** ⇒ 按复盘铁律「**是否已发布的唯一判据是 release 清单/资产列表，永远不是 run 状态**」，执行后必须 `gh release list && gh release view <tag> --json assets` 复核；不成立则回落移 tag 路径（`git tag -f` + force-push，需用户批准）。
+- **补发路径存在文档冲突，按"两路候选 + 清单判据"处理**：私有笔记库 v5.4.0 复盘实证「dispatch 到**分支** ⇒ publish 被静默跳过」，其修法是**移 tag**；怀疑者据 `gh workflow run --help`（`--ref` 接受 branch **or tag**）推断 dispatch 到 **tag** 可满足 `if: startsWith(github.ref,'refs/tags/v')`。后者在本仓**从未实证** ⇒ 按复盘铁律「**是否已发布的唯一判据是 release 清单/资产列表，永远不是 run 状态**」，执行后必须 `gh release list && gh release view <tag> --json assets` 复核；不成立则回落移 tag 路径（`git tag -f` + force-push，需用户批准）。
 - **Smoke 闸选"加 pytest"而非"删安装"**：`ci.yml:240` 已装 pytest 却从不调用（死安装）⇒ 在 Build **之前**插入 `pytest -q`（测试红就别再花 10 分钟构建）；`timeout-minutes: 30` 现值容得下（构建约 10min + 全量测试约 7.5min + 验包）。覆盖面诚实边界见 Fog of War。
 - **Tier 判定**：Task 1/2 改 CI 定义与闸守卫 ⇒ **Tier 2**（按 dfs-exec 硬升级触发器："core test-gate or CI definition files ⇒ MUST escalate"）；Task 3–6 纯文档/元数据 ⇒ **Tier 1-Light**，合并为一个 Batch 原子提交。
 

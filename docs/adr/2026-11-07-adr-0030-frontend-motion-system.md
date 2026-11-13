@@ -12,7 +12,7 @@
 
 ADR-0029 完成字形清零后，界面需要新的注意力锚点。调研（`docs/research/2026-11-07-motion-vitality-research.md`）给出三条约束：
 
-1. 阅读面接近零动效也能成立（Obsidian Help 正文无位移，NN/g 文章页仅 4 个元素、150ms）。
+1. 阅读面接近零动效也能成立（私有笔记库 Help 正文无位移，NN/g 文章页仅 4 个元素、150ms）。
 2. 功能面 hover 预算应花在颜色/阴影上，不花在位移上（GitHub 抽样 80 条 hover，仅 2 条带 `transform`）。
 3. 实测 `static/` 有 22 个 `@keyframes`、**13 处 `infinite`**（此前估计 4 处），其中 3 个直接作用在阅读正文上。
 

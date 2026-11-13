@@ -4,13 +4,13 @@
 - **日期**：2026-11-10
 - **决策者**：席皓宇 (Haoyu Xi)
 - **关联 ADR**：
-  - [[0032-python-off-first-screen-path]]（缓存优先 + store + 就绪重试；本 ADR 是它的叠加与阶段三的提前兑现）
-  - [[0031-python-import-migration]]（方案 A / B 判负；本 ADR 不重走启动期搬移）
-  - [[0018-performance-measurement-before-runtime-swap]]（先测量、再换运行时）
-  - [[0021-stay-on-python-language-choice-criteria]]（语言选择以运行时/交付为判据；本 ADR 不换语言）
-  - [[0020-windows-desktop-shell-pywebview]]（桌面壳边界：pywebview + Python 进程；本 ADR 不换壳）
-  - [[0019-windows-desktop-pwa-first-and-data-dir-externalization]]（桌面交付边界；不新增安装包）
-  - [[0008-go-agent-runtime-architecture]]（Go 侧现状的唯一依据；本 ADR 不扩大 Go 职责）
+  - 0032-python-off-first-screen-path（缓存优先 + store + 就绪重试；本 ADR 是它的叠加与阶段三的提前兑现）
+  - 0031-python-import-migration（方案 A / B 判负；本 ADR 不重走启动期搬移）
+  - 0018-performance-measurement-before-runtime-swap（先测量、再换运行时）
+  - 0021-stay-on-python-language-choice-criteria（语言选择以运行时/交付为判据；本 ADR 不换语言）
+  - 0020-windows-desktop-shell-pywebview（桌面壳边界：pywebview + Python 进程；本 ADR 不换壳）
+  - 0019-windows-desktop-pwa-first-and-data-dir-externalization（桌面交付边界；不新增安装包）
+  - 0008-go-agent-runtime-architecture（Go 侧现状的唯一依据；本 ADR 不扩大 Go 职责）
 - **关联计划**：
   - `docs/plans/2026-11-09-first-screen-store-and-cache.md`（阶段一/二，已交付）
   - `docs/plans/2026-11-10-android-local-shell.md`（安卓壳页，已交付；本 ADR 的基线数字来源）

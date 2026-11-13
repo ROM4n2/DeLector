@@ -125,7 +125,7 @@
 ## 关联索引
 
 - `docs/specs/2026-09-24-toolchain-guard-truth-design.md`
-- `08-Projects/DeLector/POST-MORTEM-V5.4.0-FASTAPI-DEPENDENCY-DRIFT.md`
-- `01-Rules/AUTOMATION-VERIFICATION-THREE-PROOFS.md`
+- 不随仓库分发
+- 私有规范
 - `docs/specs/2026-09-18-mypy-strict-annotation-sweep-design.md`（B 的前序工程）
 - `.github/dependabot.yml`（A 条件分支的撤销面）

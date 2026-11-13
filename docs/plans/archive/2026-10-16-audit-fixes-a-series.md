@@ -131,6 +131,6 @@
 
 ## 🚫 Out of Scope
 
-- **A7**（vault 两张 `99-Inbox` 草稿过 consolidate）—— 属 `/dfs-inbox-consolidate` 工作流，不在本计划。
+- **A7**（vault 两张 私有笔记库 草稿过 consolidate）—— 属 `/dfs-inbox-consolidate` 工作流，不在本计划。
 - **B/C 档全部**（见登记表）：分支纪律机械闸、`.gitattributes`、design-system 定夺、`database.py` 切分、harness 工程前置、回灌子计划、Android 真机、Pi 重构、测试文件切分、`workbench.html` 拆分。
 - 不顺手改 `tools/bench_judge_fp.py`（Task 6 冻结的标定记录）。

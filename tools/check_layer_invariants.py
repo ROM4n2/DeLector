@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """分层依赖与循环引用自动化机械闸 (Layer Invariants Gate)。
 
-依据 docs/agents/architecture.md Layer 0~5 层序声明与 01-Rules/LAYERED-ARCHITECTURE.md：
+依据 docs/agents/architecture.md Layer 0~5 层序声明与私有规范 LAYERED-ARCHITECTURE：
   Layer 5 [运行装配层]: delector.routes, delector.server, static
   Layer 4 [工具接口层]: delector.tools
   Layer 3 [领域服务层]: delector.services

@@ -1,7 +1,7 @@
 # Stage B（自动化 WebRTC + 持久配对凭证）执行 Ledger
 
 > 计划：`docs/plans/archive/2026-09-03-lan-silent-sync-stage-b.md`
-> ADR：`d:/Obsidian/Coding/08-Projects/DeLector/01-ADR/0004-lan-sync-webrtc-stage-b.md`
+> ADR：`（私有笔记库，不随仓库分发））`
 > 基线提交：`3df9d84`
 
 ## 执行模式降级说明（如实记录）

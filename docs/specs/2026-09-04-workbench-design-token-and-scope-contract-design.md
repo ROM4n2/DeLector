@@ -1,7 +1,7 @@
 # 背词工作台视觉 Token 归一与考纲词表契约设计
 
 > **状态**：设计稿 v1（/vault-spark 产出，经 Dual-Lens 权衡，用户确认优先级：先路线 B，再路线 C，路线 A 延后）。
-> **关联**：`d:/Obsidian/Coding/08-Projects/DeLector/01-ADR/0005-navigation-exam-domain-and-level-scalability.md`（§4.5 背词工作台形态与词表契约）、`docs/specs/2026-09-03-lan-silent-sync-design.md`、`static/german/workbench.html`、`static/style.css`。
+> **关联**：`（私有笔记库，不随仓库分发））`（§4.5 背词工作台形态与词表契约）、`docs/specs/2026-09-03-lan-silent-sync-design.md`、`static/german/workbench.html`、`static/style.css`。
 > **范围**：背词工作台视觉重构（Academic Modern Editorial 暖纸墨水风）、共享 CSS Token 架构抽取、CEFR 考纲词库契约与范围选择器扩展。
 > **不在此范围**：取消 iframe 将工作台并入主站 SPA（维持 iframe 隔离防样式污染）、重写 FSRS-6 数学算法、引入非考纲生僻词。
 

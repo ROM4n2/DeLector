@@ -215,7 +215,7 @@
 ### Task 6: 结论回填 ADR + 门禁收口 + 分支交付 [Mode: HITL] [Role: Release Steward]
 
 **Files:**
-- Modify: `d:/Obsidian/Coding/08-Projects/DeLector/01-ADR/0018-performance-measurement-before-runtime-swap.md`（§1.3 表换成本次可复跑数字；§4 标记 D1 已执行；写入 D2 的路线结论）
+- Modify: `（私有笔记库，不随仓库分发））`（§1.3 表换成本次可复跑数字；§4 标记 D1 已执行；写入 D2 的路线结论）
 - Modify: `d:/Code/DeLector/docs/adr/2026-10-09-adr-0018-performance-measurement-before-runtime-swap.md`（仓内副本同步，从 vault 机械同步）
 - Modify: `d:/Code/DeLector/WORKMEMORY/work.log`、`WORKMEMORY/PROJECT_OVERVIEW.md`
 

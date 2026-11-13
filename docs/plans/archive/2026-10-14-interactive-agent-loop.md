@@ -1,8 +1,8 @@
 # DeLector 交互层「验证驱动 agent 循环」实施计划
 
-> **Goal**: 按 ADR-0023（vault `08-Projects/DeLector/01-ADR/0023-…md`，`accepted`，**§8 为定稿口径**）把 `ai-polish` 从 one-shot「取神谕」改为**模型驱动流转 + 确定性裁判终审**的有界循环；并**先偿还该 ADR 自认的两处前置欠账**（Go 门禁两红灯 → LLM client 收口）。
+> **Goal**: 按 ADR-0023（vault 不随仓库分发，`accepted`，**§8 为定稿口径**）把 `ai-polish` 从 one-shot「取神谕」改为**模型驱动流转 + 确定性裁判终审**的有界循环；并**先偿还该 ADR 自认的两处前置欠账**（Go 门禁两红灯 → LLM client 收口）。
 > **Tech Stack**: Python 3.11 / FastAPI / httpx / Go（仅触及批处理侧测试）/ pytest
-> **Spec Reference**: `08-Projects/DeLector/01-ADR/0023-interactive-layer-verification-driven-agent-loop.md`（§4.2 形态 · §4.4 前置 · §8 定稿记录）
+> **Spec Reference**: 不随仓库分发（§4.2 形态 · §4.4 前置 · §8 定稿记录）
 > **Global Constraints**:
 > - 零新依赖、**不引入任何 agent 框架**（ADR-0001 §1）；交互层留 Python（ADR-0010 §5 红线）
 > - **测试一律 stub，MUST NOT 依赖真实 `DEEPSEEK_API_KEY`**（否则门禁恒 skip —— ADR §5 合规护栏）
@@ -221,7 +221,7 @@
 **实际 Files 与计划的偏差**：`static/writer.html` **不存在**（全仓无此文件）⇒ 取消按钮 DOM 加在 `static/index.html`（`.writer-actions-top` 内、`#writer-ai-btn` 之后），`static/js/main.js` 同步导出 `cancelAiPolish`。测试实际新增：`tests/test_server.py` +11、`tests/test_goethe_a1_writing.py` +2、`tests/test_ai_polish_loop.py` +1。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
-> "给 `ai-polish` 端点加 `converged` / `unconverged_reason` 两字段（**只增不改**，`main.py:2420-2427` 既有结构保持），并在 `static/js/writer.js` 实现：逐轮进度文案（第 N/3 轮）、取消（`AbortController` 或等价机制）、`converged=false` 时 toast 原因。契约同步 MUST 跑 `python tools/check_frontend_api_contract.py`（前端契约闸，仓内既有）。注意 `01-Rules/ENDPOINT-CONTRACT-FRONTEND-SYNC`：契约改动与前端改动 MUST 同批。RUN：`python -m pytest tests/test_goethe_a1_writing.py tests/test_writer_mobile.py -q` + 契约闸 + `ruff`。"
+> "给 `ai-polish` 端点加 `converged` / `unconverged_reason` 两字段（**只增不改**，`main.py:2420-2427` 既有结构保持），并在 `static/js/writer.js` 实现：逐轮进度文案（第 N/3 轮）、取消（`AbortController` 或等价机制）、`converged=false` 时 toast 原因。契约同步 MUST 跑 `python tools/check_frontend_api_contract.py`（前端契约闸，仓内既有）。注意 私有规范：契约改动与前端改动 MUST 同批。RUN：`python -m pytest tests/test_goethe_a1_writing.py tests/test_writer_mobile.py -q` + 契约闸 + `ruff`。"
 
 **Step Breakdown:**
 - [x] Step 1: 写契约失败测试（RED：`converged` 不在响应）

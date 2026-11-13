@@ -4,8 +4,8 @@
 - **日期**：2026-11-04
 - **决策者**：席皓宇 (Haoyu Xi), Hermes Agent
 - **关联 ADR**：
-  - [[0008-go-agent-runtime-architecture]]（历史记录：NLP 引擎选型时写的是 md，本 ADR 不改写历史）
-  - [[0018-performance-measurement-before-runtime-swap]]（性能实测基线，含模型加载耗时口径）
+  - 0008-go-agent-runtime-architecture（历史记录：NLP 引擎选型时写的是 md，本 ADR 不改写历史）
+  - 0018-performance-measurement-before-runtime-swap（性能实测基线，含模型加载耗时口径）
 
 ---
 

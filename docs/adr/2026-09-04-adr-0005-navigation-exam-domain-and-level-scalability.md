@@ -64,7 +64,7 @@ DeLector 主前端 `static/index.html` 是单文件 SPA，全部 view 由同文�
 ### Q4 背词工作台形态
 - **C. 混合**（采纳）：保持 iframe 工程边界；主站抽共享设计 token 层供 workbench 引用以统一视觉；词表/进度数据走既有权威同步通道（wb-sync/applyMerge、ADR-0001 核心词联动），词表来源契约 = `vocab_cards.cefr_level` 过滤——工作台成为通用 A1/A2/B1 词库视图。
 - A. iframe + 主题适配壳：仅父壳统一 header/容器排版，工作台内样式对齐不足、数据隔阂仍在。
-- B. 并入主站 SPA：视觉/数据彻底同源，但背上「上游词库工具更新须手动 merge」的债（Vault `_template/ADR-0004-workbench-iframe-embedding` 草稿已论证过该选项的样式污染/维护成本）。
+- B. 并入主站 SPA：视觉/数据彻底同源，但背上「上游词库工具更新须手动 merge」的债（私有笔记库 模板 草稿已论证过该选项的样式污染/维护成本）。
 
 ## 4. Decision Outcome
 
@@ -106,4 +106,4 @@ DeLector 主前端 `static/index.html` 是单文件 SPA，全部 view 由同文�
 
 **关联**
 - 前置：ADR-0001（工作台核心词模式）、ADR-0002（工作台 scope 控制）；同步：ADR-0004（LAN 同步 Stage B，与工作台数据通道复用 applyMerge）。
-- Vault `_template/ADR-0004-workbench-iframe-embedding.md` 为「iframe 隔离」背景草稿（非 DeLector 已归档决策），本 ADR Q4 以其为参照而非重复立项。
+- 私有笔记库 模板 为「iframe 隔离」背景草稿（非 DeLector 已归档决策），本 ADR Q4 以其为参照而非重复立项。

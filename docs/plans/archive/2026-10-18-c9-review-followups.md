@@ -5,7 +5,7 @@
 > **Spec Reference**:
 > - `docs/reviews/2026-10-18-c8-delivery.md`（C8 交付报告，含 Y1~Y6 的完整上下文）
 > - `docs/reviews/2026-10-16-open-items-backlog.md`（C9 行）
-> - `01-Rules/LAYERED-ARCHITECTURE.md` 无关；本计划的闸设计遵循技能 `mechanical-gate-authoring`（判据按机制形状、首日不许红、抑制必带理由、变异自证、禁止批量消音）
+> - 私有规范 无关；本计划的闸设计遵循技能 `mechanical-gate-authoring`（判据按机制形状、首日不许红、抑制必带理由、变异自证、禁止批量消音）
 > **Global Constraints**:
 > - **零新依赖**；闸为纯 stdlib 脚本 + CI job。
 > - **不得放宽既有闸**：`tools/check_silent_degradation.py` 的 C1 收窄是已裁决的设计，**MUST NOT** 因 Y4 而重新放宽（这正是该闸头注释明确禁止的动作）。
@@ -65,7 +65,7 @@
 **Files:**
 - Modify: `delector/core/db/content.py`（Y1：豁免理由只覆盖「单文件瞬时锁」，未覆盖「系统性裁剪失败 ⇒ 缓存无界增长」——**理由改准**，或按需补计数）
 - Modify: `tools/build_dict.py`（Y2：豁免理由与该函数自身 docstring 相反；且吞掉的异常面比理由所述更宽）
-- Modify: `tools/vault-proactive-scan.py`（Y3：`if not found_keys` 的 PASS 在**跳过文件未计数**时仍成立）
+- Modify: （本机脚本）（Y3：`if not found_keys` 的 PASS 在**跳过文件未计数**时仍成立）
 - Modify: `delector/services/tts.py`（Y5：`SSLCertVerificationError` 被当作可重试；`OSError(ENETUNREACH/EHOSTUNREACH)` 未被重试——与 docstring 的「连接/传输层」表述不符）
 - Modify: `delector/services/tts.py`（Y6：错误信封不一致——裸 `_HandshakeError` vs `RuntimeError` 包装；若维持现状，MUST 在 docstring 写明是有意的）
 

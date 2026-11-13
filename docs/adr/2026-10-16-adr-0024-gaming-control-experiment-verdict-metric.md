@@ -1,4 +1,4 @@
-> 本文件是 vault 正式件 `08-Projects/DeLector/01-ADR/0024-gaming-control-experiment-verdict-metric.md` 的仓内镜像（正本在 Vault，见 `docs/README.md`）。
+> 本文件是 vault 正式件 不随仓库分发 的仓内镜像（正本在 私有笔记库，见 `docs/README.md`）。
 
 # ADR-0024：第 8 条对照实验的判决量与结论边界
 

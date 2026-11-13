@@ -13,7 +13,7 @@
 #   - build-release.yml：仅 tag v* 触发 → 三平台打包 + Android APK + 发布（打包面）；
 #   - build-agent.yml  ：仅 tag v* 触发 → agent 三平台 artifact（分发面）。
 #
-# cache 写法教训（99-Inbox：GitHub Actions tag 发版三重陷阱）：
+# cache 写法教训（GitHub Actions tag 发版三重陷阱）：
 #   setup-go@v5 的 cache 参数是 boolean，MUST 写 `cache: true` 并配
 #   cache-dependency-path: agent/go.mod；误写成字符串型 "go" 会被 runner
 #   直接拒绝（Input does not meet YAML 1.2 "Core Schema" specification）。
@@ -226,7 +226,7 @@ jobs:
         with:
           go-version: "1.26"
           # cache 是 boolean（区别于 setup-python 的字符串 "pip"）；
-          # 误写成字符串 "go" 会被 runner 直接拒绝——99-Inbox 真实事故，勿改。
+          # 误写成字符串 "go" 会被 runner 直接拒绝——历史真实事故，勿改。
           cache: true
           cache-dependency-path: agent/go.mod
 

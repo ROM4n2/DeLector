@@ -5,7 +5,7 @@
 > **Spec Reference**:
 > - `docs/plans/2026-10-19-writer-js-modularization.md`（**模板来源**：Task 1~5 的可复制做法与踩坑清单）
 > - 同计划 §Fog of War Unknown 2（**本计划的立项依据**：「`cards.js` / `reader.js` 同构切分收益 —— 判据草案：纯函数行数 / 总行数、探针损伤面」）
-> - vault `01-Rules/LAYERED-ARCHITECTURE.md`（分层判据是**依赖方向**；§2 底层定原子上层只加不改；**§3 分层正确性验证 = 「可独立使用」测试**——只有物理移除上层依赖后底层仍能通过测试才算独立，**MUST NOT 以「能编译通过」冒充**）
+> - vault 私有规范（分层判据是**依赖方向**；§2 底层定原子上层只加不改；**§3 分层正确性验证 = 「可独立使用」测试**——只有物理移除上层依赖后底层仍能通过测试才算独立，**MUST NOT 以「能编译通过」冒充**）
 > - `docs/agents/architecture.md`（前端拓扑与跨端契约）
 > **Global Constraints**:
 > - **入口与导出面不可变（MUST）**：`static/js/reader.js` 保留原路径与**全部 40 个既有具名导出**（实测：`grep -oP '^export (async )?function \K\w+' static/js/reader.js | wc -l` = 40）。它被 6 处跨模块 import 钉住：`a1_cards.js`(refreshCardCounters) · `a1_hoeren.js`(refreshCardCounters) · `cards.js`(refreshCardCounters) · `main.js`(具名批量) · `search.js`(openReader) · `writer.js`(refreshCardCounters)。

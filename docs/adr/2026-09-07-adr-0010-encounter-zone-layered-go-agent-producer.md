@@ -105,4 +105,4 @@ review_status: unreviewed
 
 - ADR-0008（DAG 4 层口径修订）— 计划状态块锚点；ADR-0009（Python 工具契约）— leaf 工具语义依据。
 - `docs/plans/2026-09-06-go-agent-runtime-phase2a/2b.md`（supervisor/DAG/registry/llm/打包全部就位）。
-- Vault：`08-Projects/DeLector/GO-PYTHON-HYBRID-ARCHITECTURE.md`（进程坑/打包校准 §5.1/§6）。
+- 私有笔记库（不随仓库分发）：不随仓库分发（进程坑/打包校准 §5.1/§6）。

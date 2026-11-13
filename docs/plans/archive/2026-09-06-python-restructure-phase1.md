@@ -210,7 +210,7 @@ Layer 6:           server → 全部（上帝文件，2418 行）
 2. **routes/main.py 与 server.py 的未用 re-export 导入已 prune**（pyflakes 干净）：server.py 仅保留真实被 handler/测试消费的 re-export 面；main.py 删掉 20 个未用符号。
 3. **打包 hidden-import 补 `delector.routes.main`**：`package_windows.py` 与 `.github/workflows/build-release.yml` 两处均补，避免打包后漏模块（routes_a2 同类事故）。
 4. **新增守卫测试** `tests/test_server.py::test_register_routes_covers_every_module_in_routes_package`：比对端点函数对象（非路径字符串，router 的 path 不含 prefix 比不出），并做「删 `include_router(main.router)` 必红」变异验证，防新增路由模块忘了挂。
-5. **docs 静态契约测试跟迁**：`test_german_workbench.py` 改读 `routes/main.py` 的 `@router.get("/api/audio/tts")`；`test_audit_hardening.py` 改读 `routes/main.py` 的 `review_card_sm2`；`tools/vault-proactive-scan.py` 的 `VocabCardReq` 来源改 `routes.main`。
+5. **docs 静态契约测试跟迁**：`test_german_workbench.py` 改读 `routes/main.py` 的 `@router.get("/api/audio/tts")`；`test_audit_hardening.py` 改读 `routes/main.py` 的 `review_card_sm2`；（本机脚本） 的 `VocabCardReq` 来源改 `routes.main`。
 
 ---
 
@@ -336,7 +336,7 @@ Layer 6:           server → 全部（上帝文件，2418 行）
 **vault-grill 追加决策（2026-09-06，ADR-0009）**：收官后以重构师视角拷打 T5–T7，三项拍板并落地：
 1. **Q1A**：`services/__init__` 删除 17 个零调用方的符号级扁平 re-export（Deletion Test），只 re-export 4 个模块对象，消除与 core/__init__ 纪律的自相矛盾（commit `f900fe4`）。
 2. **Q2A**：`tools/exercise` 语义造假（批改≠生成）→ 更名 `writing_check`，注册键同步；`tools/export` 的 `output_path` 改必填，移除废弃 API `tempfile.mktemp`（TOCTOU 竞态）的临时路径兜底（commit `b14a938`）。
-3. **ADR 独立编号 0009**，不并入 ADR-0008（运行时架构 ≠ 重构纪律/契约语义），归档于 Vault `08-Projects/DeLector/01-ADR/0009-python-package-restructure-deletion-test-and-tool-contract.md`。
+3. **ADR 独立编号 0009**，不并入 ADR-0008（运行时架构 ≠ 重构纪律/契约语义），归档于 私有笔记库 不随仓库分发。
 4. 契约变更：Go Agent 工具名 `exercise` → `writing_check`（Phase 2 未启动，无兼容成本）。
 
 ---

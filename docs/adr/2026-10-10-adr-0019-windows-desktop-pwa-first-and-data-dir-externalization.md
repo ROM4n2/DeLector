@@ -1,6 +1,6 @@
 # ADR-0019: Windows 桌面端 —— 不换壳、不做安装包，先零代码验证 PWA 并把数据目录救出来
 
-> **正式件:** `08-Projects/DeLector/01-ADR/0019-windows-desktop-pwa-first-and-data-dir-externalization.md`（vault）。本文件是仓内副本，内容与正式件同源（机械重新生成，未手抄）。
+> **正式件:** 不随仓库分发（vault）。本文件是仓内副本，内容与正式件同源（机械重新生成，未手抄）。
 > **决策者:** Haoyu Xi ｜ **产出方式:** `/dfs-grill` 双镜拷问（product-ux + sre-resilience）+ 用户拍板（Q1-A / Q2-A / Q3-B）。
 > **⚠️ 后续（2026-10-10）：**用户试用 PWA 后判定「独立窗口不够用」⇒ Q1 前提被推翻，外壳议题转由 **ADR-0020** 承接；**数据外置（Q2-A）与手动更新入口（Q5-A）仍有效**，且是 ADR-0020 的前置。
 
@@ -47,7 +47,7 @@
 | 端口复用不校验身份 | `start.py:61-67` | ✅ 已核实 |
 | LAN 无鉴权且是有意特性 | `start.py:43-48` | ✅ 已核实（注释明说） |
 | 四端打包同步守卫（曾漏同步 → 白屏 APK） | `DELECTOR-DEV-RULES.md §2.4` | ⚠️ 教训型（新增打包位点有历史成本） |
-| **提权安装器 + OWNER RIGHTS ACL 致普通权限全线失守**（另一项目 Hermes） | `08-Projects/Hermes/02-Post-mortem/POST-MORTEM-ELEVATED-INSTALLER-ACL-LOCKOUT.md` | ⚠️ 教训型（与本提议同构） |
+| **提权安装器 + OWNER RIGHTS ACL 致普通权限全线失守**（另一项目 Hermes） | 不随仓库分发 | ⚠️ 教训型（与本提议同构） |
 | 性能结论 O0、换主体永久否决 | ADR-0018 §3.2 / §4 / §7.2 | ✅ 已定案 |
 | "Go 二进制 + Python venv = ~50MB vs PyInstaller 300MB+" | `06-Sources/Articles/GO-PYTHON-HYBRID-ARCHITECTURE.md §5` | 参考（本仓实测便携版 zip 仅 75MB，未到 300MB） |
 
@@ -80,7 +80,7 @@
 
 ### 3.2 Option B：只改分发与外壳（`--windowed` + 安装器 + 托盘 + 自启 + 单实例）—— ⚠️ 部分采纳（本轮只采纳"不动"之外的零碎，安装器/自启否决）
 
-- **安装器 ❌ 否决**：DeLector 在 **import 期就写盘**（`database.py:35-40`）⇒ 装进 Program Files 会"管理员能跑、普通用户不能跑"且**静默失败**；卸载器还会连 `_internal` 一起删走数据 —— 与 Vault 里 Hermes 的提权安装器 ACL 事故**同构**。
+- **安装器 ❌ 否决**：DeLector 在 **import 期就写盘**（`database.py:35-40`）⇒ 装进 Program Files 会"管理员能跑、普通用户不能跑"且**静默失败**；卸载器还会连 `_internal` 一起删走数据 —— 与 私有笔记库 里 Hermes 的提权安装器 ACL 事故**同构**。
 - **开机自启 ❌ 否决且有反作用**：沉浸阅读是主动进入的场景；且桌面端绑 `0.0.0.0` 无鉴权 ⇒ 常驻 = 长期暴露面。
 - **`--windowed` ⏸ 延后**：它依赖打包改造，且**裸切可否决** —— 隐藏后 UVicorn traceback / 端口占用提示 / 模型缺失全部消失，用户视角是"双击无反应"。必须先配齐可观测三件套（见 §6.3）。
 - **单实例/端口顺延** 📌 登记（见 §6.4），不在本轮。
@@ -170,5 +170,5 @@
 
 - **ADR-0017**（更新可见性）、**ADR-0018**（性能 O0 / 换主体否决）、**ADR-0008 / ADR-0010**（Go/Python 边界）、**ADR-0016**（统一词池）
 - `DELECTOR-DEV-RULES.md §2.4`（四端打包同步守卫）
-- `08-Projects/Hermes/02-Post-mortem/POST-MORTEM-ELEVATED-INSTALLER-ACL-LOCKOUT.md`（提权安装器事故，否决安装器的直接依据）
+- 不随仓库分发（提权安装器事故，否决安装器的直接依据）
 - `06-Sources/Articles/GO-PYTHON-HYBRID-ARCHITECTURE.md §5`（打包体积对比）

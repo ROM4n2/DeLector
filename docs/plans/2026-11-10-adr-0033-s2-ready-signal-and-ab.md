@@ -2,7 +2,7 @@
 
 - **日期**：2026-11-10
 - **状态**：已测；**已合入 master**（PR #331，merge `67a2924`）
-- **上游**：[[ADR-0033]](../adr/2026-11-10-adr-0033-python-out-of-first-screen-completely.md) §6/§7
+- **上游**：ADR-0033(../adr/2026-11-10-adr-0033-python-out-of-first-screen-completely.md) §6/§7
 - **前序**：`docs/plans/2026-11-10-adr-0033-s1-static-intercept.md`（S1 已测）
 
 ---

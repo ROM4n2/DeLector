@@ -2,7 +2,7 @@
 
 > **Goal**: 新增 `GET /api/update/check`（后端代查 GitHub Releases）+ 建立应用级版本单一真相源 + 顶栏落后提示 chip，消灭"不知道有新版"的盲区（**不做**应用内下载/安装）。
 > **Tech Stack**: Python 3.11（FastAPI + httpx，Android 侧 Chaquopy py3.10/pydantic<2/fastapi<0.100）/ 原生 JS ES Modules / node 行为探针
-> **Spec Reference**: [ADR-0017](../../docs/adr/2026-10-08-adr-0017-android-update-check-notifier.md)（vault 正式件：`08-Projects/DeLector/01-ADR/0017-android-update-check-notifier.md`）
+> **Spec Reference**: [ADR-0017](../../docs/adr/2026-10-08-adr-0017-android-update-check-notifier.md)（vault 正式件：不随仓库分发）
 > **Global Constraints**:
 > - 出网**只准** `httpx`（`requirements.txt:12` + `android/app/build.gradle:95 install "httpx"` 已打包）——**禁**引入 `requests`/`aiohttp`（Android 无 wheel，见 `delector/services/tts.py:4`）。
 > - 出网超时 **3s**；TTL 缓存：成功 **6h** / 失败 **60s**（失败长缓存会把"网络已恢复"锁死 6 小时）。
@@ -94,7 +94,7 @@
 > Injected Instincts: 守卫断言"与 `APP_VERSION` 相等"而非字面量；改顶栏串必须同时改两处正则；文档改动后跑破坏检测。
 > TDD Steps:
 > 1. 先把守卫基准改成 `APP_VERSION` 并跑 `python -m pytest tests/test_writer_mobile.py -q`：预期**红**（因为 `APP_VERSION` 与各面虽然相等，但顶栏正则 `System · v(\d+\.\d+\.\d+) Online` 会因去掉 `Online` 而失配）——记录真实失败输出。
-> 2. 同步改 `index.html:35`（去掉 `Online`）、`tools/vault-proactive-scan.py` 的三处正则。
+> 2. 同步改 `index.html:35`（去掉 `Online`）、（本机脚本） 的三处正则。
 > 3. 跑 `python -m pytest tests/test_writer_mobile.py tests/test_server.py -q` 全绿（`test_server.py` 必须一并跑：它也有 gradle 版本正则）。
 > 4. 跑 `python tools/vault-proactive-scan.py`（或等价入口）确认**无 WARN**、且 build.gradle 现已被正确解析。
 > Return: MANDATORY Physical Execution Receipt（exit code + pass counts + `git diff --stat`）。"

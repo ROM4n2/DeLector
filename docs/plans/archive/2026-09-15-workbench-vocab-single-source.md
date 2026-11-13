@@ -2,7 +2,7 @@
 
 > **Goal**: 把背词工作台词库从「前端 HTML 内联种子 + 服务端正则解析 HTML」收敛为「数据模块单一真相 + 构建期注入」，统一词对象契约、把等级判定改为数据驱动，并据此打开 B1 入口——使"加一个等级 = 改数据，不改逻辑"。
 > **Tech Stack**: Python 3.11 / FastAPI / 原生 JS ES Modules（`workbench.html` 单文件）/ pytest + Node 探针 / PyInstaller + Android Chaquopy
-> **Spec Reference**: Vault `ADR-0011`（词库单一真相化与等级判定数据驱动，用户拍板 Q1=A / Q2=A）；上游 `ADR-0002`（scope 控制 + 进度零丢失）、`ADR-0005`（多等级可扩展 / `exam_catalog`）、`01-Rules/DATABASE-MIGRATION-IDEMPOTENCY`（幂等迁移对账谓词）
+> **Spec Reference**: 私有笔记库 `ADR-0011`（词库单一真相化与等级判定数据驱动，用户拍板 Q1=A / Q2=A）；上游 `ADR-0002`（scope 控制 + 进度零丢失）、`ADR-0005`（多等级可扩展 / `exam_catalog`）、私有规范（幂等迁移对账谓词）
 > **Global Constraints**:
 > - **id 只增不改**：`wb.cards.v1`/`wb.wrong.v1` 以词 id 为键，任何改动不得变更既有 `a1-NNNN` / `a2-*` / `b1-*` id；需要变更只能走别名表（沿用 `SEED_ID_ALIASES` 机制）。**违反即否决。**
 > - **存储 schema 冻结**：`lemma -> (cefr, pos, gender, plural, definition_zh)` 5 元组本轮不变；"统一契约"只作用于 `get_vocab_by_cefr` 的**输出侧**。扩展存储字段须另立 ADR。

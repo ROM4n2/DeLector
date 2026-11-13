@@ -53,7 +53,7 @@ A1 词表存在**三源存储**，内容大量重叠但**成员集合并不相�
 
 - **真实痛点是维护面与字段对齐**，不是用户可见 bug（L0 YAGNI 校正）。
 - **FSRS id 不变式**（ADR-0011）与 **letter 原值** 不可派生 → 必须 side-car。
-- **人工值 > 规则/官方**（禁编造；[[01-Rules/STORED-DATA-BACKFILL]]「只补空、不抹非空」）。
+- **人工值 > 规则/官方**（禁编造；私有规范 STORED-DATA-BACKFILL「只补空、不抹非空」）。
 - **单一 merge 路径**（Ladder L1：复用 `lexicon_merge.FIELD_PRIORITY`；L2：零新依赖）。
 - **契约 12 字段不破**（ADR-0013/0014）；消费端只经 `lexicon`（ADR-0012 §5-3）。
 
@@ -136,6 +136,6 @@ A1 词表存在**三源存储**，内容大量重叠但**成员集合并不相�
 
 ## 7. 相关 (References)
 
-- ADR-0011 / 0012 / 0013 / 0014（Vault `08-Projects/DeLector/01-ADR/`）。
+- ADR-0011 / 0012 / 0013 / 0014（私有笔记库 不随仓库分发）。
 - `docs/compose/spec/a1-rich-convergence.md`（实施契约与任务）。
 - 取证：`lexicon.py`、`lexicon_merge.py`、`a1_workbench_dict.py`、`a1_dict.py`、`database.py`（`_a1_workbench_row` / `_contract_*`）、`tools/build_workbench_seed.py`、`tests/test_a1_workbench_source.py`、`tests/test_vocab_contract_uniform.py`。

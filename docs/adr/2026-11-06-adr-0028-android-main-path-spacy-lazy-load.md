@@ -7,8 +7,8 @@
 - **实施**：**已完成**（2026-11-06，PR #237 合入 `master`，merge commit `7073bac`；T5/T6 已执行，数字见 §4.2）；**2026-11-06 决策修订**：加载时机由「首次分析时同步加载」改为「服务就绪后后台预热 + 首次使用同步兜底」，见 §2 澄清段
 - **决策者**：席皓宇 (Haoyu Xi)
 - **关联 ADR**：
-  - [[0018-performance-measurement-before-runtime-swap]]（§7.6：冷启动瓶颈是 spaCy 模型加载 ≈1.47s，占首启 58%；首选修法是惰性加载）
-  - [[0027-nlp-model-sm-only]]（模型档位只支持 `de_core_news_sm`；本 ADR 不改档位）
+  - 0018-performance-measurement-before-runtime-swap（§7.6：冷启动瓶颈是 spaCy 模型加载 ≈1.47s，占首启 58%；首选修法是惰性加载）
+  - 0027-nlp-model-sm-only（模型档位只支持 `de_core_news_sm`；本 ADR 不改档位）
 - **关联规格**：`docs/specs/2026-11-06-android-spacy-parity-spec.md`
 - **关联运行时文档**：`docs/agents/android-local-runtime.md`、`docs/agents/architecture.md`
 

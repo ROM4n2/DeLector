@@ -2,7 +2,7 @@
 
 > **Goal**: 修掉 2026-10-03 全量审计（`docs/reviews/2026-10-03-swarm-audit-master.md`）的 3 条 P0——存量 Docker 升级后静默空库、`.env` 密钥进镜像层、工作台词被投进 KARTEI「今日到期」并配一句说谎的卡面。
 > **Tech Stack**: Python 3.11 / FastAPI / SQLite(WAL) · Docker(Compose) · 原生 ES Modules 前端（**本计划 T1~T4 不改前端**）
-> **Spec Reference**: `docs/reviews/2026-10-03-swarm-audit-master.md`（P0-1 / P0-2 / P0-3）＋ `docs/adr/2026-09-29-adr-0016-unified-vocab-pool-architecture.md`（§4/§5）＋ Vault `01-Rules/DATABASE-MIGRATION-IDEMPOTENCY` §4、`01-Rules/STORED-DATA-BACKFILL`（只补空）
+> **Spec Reference**: `docs/reviews/2026-10-03-swarm-audit-master.md`（P0-1 / P0-2 / P0-3）＋ `docs/adr/2026-09-29-adr-0016-unified-vocab-pool-architecture.md`（§4/§5）＋ 私有规范 §4、私有规范（只补空）
 > **Global Constraints**:
 > - **改动含 `static/` ⇒ 必须发版 + Android 覆盖安装**（项目红线）。故 T1~T4 **一律零 `static/` 改动**；唯一需动前端的任务是 T5，已标 `[Mode: HITL]`。
 > - 门禁全绿才算完成：`ruff check .` ＋ `mypy --strict delector tools` ＋ `mypy --follow-imports=skip tests` ＋ 分半 pytest（`--ignore=tests/test_server.py` / 单跑 `tests/test_server.py`）＋ 全 `tools/*.mjs` 探针。

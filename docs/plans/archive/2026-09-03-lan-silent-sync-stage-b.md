@@ -2,7 +2,7 @@
 
 > **Goal**: 在 Stage A「配对一次 + HTTP 轮询」之上，用 WebRTC DataChannel 实现持久配对凭证下的自动建连/重连与加密双向静默同步，并保留 HTTP 轮询为兜底通道。
 > **Tech Stack**: Python 3.11（FastAPI 信令中继）/ 浏览器原生 WebRTC（RTCPeerConnection + DataChannel）/ 前端内联于 `static/german/workbench.html` 的 `wbsync` 模块。
-> **Spec Reference**: `docs/specs/2026-09-03-lan-silent-sync-design.md`（§3.6 路线 B / §6）；`d:/Obsidian/Coding/08-Projects/DeLector/01-ADR/0004-lan-sync-webrtc-stage-b.md`（范围/架构锁定）。
+> **Spec Reference**: `docs/specs/2026-09-03-lan-silent-sync-design.md`（§3.6 路线 B / §6）；`（私有笔记库，不随仓库分发））`（范围/架构锁定）。
 > **Global Constraints**:
 > - 合并权威唯一：所有到达的同步信封一律 `applyMerge(envelope, {silent: true})`，不得新写合并逻辑。
 > - 信任模型不变：`GET /api/wb/state` 仍局域网开放；`PUT /api/wb/state` 仍 `X-WB-Key`；`GET /api/wb/state/key` 仍仅本机；`/info` 仍开放。

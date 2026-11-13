@@ -53,7 +53,7 @@ status: closed
 7. **B1 机械闸的语义边界**：拦的是「**直推 master 的非 merge 提交的改动面出白名单**」；它**不拦**"删改"（只按改动面判）。白名单 = `WORKMEMORY/` · `docs/` · `README.md` · `CHANGELOG.md` · `static/index.html` · `static/sw.js` · `android/app/build.gradle` · `delector/core/version.py`。
 8. **`database.py` 的残留**：只剩 `_require_localhost` 一个 `def`（**非 DB 关注点，刻意留在持久层包之外**）。要达成"纯 façade"需另开 `core/net_guard.py`（属命名/分层整理，本轮 out of scope）。
 9. **版本面待同步**：本批新增了不少测试（A1 3 条 / B1 14 条 / B4 2 条 / B5 若干）⇒ **下次发版**须按 `ops.md` 的口径同步版本面数字（当前 master **未发版**，故未动）。
-10. **vault 侧**：`99-Inbox` 还有 **2 张草稿**待 `/dfs-inbox-consolidate`（登记表 A7，已注明"并入既有规则、勿另立新规"）。
+10. **私有笔记库侧**：私有笔记库还有 **2 张草稿**待 `/dfs-inbox-consolidate`（登记表 A7，已注明"并入既有规则、勿另立新规"）。
 11. **本地验证 MUST 逐字复刻 CI 的门禁命令**（本轮两连红的第二红 = 我只跑了"单文件 + 相似 flags"，而 CI 是 `mypy --follow-imports=skip tests` **整目录** + `--strict delector tools` **含 tools/**）。**不许用近似代替**：CI 的确切两条是 `mypy --strict delector tools` 与 `mypy --follow-imports=skip tests`（`.github/workflows/ci.yml:90-94`）。
 12. **`__file__` 相对路径在模块搬家后会静默偏层**（本轮 B4 的第一红，**只在干净 checkout 暴露**）：`_PKG_DIR` 的值 = `delector/core`（切分前 `dirname(database.py)`）是**冻结面**，搬进 `delector/core/db/` 后必须取**两级** dirname 才能保持同值；否则 `preset_processed_data_path()` 会多出一层 `core/`，而**本地若恰有散落文件则全绿**（本轮就是这样骗过我和两个 maker 的）。守卫：`tests/test_backend_package_layout.py::test_preset_processed_data_path_survives_module_moves`（与既有 `DATA_DIR`/`STATIC_DIR` 两条同族）。**今后任何搬包 MUST 顺带重核所有 `__file__` 派生路径**（`delector/core/db/` 内现已只有这一处，且 `_REPO_ROOT` 用的是抗搬家的"向上走到非包目录"写法）。
 
@@ -61,7 +61,7 @@ status: closed
 
 - `.env` 已配 `DEEPSEEK_API_KEY`（**gitignored 且未跟踪**）；harness 经 `delector.server.load_env()` 载入。**真实 API 调用需用户确认**（B5 只补了前置，**未真跑**）。任何输出/报告 MUST NOT 含 key 本体。
 - 台账 `.vault-exec-ledger.json` 是**未跟踪的工作文件**（当前内容 = B4 计划 5/5）。A 系列与 B 系列台账曾被覆盖，备份在 `/tmp/ledger-*.json`（**临时路径，多半已失效，勿依赖**）。
-- 自动化脚本：`python /d/Obsidian/Coding/scripts/vault_exec_state.py {init --plan-file <p> | start-task --task-id <t> | complete-task --task-id <t> --commit <sha> --reviewer PASS | status}`。
+- 自动化脚本：`python （本机脚本） {init --plan-file <p> | start-task --task-id <t> | complete-task --task-id <t> --commit <sha> --reviewer PASS | status}`。
 - 提交信息**禁 inline `-m`**（中文 + 引号会截断/静默缺字）⇒ 一律 `git commit -F <file>`，消息文件用 `python - <<'PYEOF'`（**定界符带引号**）生成。行尾统一 **CRLF**（改完自查 `lone_LF=0`）。
 - **负载纪律**（用户明确要求）：**本地不跑全量套件**（全量交 CI）；只跑定向文件；不并发起多个重负载 python 进程（用户同机还有别的 agent 在跑）。
 
@@ -92,9 +92,9 @@ status: closed
    `INDEX.md` 只留配置 / 文件清单 / Active handoffs（65→28 行）；超限事件正文入 `notes/`；
    已生成 COLD 月度 `cold/digest-2026-10.md`（覆盖 92 条 10 月事件）。`PROTOCOL.md` §3 读序同步。
 2. **vault 新增 `pattern` 类**（可复用**成功做法**）：此前沉淀几乎全是事故驱动 ⇒ 首张
-   `01-Rules/REFACTOR-SAFETY-NET.md`（重构安全网：双向对账 + 逐切片 patch 扫查）。
+   私有规范（重构安全网：双向对账 + 逐切片 patch 扫查）。
    写草稿时 MUST 先判定 pattern vs troubleshooting。
-3. **规则时效闸**：`scripts/vault-rule-freshness.py`（vault 侧）—— `01-Rules/` 每条 MUST 带
+3. **规则时效闸**：本机脚本（vault 侧）—— 私有规范 每条 MUST 带
    `description`（触发句）+ `verified`（复核日期）；被取代的旧结论 MUST 标 `superseded-by`。
    直接针对本包「风险与坑」里 A4 那类过期条目。
 4. **模板双存 + 单向同步闸**：vault `Templates/workmemory/` 是真源，发布的 skill 自带副本

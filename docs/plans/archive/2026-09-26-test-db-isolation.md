@@ -134,4 +134,4 @@
 - `docs/specs/2026-09-26-test-db-isolation-design.md`
 - `docs/specs/2026-09-24-toolchain-guard-truth-design.md`（本修复是其 fastapi 升版的前置）
 - `WORKMEMORY/PROJECT_OVERVIEW.md`（测试契约节）
-- `01-Rules/TESTING-PATTERNS.md`（测试隔离纪律）
+- 私有规范（测试隔离纪律）

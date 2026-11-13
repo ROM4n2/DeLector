@@ -2,7 +2,7 @@
 
 - **日期**：2026-11-10
 - **状态**：已测；**已合入 master**（PR #331，merge `67a2924`）
-- **上游**：[[ADR-0033]](../adr/2026-11-10-adr-0033-python-out-of-first-screen-completely.md) §10 S1
+- **上游**：ADR-0033(../adr/2026-11-10-adr-0033-python-out-of-first-screen-completely.md) §10 S1
 - **基线**：ADR-0032 阶段一安卓侧（PR #330，merge `6d38ddf`）
 
 ---

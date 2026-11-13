@@ -164,7 +164,7 @@
 | Ginger（语法检查） | 单列：textarea 200px + 两个动作按钮 + 结果区在下 | 无 | 键盘态 430 高时 `textarea` 仍 200px，页面整体可滚 | 编辑框固定 200px | 无 | [M] `external.json` |
 | Scribens | 紧凑工具栏 + 单列编辑区，结果替换内容区 | 无 | 页面滚动 | 约 300px | 无 | [S] `ext-scribens-*.png` |
 | Dillinger（Markdown） | 侧栏 drawer（文件/导出），正文单栏 | 抽屉盖住左侧约 80% 宽，点遮罩关闭 | 页面滚动 | 约 600px | 无 | [S] `ext-dillinger-*.png` |
-| Obsidian 移动端 | 编辑区全屏 + 右侧栏/底部工具条；命令面板是底部 sheet | 半屏 sheet，可下拉关闭 | 编辑器自身滚动，工具栏贴键盘上沿 | 约 500px | 有（隐藏 UI） | [S] `ext-obsidian-*.png`；细节 [R] |
+| 私有笔记库 移动端 | 编辑区全屏 + 右侧栏/底部工具条；命令面板是底部 sheet | 半屏 sheet，可下拉关闭 | 编辑器自身滚动，工具栏贴键盘上沿 | 约 500px | 有（隐藏 UI） | [S] `ext-私有笔记库-*.png`；细节 [R] |
 | iA Writer | 纯文本全屏，键盘上方一条格式/统计条 | 无面板 | 键盘上沿工具条，正文自动让位 | 约 380px（键盘态） | 有（专注模式） | [S] `ext-iawriter-393x852.png`；[R] |
 | Ulysses | 编辑器全屏 + 底部/侧边 inspector；建议面板是覆盖层 | 覆盖式面板，非拖拽 | 键盘态收窄正文，工具栏贴键盘 | 约 400px | 有 | [S] `ext-ulysses-393x852.png`；[R] |
 | Notion / Google Docs 移动端 | 编辑区全屏；评论/建议是底部 sheet 或独立页 | 半屏 sheet，可拖到全屏 | 键盘态正文收缩，工具栏贴键盘 | 未能实测 | 无 | [U]（登录墙；`ext-notion-*`、`ext-gdocs-*` 截图不可用） |
@@ -172,8 +172,8 @@
 
 **共性结论**（去除未验证项后）：
 
-1. **编辑区永远占主位**，诊断/建议不长期挤占正文；要么内联（LanguageTool、DeepL Write），要么收进可关闭的面板（Obsidian、Ulysses）。
-2. **键盘态让位是硬要求**：要么把工具条贴到键盘上沿（iA Writer、Obsidian），要么整体滚动到焦点（Scribens、Ginger）。
+1. **编辑区永远占主位**，诊断/建议不长期挤占正文；要么内联（LanguageTool、DeepL Write），要么收进可关闭的面板（私有笔记库、Ulysses）。
+2. **键盘态让位是硬要求**：要么把工具条贴到键盘上沿（iA Writer、私有笔记库），要么整体滚动到焦点（Scribens、Ginger）。
 3. 需要「全篇诊断」的产品（LanguageTool / DeepL Write）都把结果放在**输入之后**，而不是固定在视口底部与编辑区抢高度。
 4. 没有产品会把「诊断面板」以 40px 条带常驻在底部——这正是本次要消除的反模式。
 

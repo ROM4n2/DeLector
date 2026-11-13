@@ -2,7 +2,7 @@
 
 > **Goal**: 按 ADR-0020 的 A 顺序交付三步 —— ① 把便携版数据从"程序目录"救到 `%LOCALAPPDATA%\DeLector`；② 让**已存在但不可发现**的手动"检查更新"入口变得可见可点；③ 交付 `pywebview` + `pystray` 桌面壳（含退出收尸 / 启动反馈 / WebView2 检测 / 日志弹窗四个必须前置）。
 > **Tech Stack**: Python 3.11 / FastAPI + uvicorn / 原生 JS 前端 / PyInstaller `--onedir` / Windows；GUI 侧新增 `pywebview`（系统 Edge WebView2）+ `pystray`。
-> **Spec Reference**: [ADR-0020](../../Obsidian/Coding/08-Projects/DeLector/01-ADR/0020-windows-desktop-shell-pywebview.md)（仓内副本：`docs/adr/2026-10-10-adr-0020-windows-desktop-shell-pywebview.md`）、[ADR-0019](docs/adr/2026-10-10-adr-0019-windows-desktop-pwa-first-and-data-dir-externalization.md)、ADR-0017（更新可见性边界）、ADR-0018（首启数字 / 换主体永久否决）。
+> **Spec Reference**: [ADR-0020](（私有笔记库，不随仓库分发）`docs/adr/2026-10-10-adr-0020-windows-desktop-shell-pywebview.md`）、[ADR-0019](docs/adr/2026-10-10-adr-0019-windows-desktop-pwa-first-and-data-dir-externalization.md)、ADR-0017（更新可见性边界）、ADR-0018（首启数字 / 换主体永久否决）。
 > **Global Constraints**:
 > - **不改 HTTP 主体**：Python + FastAPI 仍是服务端（`delector/server.py`），桌面壳只是前端宿主 ⇒ 不得触碰 ADR-0018 的否决边界。
 > - **禁新增静默失败**：任何"看不到反馈"的改动（无 splash、无日志、退不干净）都算不合格。

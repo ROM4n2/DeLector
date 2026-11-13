@@ -448,7 +448,7 @@ def _try_seed_or_backfill_preset_pack(pack: Any, db_path: str) -> Optional[bool]
 def seed_preset_encounter_texts(db_path: Optional[str] = None) -> int:
     """版本化增量补装预置遇见区卡包（encounter-pack/v1）；返回本次**实际新建**的行数。
 
-    语义（红线 12 / Vault `01-Rules/STORED-DATA-BACKFILL`：只增 + 只补空 + 幂等）
+    语义（红线 12 / 私有规范：只增 + 只补空 + 幂等）
     ---------------------------------------------------------------------------
     1. **版本闸**：先读 `app_settings["encounter_seed_version"]`（缺省 0），
        `>= PRESET_SEED_VERSION` 即热路径返回 0（每次启动只读 1 行）。升

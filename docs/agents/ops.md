@@ -354,7 +354,7 @@ TTS 链路（真机判定层）：`AndroidNativeTTS.speak`（系统 TTS，免网
 
 > 2026-09-21 立规（源：A1 存量裸条目 `anbieten`/`allein` 排障 + A2/B1 与 reader 生词回填设计）。
 > 适用于「服务端 / 上游 → 本地词表、精读生词」的**全部**同步路径（A1 首装合并、A2/B1 档同步、
-> reader 生词同步）。跨项目正式规范：Coding Vault `01-Rules/STORED-DATA-BACKFILL.md`。
+> reader 生词同步）。跨项目正式规范：Coding 私有笔记库 私有规范。
 
 用户报「升级了还是旧的」时，**先怀疑存量记录被冻结，而不是数据缺失**——上游数据通常是全的。
 
@@ -372,7 +372,6 @@ TTS 链路（真机判定层）：`AndroidNativeTTS.speak`（系统 TTS，免网
 5. **未命中 MUST 诚实留空**（不编造、不用默认值兜底）。提升命中率靠**归一化上游键**（小写、去冠词
    `der/die/das/ein/eine`、`lookup_irregular_verb` 兜底）与确定性查表，MUST NOT 靠降低诚实度。
 6. **回归 MUST 是行为级探针**（`tools/*.mjs` 真实源码切片 + `node:vm` 真跑），断言五条：补空生效 /
-   非空不被覆盖 / 用户数据零写入 / 二次运行零变化 / 标记不回退。静态断言不得替代（Coding Vault
-   `01-Rules/TESTING-PATTERNS`）。
+   非空不被覆盖 / 用户数据零写入 / 二次运行零变化 / 标记不回退。静态断言不得替代（Coding 私有规范）。
 
 ---

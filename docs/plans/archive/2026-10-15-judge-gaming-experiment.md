@@ -2,7 +2,7 @@
 
 > **Goal**: 把 `docs/specs/2026-10-15-judge-gaming-control-experiment-design.md` 的设计落成**可复跑的确定性 harness**，并跑出能分别证伪 P1（奖励黑客）/**P2（真变好）** 的原始数据；结论用于决定 §4.3 的无条件「已实现」能否解禁（当前：**禁用**，见 ADR-0023 §11.3）。
 > **Tech Stack**: Python 3.11 / pytest（无 pytest-asyncio）/ 复用 `run_polish_loop` 的注入缝 + `llm_client.chat`；真跑需真实 `DEEPSEEK_API_KEY`
-> **Spec Reference**: `docs/specs/2026-10-15-judge-gaming-control-experiment-design.md`（设计稿，含判决量定义）· ADR-0023 §4.3 与 §11.3/§11.6 · `01-Rules/AGENT-EVALUATION-HARNESS.md` §1/§3 · `01-Rules/AGENT-CONDUCT.md` §10.2
+> **Spec Reference**: `docs/specs/2026-10-15-judge-gaming-control-experiment-design.md`（设计稿，含判决量定义）· ADR-0023 §4.3 与 §11.3/§11.6 · 私有规范 §1/§3 · 私有规范 §10.2
 > **Global Constraints**:
 > - **密钥安全（MUST）**：密钥只经**应用自身**的 `delector.server.load_env()` 载入（实测：载入后 `os.environ` 与 `get_effective_api_key()` 均非空）。**MUST NOT** 打印、写入文件、进日志、进提交、进报告 —— 报告与测试输出里只允许出现**布尔**或长度。仓库 secret-scan 预提交门禁是最后一道防线，不是第一道。
 > - **测试零 Key 红线（MUST）**：harness MUST 提供 `--dry-run`（stub chat）；**全部测试用例在无 Key 环境下必须能跑**；真跑属 HITL 步骤（Task 5/6），不得写进 pytest。
