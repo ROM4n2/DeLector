@@ -14,9 +14,13 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
+from probe_runner import ROOT as PROBE_ROOT
 from probe_runner import assert_probe_clean, run_json_probe, scenario_keys
 
 
@@ -169,3 +173,67 @@ def test_export_toast_is_bound_to_probe_verified_result() -> None:
         "download_all_reject",
         "click_reject",
     } <= scenario_keys(out)
+
+
+
+
+def test_export_probe_slice_guard_scenarios_present() -> None:
+    """阳性 + 防删场景：sliceFunction 的配平自证场景必须逐字在场且全绿。"""
+    out = run_json_probe("wb_export_probe")
+    assert_probe_clean("wb_export_probe", out)
+    required = {
+        "slice_real_download_has_full_body",
+        "slice_real_report_has_full_body",
+        "slice_skips_strings_comments_templates",
+        "slice_destructured_params_full_body",
+        "slice_rejects_non_brace_after_paren",
+    }
+    assert required <= scenario_keys(out), (
+        f"wb_export_probe 缺 sliceFunction 自证场景：{sorted(required - scenario_keys(out))}"
+    )
+
+
+def test_export_probe_slice_guard_fails_when_balancing_removed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """阴性 + 变异自证：把 sliceFunction 换回旧实现 ⇒ 探针必红（判据不得恒真）。
+
+    在 tmp 里生成变异副本（不污染 worktree），并把 ROOT 改写成仓库绝对路径，
+    保证副本仍能读到 static/german/workbench.html 真源码。
+    """
+    node = shutil.which("node")
+    if not node:
+        if os.environ.get("CI"):
+            pytest.exit("CI 环境缺少必需的 node 运行时；导出探针不能以 skip 静默跳过", returncode=1)
+        pytest.skip("未安装 node：本用例需要 node 跑变异副本")
+
+    src = (PROBE_ROOT / "tools" / "wb_export_probe.mjs").read_text(encoding="utf-8")
+    anchor = "function sliceFunction(src, name) {"
+    assert src.count(anchor) == 1, f"注入式变异锚点应恰好 1 处，实际 {src.count(anchor)}"
+    start = src.index(anchor)
+    end = src.index("\nconst downloadSrc =", start)
+    legacy = """function sliceFunction(src, name) {
+  const start = src.indexOf("async function " + name + "(");
+  if (start < 0) throw new Error("找不到 " + name);
+  const open = src.indexOf("{", start);
+  let depth = 0;
+  for (let i = open; i < src.length; i += 1) {
+    if (src[i] === "{") depth += 1;
+    else if (src[i] === "}") { depth -= 1; if (depth === 0) return src.slice(start, i + 1); }
+  }
+  throw new Error("函数未闭合：" + name);
+}
+"""
+    root_line = 'const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");'
+    assert src.count(root_line) == 1, "ROOT 锚点应恰好 1 处"
+    mutant_src = (
+        src[:start] + legacy + src[end:]
+    ).replace(root_line, f"const ROOT = {json.dumps(str(PROBE_ROOT))};")
+    mutant = tmp_path / "wb_export_probe_mutant.mjs"
+    mutant.write_text(mutant_src, encoding="utf-8")
+
+    res = subprocess.run(
+        [node, str(mutant), "--json"], capture_output=True, text=True,
+        encoding="utf-8", errors="replace", cwd=str(PROBE_ROOT), timeout=120,
+    )
+    assert res.returncode != 0, "删掉配平保护物后探针仍全绿 ⇒ 判据恒真（死测）"

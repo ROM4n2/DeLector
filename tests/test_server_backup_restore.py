@@ -745,3 +745,77 @@ def test_backup_restore_projection_failure_rolls_back(client, monkeypatch, test_
     assert res.status_code >= 500, "投影抛错应冒泡成 500，而非被吞掉"
 
     assert _snapshot_vocab_cards(test_db_path) == before, "还原失败必须整体回滚，vocab_cards 不得残留半成品"
+
+
+def test_restore_wb_projection_holds_write_lock_before_first_select(client, test_db_path, monkeypatch):
+    """阳性：投影首条语句前已持写锁 —— 真起第二个 SQLite 连接抢 BEGIN IMMEDIATE。"""
+    import sqlite3
+
+    import delector.core.vocab_pool as vocab_pool
+
+    key = client.get("/api/wb/state/key").json()["key"]
+    put = client.put("/api/wb/state", json={"payload": _wb_learned_word_payload()}, headers={"X-WB-Key": key})
+    assert put.status_code == 200
+
+    real_project = vocab_pool.project_wb_deck
+    probe: dict = {}
+
+    def spy(conn, payload):
+        # 阴性对照：WAL 语义不回归 —— 只读连接不得被写事务挡住
+        reader = sqlite3.connect(test_db_path, timeout=0.2)
+        try:
+            reader.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()
+            probe["read_ok"] = True
+        finally:
+            reader.close()
+
+        rival = sqlite3.connect(test_db_path, timeout=0.2)
+        try:
+            rival.execute("BEGIN IMMEDIATE")
+            probe["rival_got_write_lock"] = True
+            rival.rollback()
+        except sqlite3.OperationalError:
+            probe["rival_got_write_lock"] = False
+        finally:
+            rival.close()
+        return real_project(conn, payload)
+
+    monkeypatch.setattr(vocab_pool, "project_wb_deck", spy)
+
+    backup = client.get("/api/backup/export").json()
+    backup["vocab_cards"] = []
+    res = client.post("/api/backup/restore", json=backup)
+    assert res.status_code == 200, res.text
+    assert probe.get("read_ok") is True, "BEGIN IMMEDIATE 不得把 WAL 只读也挡住"
+    assert probe.get("rival_got_write_lock") is False, (
+        "投影开始前未抢到写锁：另一连接能在 _pool_index 的 SELECT 与 INSERT 之间"
+        "插入同身份行 ⇒ 重复卡"
+    )
+    with db_conn(test_db_path) as conn:
+        rows = conn.execute("SELECT * FROM vocab_cards WHERE word = ?", ("der Abfahrt",)).fetchall()
+    assert len(rows) == 1, "写锁归位后投影仍须只落一行"
+
+
+def test_wb_projection_write_lock_probe_is_not_vacuous(test_db_path):
+    """阴性 / 探针校准：无写事务时能抢到锁，有持锁者时抢不到 —— 证明上条判据不恒真。"""
+    import sqlite3
+
+    free = sqlite3.connect(test_db_path, timeout=0.2)
+    try:
+        free.execute("BEGIN IMMEDIATE")
+        free.rollback()
+    finally:
+        free.close()
+
+    holder = sqlite3.connect(test_db_path, timeout=0.2)
+    holder.execute("BEGIN IMMEDIATE")
+    try:
+        blocked = sqlite3.connect(test_db_path, timeout=0.2)
+        try:
+            with pytest.raises(sqlite3.OperationalError):
+                blocked.execute("BEGIN IMMEDIATE")
+        finally:
+            blocked.close()
+    finally:
+        holder.rollback()
+        holder.close()

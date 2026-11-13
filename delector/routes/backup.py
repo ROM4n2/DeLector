@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """备份、还原与工作台同步路由模块（Layer 5 运行装配层）。"""
 
+import contextlib
 import ipaddress
 import json
 import os
@@ -91,6 +92,12 @@ def _write_export_file(filename: str, data: bytes) -> Tuple[Path, bool]:
             return target, fell_back
         except FileExistsError:
             continue
+        except OSError:
+            # `xb` 已落下半截 JSON：写盘 / fsync 失败必须清掉，
+            # 否则会被当成完整备份。清理失败不得掩盖原始异常。
+            with contextlib.suppress(OSError):
+                os.unlink(target)
+            raise
     raise OSError("同名导出文件过多，请先清理下载目录")
 
 
@@ -187,7 +194,8 @@ def wb_save_backup(req: WbBackupReq, request: Request) -> Dict[str, Any]:
     try:
         target, fell_back = _write_export_file(req.filename, data)
     except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"写入失败：{exc}") from exc
+        # 只回错误类别：OSError 的 str() 常带绝对路径，不回给前端。
+        raise HTTPException(status_code=500, detail=f"写入失败：{type(exc).__name__}") from exc
     body: Dict[str, Any] = {"ok": True, "path": str(target), "bytes": len(data)}
     if fell_back:
         # 下载目录建不出来（权限/只读盘）：位置仍然真实，但不是用户预期的地方。
@@ -359,6 +367,9 @@ def restore_database_backup(req: RestoreReq, request: Request) -> Dict[str, Any]
             proj_conn = get_db()
             try:
                 with proj_conn:
+                    # 投影首条语句是 _pool_index 的 SELECT，sqlite3 只对 DML 隐式 BEGIN；
+                    # 先抢写锁才能把「查重 → INSERT」收进同一事务，WAL 只读仍可并发。
+                    proj_conn.execute("BEGIN IMMEDIATE")
                     project_wb_deck(proj_conn, wb_payload)
             finally:
                 proj_conn.close()

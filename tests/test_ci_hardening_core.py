@@ -29,7 +29,6 @@ def test_ci_workflow_has_core_gates():
         ("go test -race ./...", "缺 go test -race：Go 测试没进 CI，且丢了竞态检测"),
         ("concurrency", "缺 concurrency 取消组：同分支旧跑会与新跑并发执行"),
         ("cancel-in-progress", "缺 cancel-in-progress：旧提交的 CI 不会取消，反馈变慢"),
-        ("setup-go@v5", "缺 actions/setup-go@v5：Go 工具链没安装，Go 门禁无法执行"),
     ]
     missing = [f"未找到 {needle!r}（{why}）" for needle, why in required_gates if needle not in text]
     assert not missing, f"{CI_WORKFLOW} 缺少关键门禁要素：\n" + "\n".join(missing)

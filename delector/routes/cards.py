@@ -513,6 +513,8 @@ def review_card_sm2(card_type: str, card_id: int, req: CardReviewReq) -> Dict[st
         raise HTTPException(400, "card_type must be 'vocab' or 'grammar'")
     tbl = "vocab_cards" if card_type == "vocab" else "grammar_cards"
     with db_conn() as conn:
+        # SELECT 不触发隐式 BEGIN：两个并发评级会读到同一份旧四列状态并互相覆盖。
+        conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(f"SELECT * FROM {tbl} WHERE id = ?", (card_id,)).fetchone()
         if not row:
             raise HTTPException(404, f"Card {card_id} not found")
@@ -562,11 +564,19 @@ def review_card_sm2(card_type: str, card_id: int, req: CardReviewReq) -> Dict[st
         )
         updated["next_intervals"] = next_intervals
 
-    with db_progress_conn() as pconn:
-        pconn.execute(
-            "INSERT INTO quiz_log (card_id, card_type, mode, correct) VALUES (?, ?, ?, ?)",
-            (card_id, card_type, "fsrs_review", 1 if is_correct else 0),
+    try:
+        with db_progress_conn() as pconn:
+            pconn.execute(
+                "INSERT INTO quiz_log (card_id, card_type, mode, correct) VALUES (?, ?, ?, ?)",
+                (card_id, card_type, "fsrs_review", 1 if is_correct else 0),
+            )
+    except Exception as exc:
+        # 主库 UPDATE 已提交、两库无法共处一个事务：禁止静默 200，把半写事实显式抛给调用方。
+        detail = (
+            "复习已写入卡池，但进度库写入失败"
+            f"（{type(exc).__name__}: {exc}）；本次复习的进度记录缺失，请稍后重试"
         )
+        raise HTTPException(500, detail=detail) from exc
     log_study_event("quiz_session", card_id, f"fsrs:{card_type}:{card_id}")
     return updated
 

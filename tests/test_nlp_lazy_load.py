@@ -163,3 +163,32 @@ def test_load_failure_is_visible_not_silent(tmp_path: Path) -> None:
     assert _field(out, "MSG_OK") == "True", f"异常信息未点明'加载失败'，真机上无从诊断\n{out}"
     # 失败要被记住：第二次调用同样抛错（不反复重试慢加载），且仍不是静默空值。
     assert _field(out, "SECOND_RAISES") == "yes", f"失败未被记住，第二次调用行为不一致\n{out}"
+
+
+def test_no_download_failure_is_negative_cached_until_retry(tmp_path: Path) -> None:
+    """失败负缓存：TTL 内连续请求只重跑一次本地三级回退，且首次分析不被挡死。"""
+    code = (
+        "from delector.nlp_engine import model_loader as m\n"
+        "calls = []\n"
+        "def boom(name):\n"
+        "    calls.append(name)\n"
+        "    raise RuntimeError('boom-local')\n"
+        "m._load_spacy_model = boom\n"
+        "print('FIRST=%s' % (m.try_load_nlp_no_download() is None))\n"
+        "print('SECOND=%s' % (m.try_load_nlp_no_download() is None))\n"
+        "print('LOAD_CALLS=%d' % len(calls))\n"
+        "print('DIAG_OK=%s' % ('boom-local' in m.get_spacy_load_error()))\n"
+        "print('RESOLVED=%s' % m._nlp_resolved)\n"
+        "print('RESET=%s' % m.reset_nlp_load_failure())\n"
+        "print('THIRD=%s' % (m.try_load_nlp_no_download() is None))\n"
+        "print('LOAD_CALLS_AFTER_RESET=%d' % len(calls))\n"
+    )
+    out = _run_probe(code, tmp_path)
+    assert _field(out, "FIRST") == "True", f"首次失败未诚实返回 None\n{out}"
+    assert _field(out, "SECOND") == "True", f"负缓存命中后未返回 None\n{out}"
+    assert _field(out, "LOAD_CALLS") == "1", f"失败未被负缓存，每个请求都重跑三级回退\n{out}"
+    assert _field(out, "DIAG_OK") == "True", f"失败未写入诊断\n{out}"
+    assert _field(out, "RESOLVED") == "False", f"负缓存误置位 _nlp_resolved\n{out}"
+    assert _field(out, "RESET") == "True", f"显式重试入口未生效\n{out}"
+    assert _field(out, "THIRD") == "True", f"显式重试后未诚实返回 None\n{out}"
+    assert _field(out, "LOAD_CALLS_AFTER_RESET") == "2", f"重试入口没有清除负缓存\n{out}"

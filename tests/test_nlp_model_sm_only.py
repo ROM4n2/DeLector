@@ -121,6 +121,7 @@ def test_no_download_path_returns_none_without_downloading(monkeypatch: pytest.M
 
     monkeypatch.setattr(model_loader, "_nlp_model", None)
     monkeypatch.setattr(model_loader, "_nlp_resolved", False)
+    monkeypatch.setattr(model_loader, "_nlp_failed_at", 0.0, raising=False)
     monkeypatch.setattr(model_loader, "_load_spacy_model", failing_load)
     download_calls: List[str] = []
     monkeypatch.setattr(spacy.cli, "download", lambda name: download_calls.append(name))

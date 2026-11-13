@@ -12,7 +12,7 @@ import sqlite3
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-from delector.core.database import get_db, log_study_event
+from delector.core.database import db_conn, log_study_event
 from delector.core.db.companion import (
     create_proposal as db_create_proposal,
 )
@@ -49,7 +49,7 @@ class CompanionProposalService:
         proposal_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """记录伴学提议条目（默认状态为 pending）。"""
-        with get_db(self.db_path) as conn:
+        with db_conn(self.db_path) as conn:
             return db_create_proposal(
                 conn,
                 session_id=session_id,
@@ -62,7 +62,7 @@ class CompanionProposalService:
 
     def reject_proposal(self, proposal_id: str) -> Dict[str, Any]:
         """将 pending 提议标记为 rejected；不写任何卡片。"""
-        with get_db(self.db_path) as conn:
+        with db_conn(self.db_path) as conn:
             rejected = update_proposal_status(conn, proposal_id, "rejected")
         return {
             "status": "ok" if rejected else "not_found",
@@ -76,7 +76,7 @@ class CompanionProposalService:
         status: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """查询指定会话的提议列表，可按 pending/accepted/rejected 过滤。"""
-        with get_db(self.db_path) as conn:
+        with db_conn(self.db_path) as conn:
             return db_get_proposals(conn, session_id=session_id, status=status)
 
     def _execute_multi_action(
@@ -86,7 +86,7 @@ class CompanionProposalService:
         payload: Dict[str, Any],
     ) -> Dict[str, Any]:
         """执行写作修订或周目标写入；校验、业务写入与状态流转同事务。"""
-        with get_db(self.db_path) as conn:
+        with db_conn(self.db_path) as conn:
             row = conn.execute(
                 "SELECT status FROM companion_proposals WHERE id = ?",
                 (proposal_id,),
@@ -205,7 +205,7 @@ class CompanionProposalService:
             raise ValueError("提议 payload 缺少有效的 'cards' 列表")
 
         created_events: List[Tuple[int, str]] = []
-        with get_db(self.db_path) as conn:
+        with db_conn(self.db_path) as conn:
             # Step 1（只堵新增）：身份 = (lemma_key(lemma), word_key(word))，见
             # delector/core/vocab_identity.py。存量重复未知，故**不建 UNIQUE**；
             # BEGIN IMMEDIATE 把「状态流转 → 查重 → 插入」收成一个写事务：

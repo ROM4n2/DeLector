@@ -91,6 +91,11 @@ _nlp_model: Any = None  # 解析成功后的真实模型对象
 _nlp_resolved = False  # 是否已解析（成功或失败都置位，保证「只加载一次」）
 _nlp_error = ""  # 解析失败原因（供错误信息与诊断）
 
+# 无下载加载失败的负缓存：TTL 内不重跑本地三级回退；到期自动失效，也可显式清除。
+# 它**不**置位 _nlp_resolved（后者只表示主入口已解析），首次分析仍可经主入口重试。
+_NLP_FAILURE_TTL_S = 30.0
+_nlp_failed_at = 0.0
+
 # ── 服务就绪后后台预热（ADR-0028 2026-11-06 修订）──────────────────────────────
 # 动因：Android T5/T6 实测首次分析仍多付 1,215.6 ms（改造前 12.6 ms）的模型加载。
 # 选项 B：服务就绪（uvicorn lifespan startup）后起后台线程加载，把这段时间移出用户等待；
@@ -171,6 +176,21 @@ def _require_loaded_model() -> Any:
 def get_spacy_load_error() -> str:
     """返回运行期模型加载失败的最新诊断（成功或尚未解析则为空串）。"""
     return _nlp_error
+
+
+def _failure_window_open() -> bool:
+    """失败负缓存是否仍在 TTL 内（TTL 内不重跑三级回退）。"""
+    return _nlp_failed_at > 0.0 and (time.monotonic() - _nlp_failed_at) < _NLP_FAILURE_TTL_S
+
+
+def reset_nlp_load_failure() -> bool:
+    """显式重试入口：清除失败负缓存；成功态 / 未解析态不动。"""
+    global _nlp_error, _nlp_failed_at
+    with _model_lock:
+        if _nlp_model is not None or _nlp_failed_at == 0.0:
+            return False
+        _nlp_error, _nlp_failed_at = "", 0.0
+        return True
 
 
 def get_nlp_readiness() -> Dict[str, Any]:
@@ -341,24 +361,33 @@ def try_load_nlp_no_download() -> Any:
     - 本函数取中间态：**本地能加载就加载、加载不上就诚实返回 None，绝不下载**。
 
     成功 ⇒ 写入既有缓存（`_nlp_model` / `_nlp_resolved=True`）并刷新 `NLP_ENGINE` / `NLP_ENGINE_DETAIL`；
-    失败 ⇒ **不写任何全局**（不改 `_nlp_resolved` / `_nlp_error`），返回 None。
+    失败 ⇒ 写负缓存（`_nlp_error` / `_nlp_failed_at`），TTL 内直接返回 None、不再重跑
+    三级回退；失效条件 = `reset_nlp_load_failure()` 显式入口或 TTL 到期。**不**置位
+    `_nlp_resolved`，首次分析仍可经 `_resolve_nlp_model()` 重试。
 
     同步函数（内部不 await），可在 `asyncio.to_thread` 里跑，避免阻塞事件循环。并发安全：
     沿用 `_model_lock` + 双检，保证与 `_resolve_nlp_model()` 共用同一份缓存、不重复加载。
     """
-    global _nlp_model, _nlp_resolved, NLP_ENGINE, NLP_ENGINE_DETAIL
+    global _nlp_model, _nlp_resolved, _nlp_error, _nlp_failed_at, NLP_ENGINE, NLP_ENGINE_DETAIL
     if _nlp_resolved and _nlp_model is not None:
         return _nlp_model
     with _model_lock:
         if _nlp_resolved and _nlp_model is not None:
             return _nlp_model
+        if _failure_window_open():
+            return None
+        if _nlp_failed_at > 0.0:  # TTL 已到：清旧诊断，给本次一次重试机会
+            _nlp_error, _nlp_failed_at = "", 0.0
         try:
             model, how = _load_spacy_model(SPACY_MODEL_NAME)
-        except Exception:
-            # 本地加载失败 ⇒ 诚实返回 None；**绝不**退到 spacy.cli.download（见 docstring）。
+        except Exception as exc:
+            # 本地加载失败 ⇒ 记负缓存后诚实返回 None；**绝不**退到 spacy.cli.download。
+            _nlp_error = str(exc)
+            _nlp_failed_at = time.monotonic()
             return None
         _nlp_model = model
         _nlp_resolved = True
+        _nlp_error, _nlp_failed_at = "", 0.0
         NLP_ENGINE = "spacy"
         NLP_ENGINE_DETAIL = f"spaCy {getattr(spacy, '__version__', 'unknown')} + {how}"
         return _nlp_model
