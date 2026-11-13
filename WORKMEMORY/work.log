@@ -729,3 +729,23 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 Work done: T4 独立 PR（2 提交）+ 模拟器双路径验证；累计 12 个有交付的独立 PR + 1 历史遗留混合分支，工作树干净、未 push / 未开 PR。
 Remaining work: T14（三个失败终态：Android 就绪预算耗尽后的终态文案与重试入口、`exportAndReport` 无 try/catch、Release 自动正文警示）。模拟器已可用，下一轮直接做。
 - 不做：不 push、不开 PR、不发版、不重写历史（均无显式授权）。
+
+### 2026-11-13 18:20 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+T14 落地（计划最后一个 Task），Ledger 收口 16/16。
+- `fix/failure-final-state` `4d8885a`（T14，独立 PR，7 文件 / +211 −32）三处失败终态：
+  ① `MainActivity.java`：就绪预算耗尽后文案从「正在重试连接…」改为「…已停止连接。点此重试。」+ `setTextIsSelectable(true)` + 停 indeterminate spinner + 点击真起 `pollServerReadiness(getFilesDir())`；ready hook 的 `'err'`/`null` 与 `'missing'` 同族复位 `readyHookInjected` CAS。
+  ② `static/german/workbench.html`：`exportAndReport` 加 try/catch，两个导出按钮改 `Promise.resolve().then(...).catch(reportExportFailure)`（同步参数构造抛错也进链）；失败走既有 `error` toast。
+  ③ `.github/workflows/build-release.yml`：自动 Release 正文加「请勿使用 v5.23.1 / v5.23.2」静态警示，并声明人工 `gh release edit` 覆盖后需另行核对（不声称已覆盖）。
+- 探针：`tools/wb_export_probe.mjs` 新增 `download_all_reject` / `click_reject`（8 场景全绿），`tests/test_wb_export_save.py` 场景名集合守卫同步补名。
+- **实测抓到方案判定器两个漏洞**（方案原样会让变异自证假绿）：`setOnClickListener` 被同块的 `setOnClickListener(null)` 兜住 → 改判 `setOnClickListener(v ->`；Release 警示的版本号在同一行后文复述 → 改判全角冒号前的「禁用列表」段。两处均由内建变异用例逼出来。
+- 验证：对点 **123 passed**；ruff / workflow YAML 绿；内建变异（pytest 内坏副本）+ 父树物理变异 2 组（删 `workbench.html` 的 catch → node exit 1；终态文案回退 → pytest exit 1，恢复均复绿）。
+- **模拟器实测**：APK 构建成功（3m19s）；主路径正常（Activity resumed、`ready_notify "missing"` → 补载 → `"false"`、零 FATAL）。
+- **未点验项（如实登记）**：Android **终态 UI 未在模拟器点验**。注入 `StartupReadinessPolicy.maxAttempts()=0` 的做法无效——超时早于服务就绪，WebView 抢先加载并显示 Chromium 错误页（`net::ERR_FAILED`），覆盖了 splash 上的终态文案；要真实复现需让服务「永不就绪」（如破坏 Python 运行时）再等满 36s 预算，本轮未做。arm64 真机同样未点检。故本条只能记「代码 + 判据 + 主路径已验证」，不得写成「终态 UI 已验证」。
+- 收尾：预算常量已恢复（`git status` 干净）、模拟器已装回正常版（358KB 正常首页）、临时 APK/日志/备份已清理。
+
+### 2026-11-13 18:20 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 上条 NOTE 的 T14 独立 PR。**计划 16 个 Task 全部完成**（Ledger 16/16、`active_task_id=null`）；累计 **13 个独立 PR** + 1 个历史遗留混合分支（`fix/repo-health-remediation`），全部工作树干净、未 push、未开 PR。
+Remaining work: 无计划内 Task。**发布前仍需你提供 Android arm64 真机**做覆盖安装点检（T4 的 SW 升级路径 + T14 的终态 UI 都只在 x86_64 模拟器上验证过主路径，终态 UI 甚至模拟器也未点验）；合并顺序与前批一致（历史分支 → 分片注册 → 其余 PR 并行，含中间修正提交的建议 Squash）。
+- 不做：不 push、不开 PR、不发版（均无显式授权）。
