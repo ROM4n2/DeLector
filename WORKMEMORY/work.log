@@ -857,3 +857,19 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 Work done: 处置完最后两个 dependabot PR（#353 合并、#354 带理由关闭）；远端 `master` (`be61af7`) 上 lock 可解、无遗留开放 PR。
 Remaining work: 发布前建议在合并后的 master 上重跑一次 arm64 真机安装冒烟（此前真机验证在分支树做过）。
 - 不做：不发版（无显式授权）。
+
+### 2026-11-13 21:11 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+修复「本地引擎暂不可用」（首屏句子解剖台演示卡），PR #376 已合入 `master`。
+- **根因不是我先前猜的那样**：真机 logcat 时间线显示页面 **2.9s** 就绘制完成，而 **uvicorn 9.7s** 才 `Uvicorn running`；窗口内 `/api/syntax/analyze`、`/api/articles`、`/api/cards/counts`、`/api/settings`、`/api/companion/sessions` **全部** `TypeError: Failed to fetch`。所以是**启动顺序**（页面早于进程内服务约 7s），不是网络/地址/CORS 问题；`curl 127.0.0.1:8000/api/health` 早在 200 也印证了这一点。
+- 演示卡此前是唯一「失败只报错、不自动恢复」的首屏模块——其它模块各自有退避重试（如 `retryArticlesIfWaiting`），它没有，于是把英文 TypeError 直接摊给用户，且重试要手点（`data-retry` 是接好线的，事件委托在 `outputEl` 上）。
+- 修法（`fix/satz-lab-boot-retry` → #376，4 文件 +120/−6）：① 失败视图按「无 status ⇒ 服务还没监听」与「有 status ⇒ 服务回了错误」分开，前者显示「本地引擎正在启动，稍候自动重试…」；② 网络级失败记 `pendingRetry`，新增 `retrySatzLabIfPending()` 挂到既有 `window.notifyServerReady`（该钩子原本只给文章补试）。
+- 验证：`frontend_guards_probe` 由 15 → **22 场景**全绿（新增 7 条，含 2 条变异自证：删状态分类 / 删就绪接线都必须红）；对点 **159 passed**；ruff + `check_index_html_sync` / `check_css_sync` / `check_frontend_api_contract` / `check_frontend_layers` 全 exit 0。真机（`cdb66c`，**clean install**）：`ready_notify` 由 `"false"` → `"true"`，演示卡渲染出真实句法结果（VF 前场 / LK 左框 / 词格标注），`syntax/analyze` 失败次数 1（仅就绪前那一次，随后自动补上）。
+- **一处必须记下的观察**：覆盖安装后**首次启动**仍会显示旧的 `V5.23.4` 页面（来自 SW 缓存），此时新逻辑不生效、需要用户点「立即刷新」或再启一次；clean install 与二次启动均正常。这属于 T4 已定的「不跨 cache + 由 build-stamp/更新条提示刷新」路径，不是本次回归，但意味着「覆盖安装后第一次打开」的体验仍有旧壳。
+- 顺带确认：`api()` 的 25s 超时、`sw.js` 对 `/api/` 直通，二者都不是本次失败的原因（已排除）。
+
+### 2026-11-13 21:11 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 修复首屏演示卡「本地引擎暂不可用」（#376 已合入 master），真机 clean install 验证通过；master 上探针 22/22、前端对点 18 passed。
+Remaining work: 覆盖安装后首次启动仍是旧壳（需刷新一次），若要彻底消除需在解包后用新 SW 强制导航——属另一件事，未做。
+- 不做：不发版（无显式授权）。
