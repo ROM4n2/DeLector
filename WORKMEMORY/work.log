@@ -842,3 +842,18 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 Work done: 整体健康度修复的 16 件事全部经 PR 进入远端 `master`，合并后在 `origin/master` 上完成独立验收（485 passed + 9 闸 + 2 探针 + ruff + mypy 三档）。
 Remaining work: 发布前建议在合并后的 `master` 上重跑一次 arm64 真机安装冒烟（此前的真机验证是在分支树上做的）。6 个过时的本地 dependabot 分支（pr345~350）已删除；远端仍开着 #353(pydantic 2.14.3) / #354(srsly 3.0.1) 两个 dependabot PR，与本轮无关，待单独评估。
 - 不做：不发版（无显式授权）。
+
+### 2026-11-13 20:29 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+评估并处置最后两个 dependabot PR（用 T6 新加的 lock 可解性闸做机器判定，不靠人读版本号）。
+- **#354 srsly 2.5.6→3.0.1：已关闭**。硬证据（`pip install --dry-run --ignore-installed -r requirements.lock.txt`）：`The user requested srsly==3.0.1` / `spacy 3.8.18 depends on srsly<3.0.0 and >=2.5.3`（thinc 同族 `<3.1.0`）。另 Android 面装的是 `spacy==3.8.7` + 本地供给的 `srsly-2.4.4-cp310-android_*` wheel，3.x 没对应 wheel。关闭理由已写进 PR 评论：要 srsly 3.x 得作为「spaCy 大版本升级」专项做，不是 dependabot 单项能覆盖的。
+- **#353 pydantic 2.14.2→2.14.3：修好后已合并**。dependabot 只升了 pydantic，但 `pydantic 2.14.3 depends on pydantic-core==2.50.4`，lock 仍钉 2.50.2 ⇒ ResolutionImpossible。补一个提交把它升到 2.50.4（`requirements.txt` 的 2026-11-11 批量合并注释本来就写着这条，只是 lock 没落地）→ 闸通过 → 合并。
+- 运行时证据（不只是可解）：本地装 pydantic 2.14.3 + core 2.50.4 后 `create_app()` 27 路由正常，`localhost_guard` / `server_ai_polish` / `audit_hardening` 共 **82 passed**。
+- **Android 面不受影响**：Chaquopy 侧装的是 `pydantic<2.0.0` + `fastapi<0.100.0` + `spacy==3.8.7`，两处升级都只动桌面/服务端 lock。
+- 顺手发现一处契约漂移：合并前 `requirements.lock.txt` 的 blob 是 **LF**，而 `.gitattributes` 第 13 行通用规则是 `* text=auto eol=crlf`。这次合并把它归位成 CRLF，于是产生 83 行纯 EOL 的整文件 diff（内容只变 2 个 pin）。文件现在符合契约、pip 解析与 lock 闸均正常；那 83 行噪声属于一次性 renormalize，不是回归。
+
+### 2026-11-13 20:29 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 处置完最后两个 dependabot PR（#353 合并、#354 带理由关闭）；远端 `master` (`be61af7`) 上 lock 可解、无遗留开放 PR。
+Remaining work: 发布前建议在合并后的 master 上重跑一次 arm64 真机安装冒烟（此前真机验证在分支树做过）。
+- 不做：不发版（无显式授权）。
