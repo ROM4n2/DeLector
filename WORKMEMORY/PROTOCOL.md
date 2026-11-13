@@ -1,4 +1,5 @@
 # WORKMEMORY 协议（跨 Agent 共享工作记忆）
+
 > protocol-version: 1
 
 > 本文件是协议本体，所有能读写文件的 AI agent（Claude Code / Codex / OpenCode / Antigravity / Gemini CLI / CodeBuddy / …）一律遵守。
@@ -29,6 +30,7 @@
 
 ```markdown
 ### YYYY-MM-DD HH:MM | <agent-id> | <EVENT_TYPE>
+
 <body>
 ```
 
@@ -36,15 +38,15 @@
 - 事件头下一行 MUST 附能力声明一行：`Caps: filesystem-read, filesystem-write, shell-exec, web-fetch …`（vendor-neutral 通用词，不写各家工具名）。
 - `EVENT_TYPE` 最小集：
 
-| 类型 | 用途 |
-| --- | --- |
-| `WORK_START` | 开始一段有明确目标的任务；收尾时必须有配对 `WORK_END`。推荐附「不做范围」一行（本任务明确排除的功能/重构/顺手修改），对抗 scope creep |
-| `WORK_END` | 任务收尾：做了什么、验证方式（测试命令+结果）、产出物路径。推荐做「回写检查」：稳定结论已回写（vault/模块文档/INDEX）？临时产物（日志/真实数据/凭据/截图）未入库？ |
-| `DECISION` | 架构/实现决策，MUST 含 why 一句话 |
-| `PITFALL` | 踩坑：现象 + 根因 + 解法各一句；成熟后走 知识蒸馏 |
-| `HANDOFF` | 交接包已写：指向 `handoff_<topic>.md` |
-| `HANDOFF_RECEIVED` | 接收方确认收到并响应 |
-| `NOTE` | 其他一切（并行声明、补充、勘误） |
+| 类型               | 用途                                                                                                                                                               |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `WORK_START`       | 开始一段有明确目标的任务；收尾时必须有配对 `WORK_END`。推荐附「不做范围」一行（本任务明确排除的功能/重构/顺手修改），对抗 scope creep                              |
+| `WORK_END`         | 任务收尾：做了什么、验证方式（测试命令+结果）、产出物路径。推荐做「回写检查」：稳定结论已回写（vault/模块文档/INDEX）？临时产物（日志/真实数据/凭据/截图）未入库？ |
+| `DECISION`         | 架构/实现决策，MUST 含 why 一句话                                                                                                                                  |
+| `PITFALL`          | 踩坑：现象 + 根因 + 解法各一句；成熟后走 知识蒸馏                                                                                                                  |
+| `HANDOFF`          | 交接包已写：指向 `handoff_<topic>.md`                                                                                                                              |
+| `HANDOFF_RECEIVED` | 接收方确认收到并响应                                                                                                                                               |
+| `NOTE`             | 其他一切（并行声明、补充、勘误）                                                                                                                                   |
 
 ### 标准追加命令（Windows Git Bash 模板）
 
@@ -69,7 +71,7 @@ EOF
 3. `tail -n 50 WORKMEMORY/work.log`（最近事件流）；**顺手 `grep -c '^### ' WORKMEMORY/work.log`，若计数 > `HOT_RETENTION_EVENTS × 1.5` 就先按 §5 轮转再做别的**（把轮转变成读序的第一步，别等有人想起来才做）。
 4. 查旧主题：`grep -i "<关键词>" WORKMEMORY/INDEX-topics.md` → 按索引只加载命中的 archive 文件，禁止通读全部历史。（2026-10-17 起主题索引不在 `INDEX.md`，避免热层膨胀。）
 
-## 4. 交接包（handoff_*.md）
+## 4. 交接包（handoff\_\*.md）
 
 ```markdown
 ---
@@ -80,11 +82,15 @@ role: IMPLEMENT | REVIEW | INSPECT | TEST | VERIFY | FIX（可组合）
 required_capability: <如 image-input / android-build；无则省略>
 status: open
 ---
+
 # Handoff: <主题>
 
 ## 任务上下文
+
 ## 已完成（含证据：测试命令与结果）
+
 ## 未完成 / 下一步
+
 ## 风险与坑
 ```
 
@@ -120,7 +126,7 @@ status: open
 ## 6. 与 vault 的蒸馏联动
 
 - WORKMEMORY 只存**状态与轨迹**；vault（（本机知识库，不随仓库分发）
-- 会话收尾（`/vault-save` 或 agent 主动判定）时：work.log 中成熟的 PITFALL/DECISION → 按 vault 摄取流程沉淀（`save_inbox_draft` 或直写 私有笔记库）→ 在 INDEX.md 蒸馏登记节标注 `私有笔记库`（用 `私有笔记库` 前缀说明性文字，不写 私有笔记库 wikilink，避免跨库断链）。
+- 会话收尾（`/dfs-save` 或 agent 主动判定）时：work.log 中成熟的 PITFALL/DECISION → 按 vault 摄取流程沉淀（`save_inbox_draft` 或直写 私有笔记库）→ 在 INDEX.md 蒸馏登记节标注 `私有笔记库`（用 `私有笔记库` 前缀说明性文字，不写 私有笔记库 wikilink，避免跨库断链）。
 - 反向：vault 规范更新若影响本项目工作方式，当前 agent 记一条 `NOTE` 指向 vault 路径。
 
 ## 7. 多机 / 云同步附录（默认不启用）
