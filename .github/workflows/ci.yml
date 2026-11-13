@@ -84,6 +84,9 @@ jobs:
         run: |
           pip install -r requirements.txt
           pip install pytest
+          # yaml 仅供接线守卫测试（结构化解析 workflow）使用，属测试期依赖，
+          # 不进 requirements.txt（避免混入 Android 运行时打包面）。
+          pip install pyyaml
           # Pillow 仅供 tests/test_pwa_manifest.py 的 PNG 尺寸守卫使用，属测试期依赖，
           # 不进 requirements.txt（避免混入 Android 运行时打包面）。
           pip install pillow
@@ -695,3 +698,11 @@ jobs:
       # reviews/ 且长期未登记索引。规则来源与白名单理由见工具 docstring。
       - name: Enforce docs layout criteria
         run: python3 tools/check_docs_layout.py
+
+      # requirements.lock.txt 可解性机械闸（T6）：CI 只装 requirements.txt、从不读 lock，
+      # dependabot 造出不可解组合时门禁全绿。pip 自带 --dry-run 是真求解，不落盘、
+      # 不改环境，也不引入 uv / pip-compile 等新工具链。MUST 保持 fail-loud（不得容错）。
+      # step 级上限与 job 级 2 分钟预算同源；放宽 job 超时属另一件事，不在本 PR。
+      - name: Verify requirements.lock.txt is solvable
+        timeout-minutes: 2
+        run: python -m pip install --dry-run --ignore-installed -r requirements.lock.txt
