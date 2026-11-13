@@ -533,6 +533,7 @@ def test_get_loaded_nlp_is_read_only(monkeypatch):
     from delector.nlp_engine import model_loader, processor
 
     monkeypatch.setattr(model_loader, "_nlp_resolved", False)
+    monkeypatch.setattr(model_loader, "_nlp_failed_at", 0.0, raising=False)
     monkeypatch.setattr(model_loader, "_nlp_model", None)
     calls = {"n": 0}
 
@@ -557,6 +558,7 @@ def test_try_load_nlp_no_download_loads_locally(monkeypatch):
 
     sentinel = object()
     monkeypatch.setattr(model_loader, "_nlp_resolved", False)
+    monkeypatch.setattr(model_loader, "_nlp_failed_at", 0.0, raising=False)
     monkeypatch.setattr(model_loader, "_nlp_model", None)
     monkeypatch.setattr(model_loader, "_load_spacy_model", lambda name: (sentinel, f"{name}(stub)"))
 
@@ -575,6 +577,7 @@ def test_try_load_nlp_no_download_never_downloads(monkeypatch):
     from delector.nlp_engine import model_loader, processor
 
     monkeypatch.setattr(model_loader, "_nlp_resolved", False)
+    monkeypatch.setattr(model_loader, "_nlp_failed_at", 0.0, raising=False)
     monkeypatch.setattr(model_loader, "_nlp_model", None)
 
     def _boom(name: str) -> Any:
