@@ -99,9 +99,11 @@ async function networkFirst(event, request) {
     const cache = await caches.open(CACHE_NAME);
     const cached = await cache.match(request);
     if (cached) return cached;
-    // 导航请求只在**真离线**时回落应用外壳；服务未就绪（fetch 失败但在线）
-    // 必须让错误冒泡，交给 MainActivity 的就绪探针补载，而不是拿旧壳冒充成功。
-    if (request.mode === "navigate" && self.navigator.onLine === false) {
+    // 导航请求仍回落应用外壳：Android WebView 首帧（实测 ≈0.5s）必然早于
+    // 进程内服务就绪（实测 python_start_done ≈1.4s），不回落会直接停在
+    // net::ERR_FAILED 错误页 —— 2026-11-13 模拟器实测证伪了「在线未就绪不回落」。
+    // 旧壳的版本失配由页面侧 build-stamp 自检触发清缓存 + 刷新，不在这里拦。
+    if (request.mode === "navigate") {
       const shell = await cache.match("/");
       if (shell) return shell;
     }
