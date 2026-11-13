@@ -10,20 +10,20 @@
 
 ## 文档路由
 
-| 需要什么 | 去哪 |
-| --- | --- |
-| 当前状态 / 红线速查 / 开放待办 / 项目定位 | `WORKMEMORY/PROJECT_OVERVIEW.md` |
-| 架构细节：技术栈 / NLP 降级 / Android 互锁 / DB schema / API 全览 / 前端拓扑 / LAN 同步 / FSRS / 完形 / 切句 | `docs/agents/architecture.md` |
-| 安全守卫 / 本机环境 / 打包 / Agent 工作惯例 | `docs/agents/ops.md` |
-| 视觉回归：截图矩阵 / computed-style 基线 / 颜色与对比度闸 | `docs/agents/visual-regression.md` |
-| 设计系统 / 视觉 Token / 组件蓝图 | `docs/design-system.md`（token 现值以 `static/css/tokens.css` 为准） |
-| 版本历史与发布记录 | `CHANGELOG.md`（版本历史正主）+ git tag / GitHub Releases |
-| 贡献指南与行为准则 | `CONTRIBUTING.md` / `CODE_OF_CONDUCT.md` |
-| 安全策略与漏洞报告 | `SECURITY.md` |
-| 产品特性全览 / 设计与实施计划 | `FEATURES.md`；`docs/specs/`（设计稿）、`docs/plans/`（在途计划；已交付的进 `docs/plans/archive/`） |
-| 文档该放哪 / docs 目录约定（分层与归档规则） | `docs/README.md` |
-| 本机知识库（规范 / 避坑 / 沉淀） | 本机 MCP（`search_vault` / `save_inbox_draft`）或 `/vault-save`；**仓库不含其路径与内容** |
-| 工程规范与避坑检索（3 行锚点） | `CLAUDE.md` / `.agent-rules.md` / `.cursorrules` |
+| 需要什么                                                                                                     | 去哪                                                                                                |
+| ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| 当前状态 / 红线速查 / 开放待办 / 项目定位                                                                    | `WORKMEMORY/PROJECT_OVERVIEW.md`                                                                    |
+| 架构细节：技术栈 / NLP 降级 / Android 互锁 / DB schema / API 全览 / 前端拓扑 / LAN 同步 / FSRS / 完形 / 切句 | `docs/agents/architecture.md`                                                                       |
+| 安全守卫 / 本机环境 / 打包 / Agent 工作惯例                                                                  | `docs/agents/ops.md`                                                                                |
+| 视觉回归：截图矩阵 / computed-style 基线 / 颜色与对比度闸                                                    | `docs/agents/visual-regression.md`                                                                  |
+| 设计系统 / 视觉 Token / 组件蓝图                                                                             | `docs/design-system.md`（token 现值以 `static/css/tokens.css` 为准）                                |
+| 版本历史与发布记录                                                                                           | `CHANGELOG.md`（版本历史正主）+ git tag / GitHub Releases                                           |
+| 贡献指南与行为准则                                                                                           | `CONTRIBUTING.md` / `CODE_OF_CONDUCT.md`                                                            |
+| 安全策略与漏洞报告                                                                                           | `SECURITY.md`                                                                                       |
+| 产品特性全览 / 设计与实施计划                                                                                | `FEATURES.md`；`docs/specs/`（设计稿）、`docs/plans/`（在途计划；已交付的进 `docs/plans/archive/`） |
+| 文档该放哪 / docs 目录约定（分层与归档规则）                                                                 | `docs/README.md`                                                                                    |
+| 本机知识库（规范 / 避坑 / 沉淀）                                                                             | 本机 MCP（`search_vault` / `save_inbox_draft`）或 `/dfs-save`；**仓库不含其路径与内容**             |
+| 工程规范与避坑检索（3 行锚点）                                                                               | `CLAUDE.md` / `.agent-rules.md` / `.cursorrules`                                                    |
 
 ---
 
