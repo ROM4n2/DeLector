@@ -89,3 +89,41 @@ def test_lock_degradation_emits_visible_warning(
     err = capsys.readouterr().err
     assert "WARNING" in err
     assert "不是真互斥" in err
+
+
+def test_dotenv_path_must_not_override_explicit_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """钉住 dotenv 本身那条路径：注入假模块，使守卫不依赖本机是否装了 dotenv。
+
+    本机未装 python-dotenv 时，`load_env()` 走 except + 手写兜底，
+    `override=False` 的改动无人守 —— 单改回 `override=True` 仍能绿。
+    这里显式注入模块并模拟「override=True 会覆写显式 env」的真实语义。
+    """
+    import sys
+    import types
+
+    import delector.server as server
+
+    seen: list[dict] = []
+
+    def fake_load_dotenv(**kwargs) -> None:
+        seen.append(kwargs)
+        if kwargs.get("override", False):
+            os.environ["DEEPSEEK_API_KEY"] = "FROM_STALE_DOTENV"
+
+    monkeypatch.setitem(
+        sys.modules, "dotenv", types.SimpleNamespace(load_dotenv=fake_load_dotenv)
+    )
+    (tmp_path / ".env").write_text(
+        "DEEPSEEK_API_KEY=FROM_STALE_DOTENV\n", encoding="utf-8"
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "INJECTED_EXPLICIT")
+
+    server.load_env()
+
+    assert seen and seen[0].get("override") is False, (
+        "dotenv 被允许覆写显式注入的 env（override 不是 False）"
+    )
+    assert os.environ["DEEPSEEK_API_KEY"] == "INJECTED_EXPLICIT"
