@@ -37,6 +37,8 @@
   - **内容**：复盘直推 master 流程缺陷（25 个实现提交未走 PR）；提出并推动落地分支纪律机械闸 `check_master_commit_scope.py`。
 - [2026-10-16 Open Items Backlog (未决项总台账)](2026-10-16-open-items-backlog.md)
   - **内容**：全仓唯一待办总账，追踪 A 档（P0/P1 修复）、B 档（工程规矩治理）、C 档（C1~C9 深度解耦与实验回灌）；当前已全量闭环交付。
+- [2026-11-13 仓库整体健康度群体审计](2026-11-13-repo-health-swarm-audit.md)
+  - **内容**：6 席位全量只读审计 + 2 席独立反证；56 条原始 finding 折叠为 20 条（4 条 CONFIRMED P1 / 1 条 PLAUSIBLE / 15 条 P2），覆盖数据安全、SW 缓存、交付链护栏、门禁自证与活文档漂移；配套实施计划 `docs/plans/2026-11-13-repo-health-remediation.md`。
 
 ---
 

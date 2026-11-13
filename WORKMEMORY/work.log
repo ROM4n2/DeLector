@@ -584,3 +584,23 @@ v5.23.4 发版收尾。
 - Release 正文按模板整份写入（含本版资产表）；v5.23.1 / v5.23.2 的警示仍指向可用版本（v5.23.3 及更早的警示文案无需再改）。
 - 依赖环境：项目级 `.venv` 已按 lock 升级（fastapi 0.162.2 / click 8.5.1 / typer 0.28.0 / typing-inspection 0.4.5 / numpy 2.4.6 / pydantic 2.14.2 + core 2.50.2）——**全部装在项目级 .venv，未动全局解释器**（用户明确要求）。
 - 遗留：桌面导出未在冻结 exe / macOS / Linux 验证；arm64 真机仍未点检；本地 2 failed + 3 errors 为既有环境噪声（GBK / player_tray_probe / probe_json_contract，纯 master 上同样红）。
+
+### 2026-11-13 13:41 | tencent-hunyuan-hy__codebuddy | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec, git
+用户指定「整体健康度」为 /dfs-team 审计目标（repo 级，非某个 diff）。why：工作树干净且项目阶段性暂停，需要一次全面体检而非局部复核。
+- 编排：6 席分两批各 3 席（code-reviewer / dba-optimizer / sre-resilience + frontend-architect / product-ux / perf-profiler），全跑未裁剪；另 2 席独立 skeptic 对 17 条 P1 逐条反证。
+- 结论：56 条原始 finding 折叠为 20 条（4 CONFIRMED P1 / 1 PLAUSIBLE / 15 P2），无 P0、不叫停；综合 3.5/5。4 条 CONFIRMED = restore 快照回写抹并发写入、数据目录迁移漏 progress.db、发布侧真启闸无硬截止、SW 旧缓存无条件回落。
+- 降级纪律：12/17 条 P1 被 skeptic 降级；产品席 5 条 P1 无一 CONFIRMED（「未验证」不等于「已坏」）。数据席一条证据有误（cards.py:542-550 实为 6 列 UPDATE 且 correct_count 原子增），已在报告订正。
+- 编排者踩坑（已更正）：派单时把另一项目 agent-api 的 Enqueue / ErrQueueFull / 队列满 503 误写为本仓 agent/ 背景；skeptic 实查 62 个 .go 确认不存在，本仓 worker-pool 只在 agent/internal/job/runner.go（离线包固定并发）。勿据旧背景立项。
+- 产出：docs/reviews/2026-11-13-repo-health-swarm-audit.md（已在 docs/reviews/README.md 按精确文件名登记）+ docs/plans/2026-11-13-repo-health-remediation.md（16 Task / 5 Stage / 20-20 追溯表 / 待拍板 D1~D5）。均为报告与方案，未改生产源码、CI 定义、测试。
+- 验证：tools/check_docs_layout.py 退出码 0（251 文件、6 条白名单）；tests/test_docs_layout_gate.py 12 passed（1 条 fastapi StarletteDeprecationWarning，非本项目）。未跑全量 pytest；测试基线 3040/3054 仅引自 README 的 v5.23.4 实测记录，未记成本轮实测。
+- 下一步：D1（暂停期只做 Stage 1 还是 1+2）/ D2~D5 待用户拍板；Stage 0 决策文档先合入 master，才可开执行分支（PROTOCOL §1.8）。
+
+### 2026-11-13 13:49 | tencent-hunyuan-hy__codebuddy | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec, git
+任务：按用户批准「火力全开」执行 docs/plans/2026-11-13-repo-health-remediation.md 的 Stage 1~4（16 Task），工作流 dfs-exec + dfs-orchestrate。
+不做范围：不跑全量 pytest（用户硬约束，只对点测试）、不 push、不开 PR、不发版、不真机点检、不对外披露项目暂停（D5=B）。
+- 用户裁决：D1=Stage 1~4 全做；D2=A 同进程 threading.Lock；D3=B 保持空戳契约；D4=B stdlib 判定器；D5=B 不对外披露。权威文本见计划 EXECUTION ADDENDUM。
+- 执行形态：单一分支 fix/repo-health-remediation（dfs-exec 的 VCS 隔离硬闸优先于计划 GC2）；Stage 0 决策文档为分支首个原子提交（以提交顺序满足 GC3）；每 Stage 后派独立只读 reviewer + 父树复现至少 1 组变异；以 PR-ready 形态停在本地。
+- 能力边界：本环境只有只读 code-explorer 子代理，无法派实现型 Maker，实现在编排者线程完成；登记为技术债。
+- 旧台账 .vault-exec-ledger.json 为 2026-10-31 已完成 9/9、active_task_id=null 的死台账，本轮 init 覆盖（历史在 git）。
