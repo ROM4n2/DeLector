@@ -285,6 +285,7 @@ def test_frontend_tsc_gate_pins_fixed_version_in_ci() -> None:
 FRONTEND_GATE_STEP_NAMES = (
     "Frontend API contract gate (routes)",
     "Frontend index.html template sync gate",
+    "Frontend style.css source sync gate",
     "Frontend layer invariants gate",
     "Frontend API-boundary type gate (tsc)",
 )

@@ -124,15 +124,6 @@ def _rel_files(docs_root: Path) -> list[str]:
     )
 
 
-def _rel_dirs(docs_root: Path) -> list[str]:
-    """返回 docs 根下全部目录的 POSIX 相对路径（含空目录）。"""
-    return sorted(
-        path.relative_to(docs_root).as_posix()
-        for path in docs_root.rglob("*")
-        if path.is_dir()
-    )
-
-
 def _match_exemption(rel_path: str, whitelist: Sequence[Exemption]) -> Optional[Exemption]:
     """精确文件或目录前缀匹配白名单。"""
     for exemption in whitelist:

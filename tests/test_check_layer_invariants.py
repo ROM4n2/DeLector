@@ -124,3 +124,43 @@ def test_ci_workflow_invokes_check_layer_invariants() -> None:
         "ci.yml 缺少 check_layer_invariants 机械闸调用"
     )
 
+
+def test_empty_scan_surface_must_not_pass(tmp_path: Path) -> None:
+    """变异自证 5（2026-11-13 审计 P2 #1）：扫描面为空时不得恒绿。
+
+    旧实现在 `violations=[] && total_mods=0` 时照样打印「100% 单向层序」并 return 0；
+    目录被清空或扫描器解析全失败时，CI 会拿着空结果放行。环境错误必须退 2
+    （与同族 check_silent_degradation.py / check_mock_drift.py 口径一致）。
+    """
+    mod = _load_module()
+    dummy_repo = tmp_path / "repo"
+    (dummy_repo / "delector").mkdir(parents=True)
+
+    buf_out = io.StringIO()
+    buf_err = io.StringIO()
+    code = mod.run_gate(dummy_repo, stdout=buf_out, stderr=buf_err)
+
+    assert code == 2, f"空扫描面被判成合规（恒绿）：{buf_out.getvalue()}"
+    assert "扫描面为空" in buf_err.getvalue()
+    assert "100% 单向层序" not in buf_out.getvalue()
+
+
+def test_all_parse_failures_must_not_pass(tmp_path: Path) -> None:
+    """变异自证 6（独立 reviewer MAJOR）：文件在、解析全失败时同样不得恒绿。
+
+    旧实现 `total_mods = len(modules)` 数的是文件数；所有 `.py` 语法错误时
+    `violations=[]` 且 total_mods>0 ⇒ 打印「100% 单向层序」并 return 0。
+    """
+    mod = _load_module()
+    dummy_repo = tmp_path / "repo"
+    core = dummy_repo / "delector" / "core"
+    core.mkdir(parents=True)
+    (core / "broken.py").write_text("def f(:\n    pass\n", encoding="utf-8")
+
+    buf_out = io.StringIO()
+    buf_err = io.StringIO()
+    code = mod.run_gate(dummy_repo, stdout=buf_out, stderr=buf_err)
+
+    assert code == 2, f"解析全失败被判成合规（恒绿）：{buf_out.getvalue()}"
+    assert "100% 单向层序" not in buf_out.getvalue()
+

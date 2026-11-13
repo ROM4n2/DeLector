@@ -144,6 +144,19 @@ def test_missing_separator_is_rejected(tmp_path: Path) -> None:
     assert "缺少一行 `---` 分隔" in _messages(module.check(root))
 
 
+def test_missing_change_section_is_rejected(tmp_path: Path) -> None:
+    """FORMAT RULES 规则 2（2026-11-13 审计 P2 #14）：最新版本块缺变更小节必须红。
+
+    顶部注释宣称「机械校验 1-3 条」，但规则 2 一直只靠人记；本用例把
+    `### 新增/修复/内部/文档` 至少一个的判据钉死。
+    """
+    module = _load_tool()
+    broken = GOOD_CHANGELOG.replace("### 修复\n\n- 修了 A。\n\n", "", 1)
+    root = _make_repo(tmp_path, {**_good_files(), "CHANGELOG.md": broken})
+    messages = _messages(module.check(root))
+    assert "规则 2" in messages, f"缺少变更小节却没被拦：{messages}"
+
+
 def test_latest_block_missing_sections_is_rejected(tmp_path: Path) -> None:
     module = _load_tool()
     broken = GOOD_CHANGELOG.replace("### 已知限制（Known Limitations）", "### 已知边界").replace(

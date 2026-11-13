@@ -6,7 +6,7 @@ from typing import AsyncIterator, Awaitable, Callable
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 # Windows 的 mimetypes 读注册表，.woff2 未必登记 → 静态资源落到
@@ -355,6 +355,37 @@ def create_app() -> FastAPI:
     # 静态资源指纹的算力来源：/api/health 需要知道「当前磁盘上的前端到底是哪一版」。
     # 由工厂显式挂到 app.state，避免路由模块反向 import server（会成环）。
     app.state.static_dir = STATIC_DIR
+    async def _restore_write_barrier(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        """还原期间挡住其它请求（2026-11-13 审计 P1 #1，见 db/backup.py）。
+
+        覆盖**所有** HTTP 方法与路径（还原端点自身除外）：文章详情 GET 也会做
+        `processed_json` 惰性迁移并 UPDATE，只拦写方法会留一条绕过路径。
+        Event 置位时立即 503 + Retry-After，**不排队**，避免占满 anyio 线程池
+        把还原自己饿死。
+        """
+        # 惰性 import：server.py 明文要求 load_env() 先跑，之后才 import 依赖 env
+        # 的模块；顶层 import 会抢先冻结 connection.DATA_DIR（独立 reviewer MAJOR）。
+        from delector.core.db import backup as db_backup
+
+        if request.url.path == "/api/backup/restore":
+            return await call_next(request)
+        if not db_backup.note_write_start():
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "restore_in_progress"},
+                headers={"Retry-After": "1", "Cache-Control": "no-store"},
+            )
+        try:
+            return await call_next(request)
+        finally:
+            db_backup.note_write_end()
+
+    # Starlette 先注册的 middleware 在**内层**：屏障放最内层，它直接 return 的
+    # 503 才会依次经过 no-cache 与 CORS 两层拿到 ACAO（放最外层会绕过 CORS，
+    # 局域网写请求读不到 detail / Retry-After）。原有两者的相对顺序不变。
+    app.middleware("http")(_restore_write_barrier)
     app.middleware("http")(add_frontend_no_cache_headers)
     app.middleware("http")(_wb_sync_cors)
     register_routes(app)

@@ -4,11 +4,11 @@
 >
 > 单文件后端（FastAPI + spaCy + SQLite + FSRS 引擎）+ 零构建原生前端（ES Modules + PWA）；**三种形态共用同一后端**：桌面原生窗口（pywebview + 系统托盘）/ Windows·macOS·Linux 便携版（PyInstaller）/ Android 独立单机版（Chaquopy）。开箱即用，数据 100% 掌握在自己手中（桌面端默认落在 `%LOCALAPPDATA%\DeLector`）。
 >
-> **本文件是产品特性清单，对应 v5.22.1**；**版本历史与逐版变更的正主是 [`CHANGELOG.md`](CHANGELOG.md)**，本文件不复制第二份。
+> **本文件是产品特性全景快照（内容对应 v5.22.1 时点，不代表当前版本的能力边界）**；**版本历史与逐版变更的正主是 [`CHANGELOG.md`](CHANGELOG.md)**，本文件不复制第二份。逐版新增 / 修复 / 已知限制请以 CHANGELOG 为准。
 
 ---
 
-## 核心功能全览（v5.22.1）
+## 核心功能全览（特性快照 · v5.22.1 时点）
 
 | 能力域 | 一句话 |
 | --- | --- |

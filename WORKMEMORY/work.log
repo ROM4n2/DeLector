@@ -584,3 +584,243 @@ v5.23.4 发版收尾。
 - Release 正文按模板整份写入（含本版资产表）；v5.23.1 / v5.23.2 的警示仍指向可用版本（v5.23.3 及更早的警示文案无需再改）。
 - 依赖环境：项目级 `.venv` 已按 lock 升级（fastapi 0.162.2 / click 8.5.1 / typer 0.28.0 / typing-inspection 0.4.5 / numpy 2.4.6 / pydantic 2.14.2 + core 2.50.2）——**全部装在项目级 .venv，未动全局解释器**（用户明确要求）。
 - 遗留：桌面导出未在冻结 exe / macOS / Linux 验证；arm64 真机仍未点检；本地 2 failed + 3 errors 为既有环境噪声（GBK / player_tray_probe / probe_json_contract，纯 master 上同样红）。
+
+### 2026-11-13 13:41 | tencent-hunyuan-hy__codebuddy | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec, git
+用户指定「整体健康度」为 /dfs-team 审计目标（repo 级，非某个 diff）。why：工作树干净且项目阶段性暂停，需要一次全面体检而非局部复核。
+- 编排：6 席分两批各 3 席（code-reviewer / dba-optimizer / sre-resilience + frontend-architect / product-ux / perf-profiler），全跑未裁剪；另 2 席独立 skeptic 对 17 条 P1 逐条反证。
+- 结论：56 条原始 finding 折叠为 20 条（4 CONFIRMED P1 / 1 PLAUSIBLE / 15 P2），无 P0、不叫停；综合 3.5/5。4 条 CONFIRMED = restore 快照回写抹并发写入、数据目录迁移漏 progress.db、发布侧真启闸无硬截止、SW 旧缓存无条件回落。
+- 降级纪律：12/17 条 P1 被 skeptic 降级；产品席 5 条 P1 无一 CONFIRMED（「未验证」不等于「已坏」）。数据席一条证据有误（cards.py:542-550 实为 6 列 UPDATE 且 correct_count 原子增），已在报告订正。
+- 编排者踩坑（已更正）：派单时把另一项目 agent-api 的 Enqueue / ErrQueueFull / 队列满 503 误写为本仓 agent/ 背景；skeptic 实查 62 个 .go 确认不存在，本仓 worker-pool 只在 agent/internal/job/runner.go（离线包固定并发）。勿据旧背景立项。
+- 产出：docs/reviews/2026-11-13-repo-health-swarm-audit.md（已在 docs/reviews/README.md 按精确文件名登记）+ docs/plans/2026-11-13-repo-health-remediation.md（16 Task / 5 Stage / 20-20 追溯表 / 待拍板 D1~D5）。均为报告与方案，未改生产源码、CI 定义、测试。
+- 验证：tools/check_docs_layout.py 退出码 0（251 文件、6 条白名单）；tests/test_docs_layout_gate.py 12 passed（1 条 fastapi StarletteDeprecationWarning，非本项目）。未跑全量 pytest；测试基线 3040/3054 仅引自 README 的 v5.23.4 实测记录，未记成本轮实测。
+- 下一步：D1（暂停期只做 Stage 1 还是 1+2）/ D2~D5 待用户拍板；Stage 0 决策文档先合入 master，才可开执行分支（PROTOCOL §1.8）。
+
+### 2026-11-13 13:49 | tencent-hunyuan-hy__codebuddy | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec, git
+任务：按用户批准「火力全开」执行 docs/plans/2026-11-13-repo-health-remediation.md 的 Stage 1~4（16 Task），工作流 dfs-exec + dfs-orchestrate。
+不做范围：不跑全量 pytest（用户硬约束，只对点测试）、不 push、不开 PR、不发版、不真机点检、不对外披露项目暂停（D5=B）。
+- 用户裁决：D1=Stage 1~4 全做；D2=A 同进程 threading.Lock；D3=B 保持空戳契约；D4=B stdlib 判定器；D5=B 不对外披露。权威文本见计划 EXECUTION ADDENDUM。
+- 执行形态：单一分支 fix/repo-health-remediation（dfs-exec 的 VCS 隔离硬闸优先于计划 GC2）；Stage 0 决策文档为分支首个原子提交（以提交顺序满足 GC3）；每 Stage 后派独立只读 reviewer + 父树复现至少 1 组变异；以 PR-ready 形态停在本地。
+- 能力边界：本环境只有只读 code-explorer 子代理，无法派实现型 Maker，实现在编排者线程完成；登记为技术债。
+- 旧台账 .vault-exec-ledger.json 为 2026-10-31 已完成 9/9、active_task_id=null 的死台账，本轮 init 覆盖（历史在 git）。
+
+### 2026-11-13 15:06 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+独立 reviewer 席位在本批次提交上找出 2 个 BLOCKER + 6 个 MAJOR，全部已修并经第二个 reviewer 席位复核（8 项 RESOLVED，末项再收紧后亦已变异自证）。
+- BLOCKER-1：`note_write_start()` 原先把「检查 Event」与「登记在途计数」分两步、非原子，写请求可在窗口内溜进 restore 的 4 段事务间隙并被 `snap.backup(live)` 整库抹掉 ⇒ 修复：同一把 `RESTORE_WRITE_LOCK` 内原子完成检查+登记，返回 bool 供 middleware 决定 503。
+- BLOCKER-2：并发两个 restore 无互斥，先结束者 `clear()` Event 会让仍在还原者裸露 ⇒ 修复：`RESTORE_OWNER_LOCK.acquire(blocking=False)`，第二个直接拒绝，finally 复位 Event 与 owner。
+- MAJOR 族：屏障只拦写方法，但 `GET /api/articles/{id}` 会做 `processed_json` 惰性迁移并 UPDATE（改为覆盖所有方法/路径，仅排除 restore 自身）；顶层 import `db.backup` 抢在 `load_env()` 之前冻结 `DATA_DIR`（改为 middleware 内惰性 import）；503 在最外层直接 return 绕过 CORS（屏障改为最先注册＝最内层）；接线无守卫（补 monkeypatch 计数行为探针）；`total_mods` 数文件数导致「解析全失败」恒绿（改为成功解析数）；发布侧子串断言挡不住「心跳与真启拆成两行」（改为 `--[ \t]+` 的同一行包裹判据）。
+- 教训：为求「最小改动」把屏障放在 HTTP 层，反而一次引入 6 处语义洞；对抗式独立 reviewer 是必需环节，不是可跳过的仪式。复核席位又指出 `--\s+` 会吃换行，已收紧并用物理变异（拆两行）验证必红。
+
+### 2026-11-13 15:06 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 整体健康度修复计划 16 Task 中完成 7 个（T1/T2/T5/T9/T11/T12/T16）＋ 2 个独立 reviewer 修复提交；全部落在分支 `fix/repo-health-remediation`（原子提交序列见 `git log --oneline master..HEAD`），未 push、未开 PR。
+- T1 restore 请求屏障（含 BLOCKER 重做）· T2 preflight 逐库判 `progress.db` · T5 发布侧硬截止/心跳 ＋ `build-agent` 超时 · T9 门禁清单补项 ＋ 空扫描面退 2 · T11 CHANGELOG 规则 2 机械闸 ＋ 死代码清理 · T12 删除跨进程 0.5 量级比较 · T16 活文档版本/数字/状态口径收口。
+- 验证纪律：全程**只跑对点测试**（用户硬约束），未跑全量 pytest。覆盖改动面的 18 文件 307 passed、复核 84 passed、末轮 22 passed；`check_docs_layout` / `check_release_docs` 两闸绿；ruff 与 mypy 按文件对点绿；T1/T2/T5/T9/T11 及 4 个新增守卫共 9 组父树物理变异自证（写回旧实现必红、恢复必绿）。本机既有 5 条噪声（GBK 解码 / player_tray_probe / probe_json_contract）本轮未触发。
+Remaining work: 9 个 Task 未开工 —— T3（写事务边界，改动面大）、T4（SW 旧缓存回落，需 Android 真机覆盖安装验证）、T6（lock 求解闸）、T7（发布 runbook 实证）、T8（dotenv / 半截文件 / 锁降级）、T10（死测族 4 处判据）、T13/T14（前端状态机与失败终态，需模拟器）、T15（资源无界与索引登记）。T4 是 4 条 CONFIRMED P1 中唯一未修的一条，无真机环境不得声称已验证。
+- 续跑入口：Ledger `.vault-exec-ledger.json` 保留 7/16 completed、`active_task_id=null`；在 `fix/repo-health-remediation` 分支用 `python <dfs-exec>/scripts/vault_exec_state.py --workdir . start-task --task-id <Tn>` 继续。MUST 继续遵守「禁止全量 test，只对点」。
+- 按裁决未做：不 push、不开 PR（以 PR-ready 形态停本地，等用户决定）；不对外披露项目暂停（D5=B）；不改桌面 build-stamp 的空戳契约（D3=B）；不真机点检；不发版。
+
+### 2026-11-13 15:11 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+用户新约束「**一个 PR 只做一件事**」+「分派子代理火力全开」。why：首批把 11 个原子提交（7 Task + 审查修复 + 文档 + 簿记）堆在单一 `fix/repo-health-remediation` 分支，一个 PR 会含 11 件事，审阅/取舍/回滚无法按主题进行。
+- 裁决：该分支标记为**历史遗留混合分支，停止追加 Task 改动**；剩余 Task 各占独立分支 + 独立 PR（stacked，PR base 指向首批分支 ⇒ 每个 diff 只含自己这一件事）。首批合并后其余 rebase 到新 master 并把 PR base 改回 master。
+- 隔离：并行子代理 MUST 用独立 git worktree，不共享工作区（HEAD 与文件所有权会互踩）。已建 3 个：`.worktrees/t6` → `fix/lock-solvability-gate`（T6）、`.worktrees/t8` → `fix/runtime-silent-degradation`（T8）、`.worktrees/t10` → `fix/dead-guard-probes`（T10），均基于首批 HEAD `60a669a`；`.worktrees/` 已加入 `.git/info/exclude`（本地排除，未改 .gitignore）。
+- 已同步：本约束写入计划 EXECUTION ADDENDUM 第 11 条、持久化到工作记忆 `feedback_one_pr_one_thing.md`。
+- 不做：不因新约束重写首批历史（无显式授权不做 rebase/cherry-pick 改写）。
+
+### 2026-11-13 15:52 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+第二批交付（15:11~15:52）收口。
+- 子代理：并行派 3 个实现席位（T6 / T8 / T10），受工具能力限制均为 READ-ONLY（仅 search/read），产出精确 unified diff + 新测试全文 + 对点命令清单，**未落地 / 未跑测试 / 未提交**，且明确不编造实测数字；由编排者在各自 worktree 落地。该能力边界登记为技术债。
+- 隔离：4 个独立 git worktree（`.worktrees/{shards,t6,t8,t10}`），stacked 链 `master` → `fix/repo-health-remediation`（历史遗留混合分支，已停） → `fix/register-new-guard-tests` → 三个 Task 分支。PR base 指向前一环 ⇒ 每个 diff 只含自己这一件事。
+- 4 个 PR（工作树全干净、未 push、未开 PR）：
+  ① `fix/register-new-guard-tests` `f2d260e`：修首批引入的真实回归（3 个新守卫未登记 `ci_shards` ⇒ 分片守卫红），补 CI 的 pyyaml 测试期依赖。对点 39 passed，删一条注册的变异红→恢复绿。
+  ② `fix/lock-solvability-gate` `d041bb1`（T6）：`pip --dry-run` 真求解闸 + PyYAML 结构化接线守卫 + 分片登记。对点 45 passed，删 step 的物理变异红→恢复绿。
+  ③ `fix/runtime-silent-degradation` `4a03010` + `a74b024`（T8）：dotenv 显式 env 优先 / 写盘失败清半截文件 + detail 脱敏 / 锁降级 stderr 可见告警 + 分片登记。RED 3 failed → GREEN 70 passed；物理变异曾暴露「本机未装 dotenv ⇒ `override` 改动无人守」，补注入假 dotenv 的行为探针后变异红→恢复绿。
+  ④ `fix/setup-go-guard` `8728d46`（T10-①）：删恒真的 `setup-go@v5` 子串判据，改解析 YAML 的 `uses:` 真值 + 阴性 / 注入式变异用例 + 分片登记。对点 42 passed，删真实 uses 的物理变异红→恢复绿。
+- 纪律：全程**只跑对点测试**，未跑全量 pytest；每个 PR 内新增测试自行登记分片（自洽）；ruff 与 JSON 合法性逐 PR 验证；无 PR 混入别的文件。
+- 剩余：T3 / T4 / T7 / T13 / T14 / T15 未开工；T10 的 ②③④（前端守卫探针 / 模块图判据 / wb 锚点配平）方案已由子代理产出（持久化在会话输出），未落地。Ledger 9/16 completed、`active_task_id=null`。
+
+### 2026-11-13 15:52 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 上条 NOTE 的 4 个独立 PR，全部 PR-ready、工作树干净、未 push / 未开 PR。
+Remaining work: 按 `docs/plans/2026-11-13-repo-health-remediation.md` 续跑剩余 7 个 Task；每个仍须独立分支 + 独立 PR（stacked），继续「禁止全量 test，只对点」。T4 需 Android 真机覆盖安装验证，不得在无真机环境声称已修。
+- 合并顺序建议：先合首批历史分支（或按主题拆分）→ 分片注册 PR → T6 / T8 / T10-① 三个 PR 可并行；合并后其余分支 rebase 到新 master 并把 PR base 改回 master。
+- 不做：不 push、不开 PR、不发版、不真机点检、不重写首批历史（均无显式授权）。
+
+### 2026-11-13 16:24 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+第三批（续跑）收口：又派 3 个并行设计席位（T3 / T13 / T15，均 READ-ONLY，产出 unified diff + 行为探针），3 个独立 worktree 均基于 `fix/register-new-guard-tests`（stacked）。
+- 新增 2 个 PR（工作树干净、未 push / 未开 PR）：
+  ① `fix/reader-state-machine` `44ce9f4` + `af2fb71`（T13）：`reader.js` 三处状态机（占位标题归一化、503 退避定时器句柄 + `pagehide` 撤销、`processed_stale` 可见提示）；node 行为探针内建阳性/阴性/变异自证，追加进既有 `tests/test_frontend_guards.py`（不新增文件，避免分片冲突）。`node --check` 绿、对点 16 passed；删 `pagehide` 监听的物理变异红→恢复绿；追加探针曾触发 ruff E402/E501，行级拆行 + `# noqa: E402` 后收口。
+  ② `fix/model-load-negative-cache` `7bd24b6`（T15，按「一 PR 一事」缩小为**无下载加载失败负缓存**）：`model_loader.py` 加 TTL 负缓存 + `_failure_window_open()` / `reset_nlp_load_failure()`，失败写诊断、TTL 内不重跑本地三级回退；**不**置位 `_nlp_resolved`（首次分析仍有重试机会）。对点 62 passed；删短路判据的物理变异红→恢复绿；ruff + `mypy --strict` 绿。索引治理裁决登记与 `test_query_plans.py` 未纳入本 PR（属另一件事）。
+- 落地踩坑（已自证并修正）：① Windows 长路径读不到子代理持久化输出 ⇒ 复制到 `.git/` 短路径；② T15 的 `git apply --recount` 上下文失配 ⇒ 改手写精确补丁（`replace_once` + CRLF 安全）；③ T13 追加探针的模块级 import 触发 ruff E402，JS 探针长行触发 E501；④ T15 负缓存残留让既有 `test_try_load_nlp_no_download_loads_locally` 变红 ⇒ 在 4 处既有测试加 `_nlp_failed_at` 隔离（子代理已预警该风险）。
+- T3 方案已产出但未落地：`fix/write-tx-boundaries` worktree 干净、停在 base。事务边界（`BEGIN IMMEDIATE` 嵌套 / 跨库补偿）需更谨慎验证，不在本批次 rushed 落地。
+- 纪律：全程只跑对点测试，未跑全量 pytest；无新增测试文件、无分片登记冲突；每个 PR 只做一件事。
+
+### 2026-11-13 16:24 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 上条 NOTE 的 2 个独立 PR；累计 6 个独立 PR + 1 个历史遗留混合分支，全部 PR-ready、工作树干净、未 push / 未开 PR。Ledger 11/16 completed、`active_task_id=null`。
+Remaining work: T3（方案已就绪，待落地）/ T4（需 Android 真机）/ T7（发布 runbook 实证需 GitHub 权限）/ T10 的 ②③④（前端探针 / 模块图判据 / wb 锚点配平，方案已产出）/ T14（前端 + Android，需模拟器）。继续按「一 Task 一分支一 PR、独立 worktree、只跑对点测试」推进。
+- 不做：不 push、不开 PR、不发版、不真机点检、不重写历史（均无显式授权）。
+
+### 2026-11-13 16:53 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+第四批（续跑）收口：并行派 2 个设计席位（T7 / T14，均 READ-ONLY，产出文档全文与 unified diff，明确不编造实测）；落地 2 个独立 PR。
+- ① `fix/write-tx-boundaries` `0906bac`（T3，5 处生产改动）：wb 投影与 FSRS 复习在 SELECT 前显式 `BEGIN IMMEDIATE`（WAL 只读仍并发）、跨 progress 库写失败改显式 500 而非静默 200、`companion_session.py` / `companion_proposal.py` 共 11 处裸 `with get_db()` 改 `db_conn()` 确定性 close。测试追加到 3 个既有文件（不新增，避免分片冲突）：RED 阶段投影/FSRS/跨库/连接四条全红；GREEN 7 passed；`ruff` 绿；两组父树物理变异（删投影 `BEGIN IMMEDIATE` / 吞掉跨库异常）均红→恢复绿。方案 8 个未解决点中「阴性校准用例在 RED 阶段也红」如实登记：探针捕获的是所有未 close 连接，校准作用未实现，但 GREEN 后两条都绿。
+- ② `fix/release-runbook` `fb0ccd4`（T7）：新增 `docs/agents/release-runbook.md`（Publish 被跳过 / 孤儿 tag 恢复路径），文档含 5 处「未实证」声明与实证记录模板，判据只认 release 资产清单，未把 `gh workflow run --ref <tag>` 写成已验证。`tools/check_docs_layout.py` 绿。
+- 纪律：全程只跑对点测试，未跑全量 pytest；每个 PR 独立 worktree + 独立分支（stacked，base 指向 `fix/register-new-guard-tests`），diff 只含自己这一件事；工作树全干净。
+- 备料：`T10` 的 ②③④ 完整方案在 `.git/t10full.txt`，`T14` 方案在 `.git/t14.txt`（短路径，规避 Windows 长路径读不到子代理持久化输出）。T14 需 Android 模拟器 x86_64 + arm64 真机点检，本轮不落地。
+
+### 2026-11-13 16:53 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 上条 NOTE 的 2 个独立 PR；累计 8 个独立 PR + 1 个历史遗留混合分支，全部 PR-ready、工作树干净、未 push / 未开 PR。Ledger 13/16 completed、`active_task_id=null`。
+Remaining work: `T4`（SW 旧缓存回落，4 条 CONFIRMED P1 中唯一未修，需 Android 真机覆盖安装验证，无真机不得声称已修）/ `T10` 的 ②③④（前端守卫探针 / 模块图判据 / wb 锚点配平，方案就绪）/ `T14`（失败终态，需模拟器）。继续按「一 Task 一分支一 PR、独立 worktree、只跑对点测试」推进。
+- 合并顺序：首批历史分支（或按主题拆分）→ `fix/register-new-guard-tests` → 其余 7 个 PR 可并行；合并后 rebase 到新 `master` 并把 PR base 改回 `master`。
+- 不做：不 push、不开 PR、不发版、不真机点检、不重写历史（均无显式授权）。
+
+### 2026-11-13 17:02 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+第五批（T10 专项）收口：拆成 3 个独立 PR，落地 2 个，第 3 个按纪律拒收半成品。
+- ① `fix/setup-go-guard` 已于前批交付（`8728d46`）。
+- ② `fix/frontend-guard-probes` `0aeba62` + `8b3bbb6`：前端守卫从字符串断言改为 node 行为探针（新建 `tools/frontend_guards_probe.mjs`，15 场景含 5 个 `mutation_*` 变异自证），`tests/test_frontend_guards.py` 全量重写；node 15/15 全绿、对点 20 passed、ruff 绿。**已知瑕疵**：第一个提交含语法错误（编排者通用拆行脚本误伤 JS 字符串里的 `; `，且子代理写了不存在的 `pytest.Exit` / `pytest.Skipped`），第二个提交修正；PR 最终状态正确，但历史需 squash 才干净（未授权改写历史，故保留两提交，合并时用 Squash and merge 即可）。
+- ④ `fix/wb-probe-slicer` `00d1ef4` + `185a2e7`：`tools/wb_export_probe.mjs` 的 `sliceFunction` 按红线 13 改为跳过字符串/注释/模板的括号配平 + 参数表 `)` 后 MUST 是 `{`；探针内建 5 个 `slice_*` 自证场景，测试补阳性 + 注入式变异副本。node 11/11 全绿、对点 10 passed、ruff 绿；删 `paramsEnd` 行的物理变异使 node 探针 exit 1、恢复后 exit 0。
+- ③ **未落地**：`fix/module-graph-guards` worktree 已重置到 base（干净）。原因：子代理 diff 的 9 个 hunk 中 4 个与实际源码上下文冲突（`git apply --reject` 留半成品、5 个测试红），且新增测试沿用不存在的 `pytest.Exit/Skipped`。按「守卫必须能红、不提交半成品」的纪律拒收；完整方案保留在 `.git/t10full.txt`，需重新基于真实源码设计。
+- 踩坑：子代理完整文件方案里 `pytest.Exit/Skipped` 须换 `from _pytest.outcomes import Exit, Skipped`；E702 拆行 MUST 限定在 `_iter_braces` 函数体（40–90 行），全文件拆行会误伤 JS 字符串字面量。
+- 纪律：全程只跑对点测试，未跑全量 pytest；每个 PR 独立 worktree + 独立分支（stacked，base 指向 `fix/register-new-guard-tests`），diff 只含自己这一件事；不新增测试文件、无分片登记冲突。
+
+### 2026-11-13 17:02 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 上条 NOTE 的 T10 ②/④ 两个独立 PR；累计 10 个独立 PR + 1 个历史遗留混合分支，工作树全干净、未 push / 未开 PR。Ledger 仍 13/16（T10 因 ③ 未落地保持 pending，避免把部分完成记成完成）。
+Remaining work: `T10` 的 ③（模块图判据，方案需重做）/ `T4`（需 Android 真机）/ `T14`（需模拟器）。继续按「一 Task 一分支一 PR、独立 worktree、只跑对点测试」推进。
+- 不做：不 push、不开 PR、不发版、不真机点检、不重写历史（均无显式授权）。
+
+### 2026-11-13 17:48 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+T10-③ 重做完成（上一批因 diff 与真实源码脱节被拒收，本次重新派只读诊断席位逐字读源码）。
+- `fix/module-graph-guards` `ec386ef` + `eea9110` + `bbdc609`（T10-③，独立 PR）：三处判据真实源码落地 —— ① 自身导出正则 `\}(?!\s*from\b)` 堵零宽回溯（运行时与常量两处）；② `_module_local_bindings` 改 `_iter_code` 状态机只收花括号净深度 0 的顶层声明；③ `_all_cycles` 全图遍历替换只钉 3 模块、CI 缺 node 改 `pytest.exit(returncode=1)`、新增 `_pytest.outcomes` 行为探针（不再用不存在的 `pytest.Exit/Skipped`）。PR 净 diff 330 insertions / 22 deletions，仅改现有测试文件、无分片登记冲突。
+- 验证：对点 **31 passed**；相关守卫 `test_ci_hardening_infra.py` / `governance.py` / `test_probe_wiring_guard.py` **44 passed**；ruff 绿；三组父树物理变异（旧正则 / 全文 findall / 注入 `/[}]/` 到 main.js）均红→恢复绿。
+- 独立 reviewer 复核：**无 BLOCKER**；R1/R3/R5 OK，R2 CONCERN（正则字面量花括号会让深度漂移，当前生产文件不触发）、R4 CONCERN（`CI=0` 会误判，但属全仓 conftest 既有约定且被 `test_ci_hardening_infra.py:370` 钉住，非本 PR 引入）。R2 已补源码级棘轮 `test_iter_code_depth_returns_to_zero_on_real_exposer_files`，未来引入该形态立即红；R4 如实登记，未擅自改全仓约定。
+- 已知瑕疵：③ 与 ② 的 PR 内都有中间修正提交（③ 含一次 CRLF 全文件重写），最终净 diff 与测试均干净，但历史需 Squash and merge 才干净（未授权改写历史，故保留）。
+- **T10 四项 ①②③④ 全部完成**，Ledger 14/16 completed、`active_task_id=null`。
+
+### 2026-11-13 17:48 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 上条 NOTE 的 T10-③ 独立 PR；累计 11 个有交付的独立 PR + 1 个历史遗留混合分支，工作树全干净、未 push / 未开 PR。方案备料 `.git/t10full.txt` 已删（T10 完成），`.git/t14.txt` 保留供 T14。
+Remaining work: `T4`（SW 旧缓存回落，4 条 CONFIRMED P1 中唯一未修，需 Android 真机覆盖安装验证）/ `T14`（失败终态，需 Android 模拟器 x86_64 + arm64 真机点检）。这两项不提供设备环境不会硬做，也不会写成已验证。
+- 合并顺序：首批历史分支（或按主题拆分）→ `fix/register-new-guard-tests` → 其余 10 个 PR 可并行；合并后 rebase 到新 `master` 并把 PR base 改回 `master`；含中间修正提交的 PR 建议 Squash and merge。
+- 不做：不 push、不开 PR、不发版、不真机点检、不重写历史（均无显式授权）。
+
+### 2026-11-13 18:10 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Android 模拟器环境打通 + T4 落地（用户授权模拟器后首轮）。
+- 环境实测（无需用户额外提供）：SDK `D:/Android/sdk`（`local.properties` 已指）、Gradle **8.14.3** 在 `D:/Android/gradle/wrapper/dists/gradle-8.14.3-all/<hash>/gradle-8.14.3`（项目 wrapper 写 8.6，8.14 与 AGP 兼容，配置解析 BUILD SUCCESSFUL）、JDK 17.0.12、`D:/Android/avd` 下 3 个 AVD 全 x86_64、`D:/Android/chaquo-wheels/x86_64` 有 cp310 wheel、`python.buildPython` 指向本机 Python310。`emulator` flavor 本就带 `arm64-v8a + x86_64`，无需改 build.gradle。
+- **构建流程（关键，漏了会打空包）**：`python tools/sync_android_sources.py` → `gradle :app:assembleEmulatorDebug`（`GRADLE_USER_HOME=D:/Android/gradle`）。`android/app/src/main/assets/static/` 被 `.gitignore` 忽略，不同步则 APK 内无前端资源、运行时 `syncStaticAssets` 无内容可解包。
+- **T4（`fix/sw-cache-invalidation`）**：`306fdb9` + `1e722b6`。最终修法只保留「catch 回落**只从当前 CACHE_NAME** 取，不跨 cache」（`caches.match` → `caches.open(CACHE_NAME).match`），并**保留 navigate 回落应用外壳**。净 diff 87/5；对点 60 passed；跨 cache 回落的物理变异红→恢复绿。
+- **重要实证（审计报告建议被模拟器证伪）**：`networkFirst` 的 catch 若在「在线但服务未就绪」时拒绝回落，Android 会直接停在 `net::ERR_FAILED`——实测首帧导航 ≈0.5s，而进程内 Python 服务 `python_start_done` ≈1.4s，首帧必然早于服务就绪。故审计 P1 #4「在线未就绪不拿旧壳冒充」不建议在 navigate 上执行；旧壳版本失配交给页面 `build-stamp` 自检 + `MainActivity` 就绪探针补载。
+- **模拟器验证**：① 全新安装 T4 版 → 首页完整渲染、无 ERR_FAILED/FATAL、`skip_reload app_origin_ready` + `ttfd` + `ready_notify` 齐全；② 覆盖安装（master `c23f3d0ba2f1` → T4 `715400f2df05`）→ 无白屏，探针出现 `ready_notify "missing"` 触发补载、二次 `ready_notify "false"`，最终页面正常。
+- **勘误（先前的错误判断）**：首次 T4 验证出现的 `ERR_FAILED` 白屏，主因是**首次构建漏了 sync、APK 缺 assets**，不是 `sw.js` 改动的实证。但去掉 `navigator.onLine` 条件仍然必要：全新安装时 cache 为空，navigate 回落没有 shell 可回落，首帧失败就是错误页，靠补载兜底。
+- Ledger 15/16、`active_task_id=null`；剩 T14（失败终态，需模拟器，环境已就绪）。
+
+### 2026-11-13 18:10 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: T4 独立 PR（2 提交）+ 模拟器双路径验证；累计 12 个有交付的独立 PR + 1 历史遗留混合分支，工作树干净、未 push / 未开 PR。
+Remaining work: T14（三个失败终态：Android 就绪预算耗尽后的终态文案与重试入口、`exportAndReport` 无 try/catch、Release 自动正文警示）。模拟器已可用，下一轮直接做。
+- 不做：不 push、不开 PR、不发版、不重写历史（均无显式授权）。
+
+### 2026-11-13 18:20 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+T14 落地（计划最后一个 Task），Ledger 收口 16/16。
+- `fix/failure-final-state` `4d8885a`（T14，独立 PR，7 文件 / +211 −32）三处失败终态：
+  ① `MainActivity.java`：就绪预算耗尽后文案从「正在重试连接…」改为「…已停止连接。点此重试。」+ `setTextIsSelectable(true)` + 停 indeterminate spinner + 点击真起 `pollServerReadiness(getFilesDir())`；ready hook 的 `'err'`/`null` 与 `'missing'` 同族复位 `readyHookInjected` CAS。
+  ② `static/german/workbench.html`：`exportAndReport` 加 try/catch，两个导出按钮改 `Promise.resolve().then(...).catch(reportExportFailure)`（同步参数构造抛错也进链）；失败走既有 `error` toast。
+  ③ `.github/workflows/build-release.yml`：自动 Release 正文加「请勿使用 v5.23.1 / v5.23.2」静态警示，并声明人工 `gh release edit` 覆盖后需另行核对（不声称已覆盖）。
+- 探针：`tools/wb_export_probe.mjs` 新增 `download_all_reject` / `click_reject`（8 场景全绿），`tests/test_wb_export_save.py` 场景名集合守卫同步补名。
+- **实测抓到方案判定器两个漏洞**（方案原样会让变异自证假绿）：`setOnClickListener` 被同块的 `setOnClickListener(null)` 兜住 → 改判 `setOnClickListener(v ->`；Release 警示的版本号在同一行后文复述 → 改判全角冒号前的「禁用列表」段。两处均由内建变异用例逼出来。
+- 验证：对点 **123 passed**；ruff / workflow YAML 绿；内建变异（pytest 内坏副本）+ 父树物理变异 2 组（删 `workbench.html` 的 catch → node exit 1；终态文案回退 → pytest exit 1，恢复均复绿）。
+- **模拟器实测**：APK 构建成功（3m19s）；主路径正常（Activity resumed、`ready_notify "missing"` → 补载 → `"false"`、零 FATAL）。
+- **未点验项（如实登记）**：Android **终态 UI 未在模拟器点验**。注入 `StartupReadinessPolicy.maxAttempts()=0` 的做法无效——超时早于服务就绪，WebView 抢先加载并显示 Chromium 错误页（`net::ERR_FAILED`），覆盖了 splash 上的终态文案；要真实复现需让服务「永不就绪」（如破坏 Python 运行时）再等满 36s 预算，本轮未做。arm64 真机同样未点检。故本条只能记「代码 + 判据 + 主路径已验证」，不得写成「终态 UI 已验证」。
+- 收尾：预算常量已恢复（`git status` 干净）、模拟器已装回正常版（358KB 正常首页）、临时 APK/日志/备份已清理。
+
+### 2026-11-13 18:20 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 上条 NOTE 的 T14 独立 PR。**计划 16 个 Task 全部完成**（Ledger 16/16、`active_task_id=null`）；累计 **13 个独立 PR** + 1 个历史遗留混合分支（`fix/repo-health-remediation`），全部工作树干净、未 push、未开 PR。
+Remaining work: 无计划内 Task。**发布前仍需你提供 Android arm64 真机**做覆盖安装点检（T4 的 SW 升级路径 + T14 的终态 UI 都只在 x86_64 模拟器上验证过主路径，终态 UI 甚至模拟器也未点验）；合并顺序与前批一致（历史分支 → 分片注册 → 其余 PR 并行，含中间修正提交的建议 Squash）。
+- 不做：不 push、不开 PR、不发版（均无显式授权）。
+
+### 2026-11-13 18:53 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+**arm64 真机覆盖安装点检完成**（此前唯一缺口的设备验证）。
+- 设备：Redmi Note 8（`ginkgo` / `cdb66c`），`arm64-v8a`，API 30 / Android 11，初始未装 DeLector。
+- 三个 arm64 包（`device` flavor，`gradle assembleDeviceDebug`）：master 基线 / T4（SW）/ T14（失败终态）。每个 63MiB、`lib/arm64-v8a` 5 项、`lib/x86_64` 0 项；三者签名同为 Android Debug `f60b88ca…` ⇒ 可互相覆盖。arm64 Chaquopy wheel 齐备（57 个，含 spacy 3.8.7 / blis / thinc / numpy / srsly）。
+- **MIUI 拦截踩坑（已解）**：`INSTALL_FAILED_USER_RESTRICTED: Install canceled by user` 三次复现。根因不是驱动或开关缺失，而是 MIUI 每次安装都拉起 `com.miui.securitycenter/...AdbInstallActivity` 确认页，**12 秒无人点「继续安装」就超时**。解法：后台跑 `adb install` → 轮询 `uiautomator dump` 找「继续安装」→ `input tap` 点掉。`pm install`（shell 权限）/ `install --no-streaming` / `install-create+write+commit` 分步**全部同样被拦**，只有点确认页有效。另需先开「开发者选项 → USB安装」（文字区点了无效，要点右侧 toggle）。
+- **点检结果（arm64 真机）**：
+  - 基线版（纯 master）：启动正常，`ttfd` 5.2s、`ready_notify "false"`、0 FATAL、首页完整渲染。
+  - **覆盖装 T4 版**：复现了 v5.23.3 的场景并被兜住——`loadurl_retry_missing_page`（16.3s）→ `commit` → `ttfd` 23.0s → `ready_notify "false"`，**零 `ERR_FAILED` / 零 `Webpage not available`**，截图首页完整。
+  - 第二次启动（新 SW 已接管）：直接成功、无补载、零 ERR_FAILED ⇒ T4 的「只从当前 CACHE_NAME 回落」没有破坏 navigate 外壳回落。
+  - 覆盖装 T14 版：主路径正常（`ttfd` 5.1s、0 FATAL）。
+  - 装回正常预算版：`poll_begin` → `port_file_read` → `settings_200` → `ready_notify "true"` ✓。
+- **仍未验证（如实登记）**：T14 的**终态 UI**。真机探针时间线：`loadurl_first_paint` 1.1s、`poll_begin` 2.4s、**`reveal`（splash 隐藏）2.7s** —— 首帧一旦成功，splash 就被撤掉，终态文案只可能在「首帧失败且服务真卡住 36s」时可见。注入 `StartupReadinessPolicy.maxAttempts()=0` 构造不出该场景（2s 截图仍是初始「正在启动…」+ spinner，5s 已是正常页面）。`readyHookInjected` 的 `'err'` 分支同样未触发（页面 JS 未抛异常）。
+- 收尾：`StartupReadinessPolicy.java` 已恢复（`git status` 干净）、设备已装回正常预算版、临时 detached worktree `.worktrees/baseline` 与截图/日志已清理。
+
+### 2026-11-13 18:53 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: arm64 真机覆盖安装点检（基线 → T4 → T14 三版连续覆盖）。T4 的 SW 升级路径由此前「arm64 未点检」升级为**已在真机验证**；T14 仅主路径验证，终态 UI 仍缺真实故障注入手段。
+- 累计 13 个独立 PR + 1 个历史遗留混合分支，Ledger 16/16，工作树全干净、未 push / 未开 PR。
+Remaining work: T14 终态 UI 的真机点验（需要能构造「服务启动后卡住 36s」的故障注入，例如可配置的假服务端或调试开关）；其余计划内 Task 已全闭环。
+- 不做：不 push、不开 PR、不发版（均无显式授权）。
+
+### 2026-11-13 19:07 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+两个后续项都做完（一 PR 一事，分开提交）。
+- ① `feat/adb-install-helper` `26a1f39`：新增 `tools/install_apk.py`——把 MIUI 的 USB 安装确认流程固化成一条命令（后台 `adb install` → 轮询 `uiautomator dump` → `input tap` 点「继续安装」→ 按退出码判定）。判据 `parse_confirm_button()` 抽成纯函数；`tests/test_install_apk_helper.py` 5 条（真实 dump 片段阳性、拒绝按钮阴性、未布局节点阴性、抹掉 bounds 的变异自证、空 dump），分片已登记。**真机端到端验证**：`tapped_confirm=True succeeded=True`，包确实装上。净 diff 254 insertions。
+- ② `fix/failure-final-state` `1f8f411`（追加在 T14 PR 内，属同一主题的验证手段）：debug-only 故障注入开关 `--ez delector_fake_stuck true`——预算置 0 + 不发起首帧，让 splash 停住、终态分支可达。
+  - **既有守卫抓到我的回归**：`test_main_activity_uses_policy_instead_of_literals` 要求 `pollServerReadiness` 方法体内必须出现 `StartupReadinessPolicy.maxAttempts()`；我最初把它挪进 `readyAttempts()` 辅助方法 ⇒ 守卫红。改为方法体内联三元（`fakeStuckStart() ? 0 : StartupReadinessPolicy.maxAttempts()`），契约与注入两全。
+  - 新增守卫 `test_fault_injection_is_debug_only`（注入必须被 `BuildConfig.DEBUG` 短路，否则正式包等于带一个「让应用卡在 splash」的后门）+ 变异自证（去掉短路 ⇒ 红）。对点 19 passed、ruff 绿、arm64 包构建成功。
+- **T14 终态 UI 真机验证成功**（此前唯一未验证项）：注入态启动后 `uiautomator` 读到控件文本 `服务启动超时，已停止连接。点此重试。`，截图为 splash 终态且 indeterminate spinner 已停。
+- **仍未验证**：点「点此重试」之后的运行时行为。注入态下 `readyAttempts()` 恒 0，点击后必然立刻再次耗尽，UI 文案与截图无法区分「点了没反应」与「点了但立刻再失败」；logcat 也未捕获新的 `poll_begin`。该接线由 pytest 判据（`setOnClickListener(v ->` + `pollServerReadiness(getFilesDir())` + 变异自证）覆盖，真机行为未确认。
+- 设备已恢复：不带 extra 启动 → `ttfd` 3.5s、`settings_200`、`ready_notify "true"`、零 FATAL（注入开关默认关闭）。
+
+### 2026-11-13 19:07 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 上条 NOTE 的 2 项（安装工具 PR + 故障注入开关），T14 终态 UI 由「未验证」升级为「真机已验证」。累计 **14 个独立 PR** + 1 个历史遗留混合分支，Ledger 16/16，工作树全干净、未 push / 未开 PR。
+Remaining work: 仅「点击重试后的运行时行为」一项未在真机确认，判据层已覆盖。其余计划内 Task 与设备验证均闭环。
+- 不做：不 push、不开 PR、不发版（均无显式授权）。
+
+### 2026-11-13 19:11 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+收尾复验：14 个 PR 分支逐个复跑各自的对点守卫（同一轮实测，不是引用旧数字），全部通过。
+- `fix/register-new-guard-tests` `f2d260e` · 39 passed（分片注册 + pyyaml 测试期依赖）
+- `fix/lock-solvability-gate` `d041bb1`（T6）· 6 passed（lock 可解性真求解闸）
+- `fix/runtime-silent-degradation` `a74b024`（T8）· 4 passed（dotenv / 半截文件 / 锁降级告警）
+- `fix/setup-go-guard` `8728d46`（T10-①）· 3 passed（setup-go 结构化 uses 判据）
+- `fix/reader-state-machine` `af2fb71`（T13）· 12 passed（占位标题 / 退避定时器 / processed_stale）
+- `fix/model-load-negative-cache` `7bd24b6`（T15）· 4 passed（加载失败负缓存）
+- `fix/write-tx-boundaries` `0906bac`（T3）· 96 passed（写事务边界 / 连接生命周期）
+- `fix/release-runbook` `fb0ccd4`（T7）· `check_docs_layout` OK（发布恢复 runbook，含「未实证」声明）
+- `fix/wb-probe-slicer` `185a2e7`（T10-④）· 10 passed + node 探针 11/11
+- `fix/frontend-guard-probes` `8b3bbb6`（T10-②）· 20 passed + node 探针 15/15
+- `fix/module-graph-guards` `bbdc609`（T10-③）· 31 passed（模块图判据 + 正则深度漂移棘轮）
+- `fix/sw-cache-invalidation` `1e722b6`（T4）· 60 passed（SW 回落不跨 cache 版本）
+- `fix/failure-final-state` `1f8f411`（T14）· 19 passed（失败终态 + debug-only 故障注入开关）
+- `feat/adb-install-helper` `26a1f39` · 5 passed（真机安装自动点 MIUI 确认页）
+- 合计 **309 passed**，14 个工作树全部干净；Ledger 16/16、`active_task_id=null`；临时脚本与 patch 已清空。
+- 唯一仍未在真机确认的行为：T14「点此重试」点击后的运行时轮询（注入态下必然立刻再次耗尽，UI 无差异）；判据层已由 `setOnClickListener(v ->` + `pollServerReadiness` 的变异自证覆盖。
+
+### 2026-11-13 19:28 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+把「点此重试」的运行时行为真正点验掉，并因此挖出 T14 的一个真实缺陷。两个新独立 PR：
+- ① `feat/retry-then-pass-injection` `7ad0d9c`：新增 `--ez delector_fake_stuck_once true` 注入档（只第一轮耗尽预算，点重试的第二轮走真实预算），并补 `!firstPaintSkipped` 到就绪分支——首帧被注入跳过时必须落到 `loadUrl`，否则只 `revealWebView` 掀开一个从未加载过 URL 的空白 WebView，「重试生效」与「重试把页面搞白」无法区分。守卫逐方法切片验证三个注入入口各自带 `BuildConfig.DEBUG &&`（合并切片会被另一个方法的短路兜住，实测踩到）；原先只看单方法的窄用例已并入（其 600 字符窗口假设只有一个短路，加 once 档后失效）。
+- ② `fix/retry-button-tap-target` `aae54c6`：**修 T14 的真实缺陷**——重试监听原挂在 `statusTextView` 上，而它开了 `setTextIsSelectable(true)`（为让用户复制错误转述）；可选中 TextView 在首次触摸时进入文本选择态并吞掉 `onClick`。真机决定性实验：单击一次 `poll_begin` 仍为 1，连点两次才变 2。文案写「点此重试」却点一下没反应 = 假终态。改为默认 GONE 的 `retryButton` 承接点击，文案保留可选中；守卫新增「重试必须在 Button 上」「可选中 TextView 不得带点击监听」两条 + 变异自证。
+- 真机复验（同一 once 档，单击一次）：`poll_begin 1 → 2` → `port_file_read` → `settings_200` → `loadurl` → `reveal` → `ttfd`，首页完整渲染（截图 350KB）。修复前同样条件下需点两次。
+- 踩坑：我第一次把点击打在文案区 `[48,1158][1032,1231]` 而非 Button `[48,1231][1032,1363]`，误以为按钮无效；按控件树真实 bounds 点击才验证成功——坐标必须取自 `uiautomator dump`，不能凭截图目测。
+- 收尾：临时脚本/截图/构建日志已清；设备已 force-stop 后按正常参数重启（注入默认关闭）。
+
+### 2026-11-13 19:28 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 上条 NOTE 的 2 个独立 PR。累计 **16 个独立 PR** + 1 个历史遗留混合分支，全部 PR-ready、工作树干净、未 push / 未开 PR。Ledger 16/16。
+- T14 的两条残留现在都闭合：终态 UI（上一轮真机已验证）+ 点击重试的运行时行为（本轮单击即生效，证据链完整）。新增发现并修掉「首触被 selectable 吞掉」这个此前无人知道的缺陷。
+Remaining work: 计划内 16 个 Task 与设备验证全部闭环，无未开工项。仅剩合并动作（按 PR 顺序 rebase / 合并）由用户决定。
+- 不做：不 push、不开 PR、不发版（均无显式授权）。

@@ -193,6 +193,10 @@ def scan_layers(delector_dir: Path) -> Tuple[List[ScanViolation], int]:
     modules = _find_py_files(delector_dir)
     known = set(modules.keys())
     all_sites: List[ImportSite] = []
+    # `total_mods` 必须是**成功解析**的模块数，不是文件数：语法错 / read_text
+    # 抛异常时旧实现只写 stderr 后继续，len(modules) 仍 > 0 ⇒ run_gate 照样
+    # 打印「100% 单向层序」并放行（独立 reviewer MAJOR：解析全失败恒绿）。
+    parse_failures = 0
 
     for mod_name, path in modules.items():
         try:
@@ -203,6 +207,7 @@ def scan_layers(delector_dir: Path) -> Tuple[List[ScanViolation], int]:
             extractor.visit(tree)
             all_sites.extend(extractor.sites)
         except Exception as e:
+            parse_failures += 1
             sys.stderr.write(f"解析 {path} 失败: {e}\n")
 
     # 1. 顶层依赖邻接矩阵
@@ -256,7 +261,7 @@ def scan_layers(delector_dir: Path) -> Tuple[List[ScanViolation], int]:
                 )
             )
 
-    return violations, len(modules)
+    return violations, len(modules) - parse_failures
 
 
 def run_gate(
@@ -271,6 +276,15 @@ def run_gate(
         return 2
 
     violations, total_mods = scan_layers(delector_dir)
+    if total_mods == 0:
+        # 扫描面为空时 violations 必然为空 —— 不能据此打印「100% 单向层序」并放行。
+        # 与同族 check_silent_degradation.py / check_mock_drift.py 的环境错误口径一致：退 2。
+        print(
+            f"[layer-gate] 错误：{delector_dir} 下扫描到 0 个模块 —— 扫描面为空，"
+            "判定器不得据此打印 100% 单向层序并放行（空转恒绿）。",
+            file=stderr,
+        )
+        return 2
     unexempted = [v for v in violations if not v.exempted]
 
     print(
