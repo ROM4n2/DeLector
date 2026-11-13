@@ -824,3 +824,21 @@ Work done: 上条 NOTE 的 2 个独立 PR。累计 **16 个独立 PR** + 1 个�
 - T14 的两条残留现在都闭合：终态 UI（上一轮真机已验证）+ 点击重试的运行时行为（本轮单击即生效，证据链完整）。新增发现并修掉「首触被 selectable 吞掉」这个此前无人知道的缺陷。
 Remaining work: 计划内 16 个 Task 与设备验证全部闭环，无未开工项。仅剩合并动作（按 PR 顺序 rebase / 合并）由用户决定。
 - 不做：不 push、不开 PR、不发版（均无显式授权）。
+
+### 2026-11-13 20:16 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+**已通过 PR 落地到远端 `master`**（`2e5b9d8`）。共 16 个 PR 合并 + 1 个 fix-forward PR（#374）。
+- 直推被仓库自己的 `master` 直推范围闸拦下（白名单只允许 WORKMEMORY/ · docs/ · README · CHANGELOG · static/index.html · static/sw.js · build.gradle · version.py）。**没有用 `--no-verify` 绕过**，改走 PR。
+- PR 清单：#357 历史混合分支 → #359 T6 → #360 T8 → #361 T10-① → #362 T13 → #363 T15 → #364 T3 → #365 T7 → #366 T10-④ → #367 T10-② → #368 T10-③ → #369 T4 → #370 T14 → #371 once 注入档 → #372 重试 Button → #373 安装工具 → #374 合并集成修复。
+- #358（分片注册）被关闭：它的 base 分支随 #357 的 `--delete-branch` 被删，GitHub 拒绝 reopen；其内容已作为 #359 的祖先进入 master（实测 `f2d260e` 是 origin/master 的祖先、3 条分片登记与 `pip install pyyaml` 均在位），故无需重复合并。
+- **PR 路线暴露了文本合并不等于语义合并**：GitHub 把 T10-② 的前端探针与 T13 的 reader.js 改动合成后，沙箱缺 `_cancelReaderRetryTimer` 桩 —— `origin/master` 上 `frontend_guards_probe` 15 个场景全挂。开 #374 修复（补桩 + 两条真源码切片 + 变异锚点 + mypy tests 档 3 处 + 2 处 mock-drift 豁免）。
+- 合并期另有两处冲突在 PR 侧解决：`#360`/`#361` 的分片条目插入冲突（按并集，在分支上 `merge origin/master` 后本地解决再推）；`#370` 的 wb 探针冲突（取已合并最终版）。
+- 教训：`gh pr merge --delete-branch` 在本地有同名 worktree 时会报错（#359/#362 其实已合并成功）；`gh pr merge` 在改完 base 后立刻执行会因 mergeable 尚未重算而误报冲突，需 `sleep`。
+- **`origin/master` 最终验收（独立 worktree 检出 origin/master 跑）**：对点并集 **485 passed**；9 个静态闸全 exit 0；`wb_export_probe` 13/13 与 `frontend_guards_probe` 15/15 均 exit 0；`ruff check .` All checks passed；mypy 三档（`--strict delector tools` 152 文件 / `--follow-imports=skip tests` 211 文件 / win32 入口 4 文件）全部 Success。
+- 本地 `master` 已对齐 `origin/master`（此前本地合并产生的 66 个提交内容均已通过 PR 落地；重置前留有 `backup/local-merge-2026-11-13` 引用）。
+
+### 2026-11-13 20:16 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 整体健康度修复的 16 件事全部经 PR 进入远端 `master`，合并后在 `origin/master` 上完成独立验收（485 passed + 9 闸 + 2 探针 + ruff + mypy 三档）。
+Remaining work: 发布前建议在合并后的 `master` 上重跑一次 arm64 真机安装冒烟（此前的真机验证是在分支树上做的）。6 个过时的本地 dependabot 分支（pr345~350）已删除；远端仍开着 #353(pydantic 2.14.3) / #354(srsly 3.0.1) 两个 dependabot PR，与本轮无关，待单独评估。
+- 不做：不发版（无显式授权）。
