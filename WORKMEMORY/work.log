@@ -808,3 +808,19 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 - `feat/adb-install-helper` `26a1f39` · 5 passed（真机安装自动点 MIUI 确认页）
 - 合计 **309 passed**，14 个工作树全部干净；Ledger 16/16、`active_task_id=null`；临时脚本与 patch 已清空。
 - 唯一仍未在真机确认的行为：T14「点此重试」点击后的运行时轮询（注入态下必然立刻再次耗尽，UI 无差异）；判据层已由 `setOnClickListener(v ->` + `pollServerReadiness` 的变异自证覆盖。
+
+### 2026-11-13 19:28 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+把「点此重试」的运行时行为真正点验掉，并因此挖出 T14 的一个真实缺陷。两个新独立 PR：
+- ① `feat/retry-then-pass-injection` `7ad0d9c`：新增 `--ez delector_fake_stuck_once true` 注入档（只第一轮耗尽预算，点重试的第二轮走真实预算），并补 `!firstPaintSkipped` 到就绪分支——首帧被注入跳过时必须落到 `loadUrl`，否则只 `revealWebView` 掀开一个从未加载过 URL 的空白 WebView，「重试生效」与「重试把页面搞白」无法区分。守卫逐方法切片验证三个注入入口各自带 `BuildConfig.DEBUG &&`（合并切片会被另一个方法的短路兜住，实测踩到）；原先只看单方法的窄用例已并入（其 600 字符窗口假设只有一个短路，加 once 档后失效）。
+- ② `fix/retry-button-tap-target` `aae54c6`：**修 T14 的真实缺陷**——重试监听原挂在 `statusTextView` 上，而它开了 `setTextIsSelectable(true)`（为让用户复制错误转述）；可选中 TextView 在首次触摸时进入文本选择态并吞掉 `onClick`。真机决定性实验：单击一次 `poll_begin` 仍为 1，连点两次才变 2。文案写「点此重试」却点一下没反应 = 假终态。改为默认 GONE 的 `retryButton` 承接点击，文案保留可选中；守卫新增「重试必须在 Button 上」「可选中 TextView 不得带点击监听」两条 + 变异自证。
+- 真机复验（同一 once 档，单击一次）：`poll_begin 1 → 2` → `port_file_read` → `settings_200` → `loadurl` → `reveal` → `ttfd`，首页完整渲染（截图 350KB）。修复前同样条件下需点两次。
+- 踩坑：我第一次把点击打在文案区 `[48,1158][1032,1231]` 而非 Button `[48,1231][1032,1363]`，误以为按钮无效；按控件树真实 bounds 点击才验证成功——坐标必须取自 `uiautomator dump`，不能凭截图目测。
+- 收尾：临时脚本/截图/构建日志已清；设备已 force-stop 后按正常参数重启（注入默认关闭）。
+
+### 2026-11-13 19:28 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 上条 NOTE 的 2 个独立 PR。累计 **16 个独立 PR** + 1 个历史遗留混合分支，全部 PR-ready、工作树干净、未 push / 未开 PR。Ledger 16/16。
+- T14 的两条残留现在都闭合：终态 UI（上一轮真机已验证）+ 点击重试的运行时行为（本轮单击即生效，证据链完整）。新增发现并修掉「首触被 selectable 吞掉」这个此前无人知道的缺陷。
+Remaining work: 计划内 16 个 Task 与设备验证全部闭环，无未开工项。仅剩合并动作（按 PR 顺序 rebase / 合并）由用户决定。
+- 不做：不 push、不开 PR、不发版（均无显式授权）。
