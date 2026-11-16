@@ -20,6 +20,10 @@ they are the actual leading indicator of a codebase that will need rewriting.
 
 Python only (``ast``). Other languages are counted, not analysed.
 
+Baseline tolerance: ``data/repo_structure.json`` may set ``allowed_*`` counts to tolerate existing
+findings per default class, so a repo with historical debt can land the gate green today. Suppressed
+counts are always printed in the verdict line — a silent suppression would be a dead gate.
+
 Exit contract: ``0`` clean, ``1`` violation found, ``2`` gate could not run (bad config).
 """
 from __future__ import annotations
@@ -51,6 +55,26 @@ DEFAULTS: dict[str, int] = {
     "max_dup_lines": 0,        # >0 enables [DUP]; duplicated block size that counts as a clone
     "require_test_for_src": 0, # 1 enables [TEST_GAP]; every src/ module needs a test file
     "max_dead_exports": -1,    # >=0 enables [DEAD]; tolerance for unreferenced public symbols
+    # Baseline tolerance (ratchet): allow N existing findings of each DEFAULT class. 0 = enforce all.
+    # Unlike the opt-in checks above, these never disable a check — they only absorb the historical
+    # baseline so a gate installed into an existing repo is green on day one and ratchets downward.
+    "allowed_cycle": 0,
+    "allowed_fanout": 0,
+    "allowed_func_len": 0,
+    "allowed_nest": 0,
+    "allowed_class": 0,
+    "allowed_stub": 0,
+}
+
+# Tag -> config key for the default-class ratchet. A finding keeps its bracketed tag as the first
+# token (e.g. "[NEST] src/x.py:12: ..."), so one pass partitions the list without parsing Locations.
+RATCHET_KEYS: dict[str, str] = {
+    "[CYCLE]": "allowed_cycle",
+    "[FANOUT]": "allowed_fanout",
+    "[FUNC_LEN]": "allowed_func_len",
+    "[NEST]": "allowed_nest",
+    "[CLASS]": "allowed_class",
+    "[STUB]": "allowed_stub",
 }
 
 # Directories that are not part of the analysed graph.
@@ -534,6 +558,31 @@ def find_cycles(graph: dict[str, set[str]]) -> list[list[str]]:
     return sorted(result)
 
 
+def apply_baseline_tolerance(
+    failures: list[str], cfg: dict[str, int]
+) -> tuple[list[str], dict[str, tuple[int, int]]]:
+    """Absorb up to ``allowed_*`` findings per default class; return the rest plus a suppression report.
+
+    The tolerance is a COUNT, not an allow-list of specific findings: fixing one and adding a new one
+    keeps the gate green. That is intentional — the ratchet is a number to lower as debt is paid, not
+    a brittle fingerprint of today's file positions. Every absorbed finding is named in the verdict
+    line; a silent suppression would be indistinguishable from a deleted gate.
+    """
+    seen: dict[str, int] = {}
+    absorbed: dict[str, int] = {}
+    kept: list[str] = []
+    for msg in failures:
+        tag = msg.split(" ", 1)[0]
+        limit = cfg[RATCHET_KEYS[tag]] if tag in RATCHET_KEYS else 0
+        seen[tag] = seen.get(tag, 0) + 1
+        if limit and seen[tag] <= limit:
+            absorbed[tag] = absorbed.get(tag, 0) + 1
+            continue
+        kept.append(msg)
+    report = {tag: (absorbed[tag], seen[tag]) for tag in sorted(absorbed)}
+    return kept, report
+
+
 def run_audit(root: Path) -> int:
     cfg = load_config(root)
     files = iter_python_files(root)
@@ -582,13 +631,24 @@ def run_audit(root: Path) -> int:
     failures.extend(check_test_coverage_by_file(root, trees, rel_of, cfg))
     failures.extend(check_duplicates(root, trees, rel_of, cfg))
 
-    return _report(failures, len(trees), skipped)
+    failures, suppressed = apply_baseline_tolerance(failures, cfg)
+    return _report(failures, len(trees), skipped, suppressed)
 
 
-def _report(failures: list[str], module_count: int, skipped: list[str]) -> int:
+def _report(
+    failures: list[str],
+    module_count: int,
+    skipped: list[str],
+    suppressed: dict[str, tuple[int, int]],
+) -> int:
     """Print the verdict and return the exit code."""
+    # Always name absorbed findings — suppression must be auditable, never look like a dead gate.
+    tail = ""
+    if suppressed:
+        detail = ", ".join(f"{tag} {n}/{total}" for tag, (n, total) in suppressed.items())
+        tail = f" (baseline tolerated: {detail})"
     if failures:
-        print(f"[FAIL] Structure audit found {len(failures)} issue(s):", file=sys.stderr)
+        print(f"[FAIL] Structure audit found {len(failures)} issue(s):{tail}", file=sys.stderr)
         for msg in failures:
             print(f"  - {msg}", file=sys.stderr)
         if skipped:
@@ -597,7 +657,7 @@ def _report(failures: list[str], module_count: int, skipped: list[str]) -> int:
 
     print(
         f"[PASS] Structure audit verified {module_count} module(s) "
-        f"(cycles/fanout/functions/nesting/classes/stubs/dead/tests/dups)."
+        f"(cycles/fanout/functions/nesting/classes/stubs/dead/tests/dups).{tail}"
     )
     return 0
 
