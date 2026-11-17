@@ -30,10 +30,10 @@ from __future__ import annotations
 import argparse
 import ast
 import json
-from pathlib import Path, PurePosixPath
 import re
 import subprocess
 import sys
+from pathlib import Path, PurePosixPath
 
 if sys.stdout and hasattr(sys.stdout, "reconfigure"):
     getattr(sys.stdout, "reconfigure")(encoding="utf-8")

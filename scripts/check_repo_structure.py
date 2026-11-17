@@ -31,9 +31,9 @@ from __future__ import annotations
 import argparse
 import ast
 import json
-from pathlib import Path
 import re
 import sys
+from pathlib import Path
 
 if sys.stdout and hasattr(sys.stdout, "reconfigure"):
     getattr(sys.stdout, "reconfigure")(encoding="utf-8")
