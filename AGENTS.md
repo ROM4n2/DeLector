@@ -1,6 +1,6 @@
 # AGENTS.md — DeLector 项目 AI Agent 入口
 
-> **每次开新 agent 对话时，第一步必须读这个文件。** 本文件只做路由（同 CLAUDE.md 形态）：
+> **每次开新 agent 对话时，第一步必须读这个文件。** 本文件是 agent 的唯一入口与规则真值（`CLAUDE.md` / `GEMINI.md` 仅为指向本文件的指针）：
 > 项目状态、架构、惯例、待办全在下游文档——从这里重建完整 context 不超过 60 秒。
 
 ## 共享工作记忆 (WORKMEMORY)
@@ -23,7 +23,7 @@
 | 产品特性全览 / 设计与实施计划                                                                                | `FEATURES.md`；`docs/specs/`（设计稿）、`docs/plans/`（在途计划；已交付的进 `docs/plans/archive/`） |
 | 文档该放哪 / docs 目录约定（分层与归档规则）                                                                 | `docs/README.md`                                                                                    |
 | 本机知识库（规范 / 避坑 / 沉淀）                                                                             | 本机 MCP（`search_vault` / `save_inbox_draft`）或 `/dfs-save`；**仓库不含其路径与内容**             |
-| 工程规范与避坑检索（3 行锚点）                                                                               | `CLAUDE.md` / `.agent-rules.md` / `.cursorrules`                                                    |
+| agent 规则入口                                                                                               | 唯一真值是本文件；`CLAUDE.md` / `GEMINI.md` 仅是指向本文件的指针，勿写第三份副本                     |
 
 ---
 
