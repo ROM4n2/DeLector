@@ -32,6 +32,7 @@ import argparse
 import ast
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -583,12 +584,15 @@ def apply_baseline_tolerance(
     return kept, report
 
 
-def run_audit(root: Path) -> int:
-    cfg = load_config(root)
+def collect_failures(root: Path, cfg: dict[str, int]) -> tuple[list[str], int, list[str]]:
+    """Run the full analysis and return (raw findings, module count, syntax-skipped modules).
+
+    Factored out of ``run_audit`` so ``--emit-baseline`` can measure the SAME findings the audit
+    sees — reimplementing the scan in the baseline writer would drift from the gate it feeds.
+    """
     files = iter_python_files(root)
     if not files:
-        print("[PASS] Structure audit: no Python modules found (nothing to analyse).")
-        return 0
+        return [], 0, []
 
     trees: dict[str, ast.Module] = {}
     texts: dict[str, str] = {}
@@ -630,9 +634,17 @@ def run_audit(root: Path) -> int:
     failures.extend(check_dead_exports(root, trees, rel_of, cfg))
     failures.extend(check_test_coverage_by_file(root, trees, rel_of, cfg))
     failures.extend(check_duplicates(root, trees, rel_of, cfg))
+    return failures, len(trees), skipped
 
+
+def run_audit(root: Path) -> int:
+    cfg = load_config(root)
+    failures, module_count, skipped = collect_failures(root, cfg)
+    if not module_count:
+        print("[PASS] Structure audit: no Python modules found (nothing to analyse).")
+        return 0
     failures, suppressed = apply_baseline_tolerance(failures, cfg)
-    return _report(failures, len(trees), skipped, suppressed)
+    return _report(failures, module_count, skipped, suppressed)
 
 
 def _report(
@@ -662,6 +674,133 @@ def _report(
     return 0
 
 
+def _baseline_counts(root: Path) -> dict[str, int]:
+    """Measure every default class with tolerance disabled — the raw debt, self-measured."""
+    zero = {**DEFAULTS, **{key: 0 for key in RATCHET_KEYS.values()}}
+    failures, _, _ = collect_failures(root, zero)
+    counts = {key: 0 for key in RATCHET_KEYS.values()}
+    for msg in failures:
+        key = RATCHET_KEYS.get(msg.split(" ", 1)[0])
+        if key:
+            counts[key] += 1
+    return counts
+
+
+def _git_head_sha(root: Path) -> str:
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"], cwd=root,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+        )
+        return proc.stdout.strip() if proc.returncode == 0 else "unknown"
+    except FileNotFoundError:
+        return "unknown"
+
+
+def emit_baseline(root: Path) -> int:
+    """Write measured counts + provenance into data/repo_structure.json (human reviews the diff)."""
+    counts = _baseline_counts(root)
+    existing = load_config(root)
+    payload = {key: counts[key] for key in RATCHET_KEYS.values()}
+    # Preserve opt-in settings and thresholds verbatim; only allowed_* are regenerated.
+    for key, value in existing.items():
+        if key not in payload and key not in ("_provenance",):
+            payload[key] = value
+    payload["_provenance"] = {
+        "measured_at_commit": _git_head_sha(root),
+        "note": "Self-measured by --emit-baseline; allowed_* may only decrease (see --ratchet-guard).",
+    }
+    path = root / CONFIG_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+    print(f"[BASELINE] wrote {CONFIG_PATH.as_posix()} at commit {payload['_provenance']['measured_at_commit']}:")
+    for key in RATCHET_KEYS.values():
+        print(f"  {key} = {counts[key]}")
+    return 0
+
+
+def ratchet_guard(root: Path) -> int:
+    """CI mode: fail if any allowed_* rose above the value committed at HEAD."""
+    try:
+        proc = subprocess.run(
+            ["git", "show", f"HEAD:{CONFIG_PATH.as_posix()}"], cwd=root,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+        )
+    except FileNotFoundError:
+        print("[FAIL] ratchet-guard needs git to read the committed baseline", file=sys.stderr)
+        return 2
+    if proc.returncode != 0:
+        print(f"[FAIL] ratchet-guard: {CONFIG_PATH.as_posix()} not present at HEAD; commit a baseline first",
+              file=sys.stderr)
+        return 2
+    try:
+        committed = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        print(f"[FAIL] committed baseline is not valid JSON: {exc}", file=sys.stderr)
+        return 2
+    current = load_config(root)
+    raised = [
+        f"{key}: {committed.get(key, 0)} -> {current[key]}"
+        for key in RATCHET_KEYS.values()
+        if current[key] > int(committed.get(key, 0))
+    ]
+    if raised:
+        print("[FAIL] ratchet violated — allowed_* may only decrease:", file=sys.stderr)
+        for item in raised:
+            print(f"  - {item}", file=sys.stderr)
+        return 1
+    print(f"[PASS] ratchet intact ({len(RATCHET_KEYS)} classes, no tolerance increase vs HEAD)")
+    return 0
+
+
+def audit_json(root: Path) -> int:
+    """Emit findings as JSON on stdout — no human text, so CI can aggregate debt over time."""
+    cfg = load_config(root)
+    failures, module_count, skipped = collect_failures(root, cfg)
+    raw_classes: dict[str, int] = {}
+    for msg in failures:
+        tag = msg.split(" ", 1)[0]
+        raw_classes[tag] = raw_classes.get(tag, 0) + 1
+    kept, suppressed = apply_baseline_tolerance(failures, cfg)
+    payload = {
+        "module_count": module_count,
+        "skipped_modules": skipped,
+        "verdict": "pass" if not kept else "fail",
+        "findings_total": len(failures),
+        "findings_reported": len(kept),
+        "findings_tolerated": len(failures) - len(kept),
+        "by_class": raw_classes,
+        "tolerated_by_class": {
+            tag: {"absorbed": n, "total": total} for tag, (n, total) in suppressed.items()
+        },
+        "reported_findings": kept,
+    }
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if not kept else 1
+
+
+def explain_config(root: Path) -> int:
+    """Print the effective threshold/tolerance set and where it came from (auditability)."""
+    cfg = load_config(root)
+    path = root / CONFIG_PATH
+    print(f"config source: {path.as_posix()} ({'present' if path.is_file() else 'absent — using defaults'})")
+    print("effective settings:")
+    for key in sorted(cfg):
+        print(f"  {key} = {cfg[key]}")
+    if path.is_file():
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            print("  (config file is not valid JSON; values above are defaults)")
+        else:
+            prov = raw.get("_provenance")
+            if prov:
+                print(f"provenance: measured_at_commit={prov.get('measured_at_commit', 'unknown')}")
+                print(f"            note={prov.get('note', '')}")
+    print(f"ratchet classes: {', '.join(sorted(RATCHET_KEYS.values()))}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -672,7 +811,26 @@ def main(argv: list[str] | None = None) -> int:
     # silently reports "no cycles", which is the failure mode this gate exists to prevent.
     ap.add_argument("--staged", action="store_true", help="Accepted for symmetry; the graph is always whole")
     ap.add_argument("--all", action="store_true", help="Audit all modules (default)")
+    ap.add_argument("--emit-baseline", action="store_true",
+                    help="Measure current per-class counts into data/repo_structure.json (self-measured)")
+    ap.add_argument("--ratchet-guard", action="store_true",
+                    help="CI mode: fail if allowed_* rose above the value committed at HEAD")
+    ap.add_argument("--json", action="store_true",
+                    help="emit machine-readable findings on stdout (for trend aggregation)")
+    ap.add_argument("--explain", action="store_true",
+                    help="print effective config, source path and baseline provenance")
     args = ap.parse_args(argv)
+    modes = (args.emit_baseline, args.ratchet_guard, args.json, args.explain)
+    if sum(bool(m) for m in modes) > 1:
+        ap.error("--emit-baseline, --ratchet-guard, --json and --explain are mutually exclusive")
+    if args.emit_baseline:
+        return emit_baseline(args.root)
+    if args.ratchet_guard:
+        return ratchet_guard(args.root)
+    if args.json:
+        return audit_json(args.root)
+    if args.explain:
+        return explain_config(args.root)
     return run_audit(args.root)
 
 
