@@ -229,3 +229,14 @@
 - **上游**：本 ADR 由 `/dfs-grill` 双镜拷问产出（`product-ux` 镜头：瓶颈定位在"不知道有新版"；`sre-resilience` 镜头：实核 manifest / workflow / MainActivity，给出 Option B 的信任锚与失败模式清单）。
 - **相关**：`docs/agents/architecture.md`（Android 独立单机版一节）、`docs/agents/ops.md`（打包与真机点检）、红线 4（versionCode 编码）、红线 6（缓存闸）、红线 9（import 期不联网）、红线 11（跨边界契约须行为探针验证）。
 - **知识**：vault 不随仓库分发（版本号散布必漏改 ⇒ §6.1 的依据）。
+
+---
+
+## 9. Amendment（2026-11-17）
+
+> 本节只追加，不改写上文任何原有章节。
+
+- **新决策**：[ADR-0034](2026-11-17-adr-0034-cross-platform-in-app-update.md) 正式把「只检查、不安装」修订为「检查 + 应用内下载 + 分平台安装」。
+- **被取代的部分**：§3.2 对 Option B 的否决、§4.1 Q1-A（只做检查+提示）、§6.3 中的「应用内下载 APK、唤起安装器、`REQUEST_INSTALL_PACKAGES`」三项。
+- **继续有效的部分**：§4.1 Q2-A（GitHub Releases 为唯一真相源）、Q3-A（后端端点代查）、Q4-A（延迟检查/TTL/无新版静默）、§4.2 的 7 键契约与四条不变式，以及 §6.3 中「静默安装、自建更新服务、差分更新、恢复三 ABI、前端直连 GitHub、热更新 `static/`、LAN 代理、自动安装/自动下载」。
+- **落地上限**：Android 仍受平台约束，最少需要「未知来源授权 + 系统安装确认」；本修订不承诺、也不得宣传静默安装。
