@@ -11,7 +11,7 @@
 
 ## 必读锚点（按需深入）
 
-- `AGENTS.md`（项目根）：**纯路由入口**（~30 行）——只有 WORKMEMORY 约定与文档路由，勿往它回填内容。
+- `AGENTS.md`（项目根）：**唯一入口与规则真值**（~32 行）——WORKMEMORY 约定 + 文档路由；`CLAUDE.md` / `GEMINI.md` 只是指向它的两行 `@AGENTS.md` 指针（2026-11-17 收敛，勿写第三份副本）。
 - `docs/README.md`：**docs 目录约定的正主**（分层与归档规则）。架构在 `docs/agents/architecture.md`，安全 / 环境 / 工作惯例在 `docs/agents/ops.md`。
 - `FEATURES.md`：产品特性全览。
 - `CHANGELOG.md`：**版本历史正主**（每次发版追加条目）。
@@ -41,6 +41,7 @@
   - 内部：`model_loader.get_nlp_readiness()` 零副作用探针；`/api/health` 两分支同挂 `nlp` 字段；快退只在 `prewarm_started` 为真时生效（否则保留 single-flight 同步迁移通道）。
   - 验证：本地全量 pytest 3036 passed / 3043 collected（1 failed 为本机 GBK 控制台解码问题，master 同样红，与 CI 无关）；`check_release_docs` / `check_index_html_sync` / `check_css_sync` 通过；ruff + 两档 mypy 零错；进入本版的 PR #340 全部 CI 检查通过。
   - **最新版本：v5.23.5（2026-11-13）**：整体健康度修复落地（备份还原写屏障 / 数据目录迁移逐库判定 / SW 缓存不跨版本 / 写路径事务边界 / 判据族改行为探针）。
+- **维护性改动（2026-11-17，非发版）**：① `scripts/check_repo_hygiene.py` 升到 dfs-bootstrap **门禁 v4**（PR #387，新增 `--no-git` 非 git 树自审）；② 5 个 agent 配置收敛到单真值（PR #388）——`CLAUDE.md` / `GEMINI.md` 变两行指针，`.agent-rules.md` / `.cursorrules` 删除，引用同步改写。两 PR 合并时 `work.log` 冲突已按时间序重排。门禁四档在 master 全绿（1006 files / 492 modules）。
 - **项目状态：2026-11-10 起阶段性暂停**，短期内不再推进。接手先读 [`handoff_2026-11-10-project-pause.md`](archive/handoff_2026-11-10-project-pause.md)。
 - **上一版 v5.23.0**：词卡写入幂等修复链收口 + Android 冷启动静态壳 + 桌面 B2 提前加载 + App 内已知限制。
 - **历史里程碑归档**：v5.22.1（文章响应体去重 / Android TTFD 口径）、v5.22.0（视觉材质、桌宠 P1–P4、复习台账、存量重算 3.6.0）、v5.21.1（伴学 SSE 跨 chunk 分帧修复）、v5.21.0（伴学页面级能力与 HITL 闭环）、v5.20.2（阅读排版与 CEFR 透视）、v5.20.1（Android 拖拽与 Apache 2.0）、v5.20.0（伴学 Agent 运行时）、v5.19.0 及更早版本演进详见 `CHANGELOG.md` 与 `WORKMEMORY/cold/digest-2026-10.md`。
@@ -73,7 +74,7 @@
 6. **递延项（未立项）**：tests `--strict`；（本机脚本） 三条版本正则**已于 tests/test_app_version_source.py 补齐自动化守卫**；PWA 安装提示验证 / 192-512 PNG 图标（**图标已于 2026-11-03 补齐**：`static/icon-192.png`、`static/icon-512.png` + manifest 位图条目 + 尺寸守卫测试；安装提示仍待真机验证）；**桌面单实例与端口顺延已于 2026-10-22 交付**（见「当前状态」，勿再当待办）；发布链路 runbook（Publish 被跳过 / 孤儿 tag 的恢复路径：私有笔记库 v5.4.0 复盘 + **v5.1.1 孤儿 tag 在案**；`gh workflow run --ref <tag>` 理论可补发但**本仓未实证**，判据只能是 release 资产清单）。
 
 
-7. **项目阶段性暂停（2026-11-10）**：v5.23.0 发版后短期内不再推进。接手入口 = [`handoff_2026-11-10-project-pause.md`](archive/handoff_2026-11-10-project-pause.md)（含已完成证据、下一步、风险与坑）。**热层已轮转（2026-11-13）**：97 事件 > 阈值 75，保留最新 50 条，最老 47 条（11-08 的 3 条 / 11-09 的 24 条 / 11-10 00:01~19:31 的 20 条）移入 `archive/work-2026-11-08|09|10.log`，事件集合守恒已按协议 §5.1 对账；COLD digest 已增补至 v5.23.0（v5.23.1~v5.23.5 尚未蒸馏）。
+7. **项目阶段性暂停（2026-11-10）**：v5.23.0 发版后短期内不再推进。接手入口 = [`handoff_2026-11-10-project-pause.md`](archive/handoff_2026-11-10-project-pause.md)（含已完成证据、下一步、风险与坑）。**热层已轮转（2026-11-13）**：97 事件 > 阈值 75，保留最新 50 条，最老 47 条（11-08 的 3 条 / 11-09 的 24 条 / 11-10 00:01~19:31 的 20 条）移入 `archive/work-2026-11-08|09|10.log`，事件集合守恒已按协议 §5.1 对账；COLD digest 已增补至 v5.23.0（v5.23.1~v5.23.5 尚未蒸馏）。**再轮转（2026-11-17）**：57 事件 > 保留值 50，最老 7 条（11-10 19:52~23:40）追加进 `archive/work-2026-11-10.log`，事件集合守恒已对账（`grep '^### ' | sort | uniq -c` 前后 diff 为空）。⚠️ 遗留：work.log 仍 452 行 / 81KB，超卫生门禁 150 行 / 24KB 上下文预算（该桶已按基线容忍 1/1）——`HOT_RETENTION_EVENTS=50` 是根因，降到 15~20 才能真进预算，属配置裁决，未擅自改。
 
 ## 工作方式
 
