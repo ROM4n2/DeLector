@@ -99,8 +99,9 @@ status: open
 
 ## 5. 分层与轮转（HOT / WARM / COLD）
 
-- **HOT**：`work.log`，保留最近 `HOT_RETENTION_EVENTS` 条（配置行在 INDEX.md，默认 50）。
-- **轮转触发**：事件数超 `HOT_RETENTION_EVENTS × 1.5` 时，**下一个开始工作的 agent** 顺手执行：最老事件移入 `archive/work-YYYY-MM-DD.log`（按事件日期分片），并更新 INDEX 主题索引。
+- **HOT**：`work.log`，保留最近 `HOT_RETENTION_EVENTS` 条（配置行在 INDEX.md，默认 15——按「单事件 ≤4KB、热层总量 ≤ 卫生门禁的 24KB 上下文预算」反推，2026-11-17 由 50 下调）。
+- **轮转触发**（满足任一即触发）：① 事件数超 `HOT_RETENTION_EVENTS × 1.5`；② **`work.log` 体积超 24KB 上下文预算**（卫生门禁 `BUDGET` 口径）。触发后由**下一个开始工作的 agent** 顺手执行：最老事件移入 `archive/work-YYYY-MM-DD.log`（按事件日期分片），并更新 INDEX 主题索引。
+  - ② 的存在理由：单事件 ≤4KB 时，光看条数会在撞到 15×1.5=23 条之前就先撞破 24KB（15 条均值就有 ~24KB），条数不是体积的可靠代理。
 - **WARM**：`archive/`，只经 INDEX 索引按需加载。
 - **COLD**：`cold/digest-YYYY-MM.md`，仅在用户显式要求（"把上月总结成 digest"）时由 agent 蒸馏生成，并同步刷新 PROJECT_OVERVIEW.md。
 

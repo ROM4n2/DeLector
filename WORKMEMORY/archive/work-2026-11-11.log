@@ -1,0 +1,87 @@
+### 2026-11-11 00:25 | deepseek-v4.1-flash | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec, git
+发版 v5.23.1（PR #340 合并后按「有用户可见面」判据放行）：阅读页「未就绪显示成加载错误」修复。
+- 判据：`git diff --stat v5.23.0..master -- static/` 非空（reader.js / article-store.js / style.css / index.html / sw.js 版本面），确认有用户可见面再发版，未凭记忆。
+- 五件套：`version.py` 5.23.0→5.23.1；`sw.js` CACHE_NAME；`index.html` 顶栏；`build.gradle` fallback 5.23.1 / versionCode 52301；README（badge、Tests 徽章 3032/3043、亮点、四行下载表、版本历史三轮）；CHANGELOG 新增 v5.23.1 块（修复/内部/已知限制/回滚）；PROJECT_OVERVIEW「当前状态」同步。`tests/test_app_version_source.py` 的两处硬编码字面量同步 bump。
+- Tests 徽章口径：本轮**本地真跑了全量**——`pytest tests` 3036 passed / `--collect-only` 3043 collected（5 skipped + 1 xfailed + 1 failed）。那 1 条 failed 是 `test_frontend_layers.py::test_gate_cli_reports_file_line_rule_and_raw_line`：本机 GBK 控制台把子进程中文输出解码成乱码，**master（v5.23.0）上同样失败**，判为环境问题、不计回归，README 注释里写明不算 v5.23.1 的失败。
+- 顺手踩到并修正：顶栏版本号的**真身是 `static/layout/header.html`**，`static/index.html` 由 `tools/build_index_html.py` 装配；直接改产物会让 `test_check_index_html_sync.py` 两条用例红。正确顺序 = 改片段 → build → `check_index_html_sync`。
+- 已知限制写进 CHANGELOG（不得省略）：arm64 真机未点检（本版含 `static/` 与后端改动，需覆盖安装）；预热被关或线程未起时首开仍可能同步等；就绪等待时长未量化。
+- 回滚：versionCode 52301 不可回拨；零 DDL、零迁移，`v5.23.0` 包可直接回退。
+### 2026-11-11 00:45 | deepseek-v4.1-flash | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+v5.23.1 发版收尾（含 GitHub Release 正文）。
+- 合并：PR #341（`chore(release): v5.23.1`）→ `0c0dc25`；master push CI run 42845037417 **success**。
+- tag：annotated `v5.23.1` 打在 `0c0dc25`（含 bump），推送触发 `build-release.yml` run 42845127262 **success**：Build Linux / Android / Windows / macOS 四 job 全绿 + Publish GitHub Release 成功。
+- 资产（`gh release view` 实测，均非零）：Android APK 62,278,282 B（59.4 MB）/ Linux TAR.GZ 128,348,026 B（122.4 MB）/ macOS TAR.GZ 61,659,170 B（58.8 MB）/ Windows ZIP 90,738,384 B（86.5 MB）。
+- Release 正文：按 `.github/release-notes-template.md` **整份覆盖**（`gh release edit --notes-file`），含本版更新（修复/内部/文档）+ 已知限制 + 回滚四轴 + 本版资产表 + CHANGELOG 指针；无 emoji。`isDraft=false`、`isPrerelease=false`。
+- 分支：`release/v5.23.1` 合并后已删（本地+远端），tag 为权威锚点；临时 worktree `DeLector-readiness` 与 `fix/article-readiness-ux` 亦已清理。
+- 遗留（用户已确认口径）：arm64 真机仍未点检，本版含 `static/` 与后端改动 ⇒ 需覆盖安装验证；CHANGELOG 与 Release 正文均已按「未验证」写明，不得改记为已验证。
+### 2026-11-11 01:20 | deepseek-v4.1-flash | PITFALL
+Caps: filesystem-read, filesystem-write, shell-exec, git
+v5.23.1 全平台白屏（P0）：前端模块图解析期 SyntaxError，**发版前所有门禁全绿也没抓住**。
+- 现象（用户真机）：Android 更新 v5.23.1 后，首次进入「没感觉有什么变化」，退出重进后「前端完全无法正常显示，只剩文字方框」。
+- 根因：`static/js/article-store.js` 把 `RETRY_DELAYS_MS` / `RETRY_BUDGET_MS` / `isRetryableError` **既**写成 `export const` / `export function` **又**列进文件底部 `export { ... }` ⇒ `SyntaxError: Duplicate export of ...`。ES 模块在解析/链接期失败 ⇒ `main.js` 一行不执行 ⇒ 只剩静态骨架文字。桌面同源同崩，只是用户先在 Android 上撞到。
+- 为什么三层门禁都瞎：① `node --check` 只做单文件语法检查，不解析 import/export 绑定；② 前端 `tools/*.mjs` 探针用桩模块替真实 import 图；③ 既有 `tests/test_frontend_module_graph.py` 用 **set** 收集导出名 —— 重复被静默折叠。**判据错误，不是覆盖不足。**
+- 首次修复过程再踩一坑：新建同名测试文件时**覆盖掉了仓库里已存在的 674 行** `tests/test_frontend_module_graph.py`（同名的既有守卫）。`git status` 立刻显示 ` M`（已跟踪文件被改）才发现，`git checkout --` 复原后改为在该文件尾部追加两条用例。教训：写新文件前先 `ls`/`git ls-files` 确认同名文件不存在。
+- 修法与守卫：声明处去 `export`、只在底部 `export { ... }` 列一次；新增 ① 结构化重复导出检查（不依赖 node）② node 真 `import()` 每个 `static/js/*.js`，把 `SyntaxError` / `ERR_MODULE_NOT_FOUND` / 缺失导出判失败（浏览器专有全局缺失的运行期错误不计）。两条都做了变异自证：把重复导出写回去 → 2 failed。
+- 发布：v5.23.2（versionCode 52302）。CHANGELOG 顶部新增 v5.23.2 并给 v5.23.1 条目加「本版白屏，请用 v5.23.2」警示；v5.23.1 的 Release 正文同步加警示。
+- 遗留：仓库无浏览器自动化（无 Chrome/Playwright），修复后没有像素级渲染证据，只有「node 能解析并链接整张图」+ 本地 `/` `/style.css` 200；MUST 不得写成「已验证渲染正常」。
+### 2026-11-11 02:10 | deepseek-v4.1-flash | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+v5.23.2 发版收尾（白屏修复版）。
+- 合并：PR #342 → `3f0f695`；tag annotated `v5.23.2` 触发 `build-release.yml` run 42853586844 **success**（四平台 job + Publish 全绿）。
+- 资产（实测非零）：APK 62,283,666 B（59.4 MB）/ Linux 128,337,484 B（122.4 MB）/ macOS 61,662,176 B（58.8 MB）/ Windows 90,743,442 B（86.5 MB）。
+- Release 正文：按模板整份覆盖写入（含本版资产表）；**v5.23.1 的 Release 正文顶部加白屏警示并指向 v5.23.2**（资产保留仅作追溯）。
+- 本地全量 pytest（干净环境，期间不改文件）：3035 passed / 3045 collected（8 skipped + 1 xfailed + 1 failed = GBK 环境问题）。上一轮 3033/3 failed 的三条，根因分别是：① GBK 环境（既有）② 我自己起 uvicorn 调试服务在仓库根生成了 `delector.db` / `progress.db`，触发数据目录迁移预检拒启（已 kill PID 2524 并删除这两个我造的库）③ **跑测试期间并发编辑 README** 导致版本面断言读到半成品。教训：全量跑测试期间不得改工作区文件，调试服务要指定临时数据目录。
+- 环境事故（同轮）：`python -c "...反引号..."` 被 bash 当作命令替换执行，误跑了文件内容（无破坏，`git status` 复核干净）。写含反引号的脚本一律落成 `.py` 文件再执行，不用 `-c`。
+### 2026-11-11 03:05 | deepseek-v4.1-flash | PITFALL
+Caps: filesystem-read, filesystem-write, shell-exec, git
+模拟器点验揪出 v5.23.2 的两个真缺陷（发版后 30 分钟内修完，出 v5.23.3）。
+- 环境：`/d/Android/sdk` + AVD `Medium_Phone_API_37.0`（x86_64，仅此镜像）；模拟器渠道 flavor `emulator`（applicationId 后缀 `.emulator`，额外带 x86_64），`assembleEmulatorDebug` 产物 96→112 MB。
+- 第一次构建踩坑：漏跑 `tools/sync_android_sources.py` ⇒ APK 里 assets 仍是 **v5.22.1** 的旧静态资源，界面上顶栏写着 V5.22.1 还提示「可更新 v5.23.2」。顺序必须是 sync → gradle。
+- 缺陷 A（点开文章无反应）：`reader.js` 的 `_readerStateHtml` 删掉 `const bar = ...` 后模板仍留 `${bar}` ⇒ 点击抛 `ReferenceError: bar is not defined`，只有全局兜底弹一条提示。模块能解析，`node --check`/模块图守卫/桩探针全都看不见。加守卫 `test_reader_state_template_uses_only_declared_vars`（只核对该函数内 `${纯标识符}` 是否已声明；变异自证：写回 `${bar}` 立即红）。**先试过的全仓通用启发式误报 30+ 条（解构/多声明器识别不了），已撤掉——宁窄勿糊。**
+- 缺陷 B（退出重进停在 Webpage not available）：首帧导航早于服务 listening，SW network-first 的 fetch **不经过** `shouldInterceptRequest` ⇒ 拿不到 APK 骨架、ERR_FAILED；Chromium 错误页 URL 仍是应用 origin 且**不触发 onPageFinished**（实测整轮 logcat 没有 page_finished），旧 `skip_reload detail=app_origin_ready` 判据把它当成功。修法：就绪后注入探针发现 `window.notifyServerReady` 缺失 ⇒ 1.5s 后同探针再问一次 ⇒ 仍缺就补载一次（一次性防抖）。实测探针序列：`ready_notify=missing → loadurl_retry_missing_page → commit → ttfd → ready_notify=false`。
+- 顺带发现（未修，记在 CHANGELOG 已知限制）：启动瞬间服务未就绪时 SW 会回落上一轮缓存，可能短暂遮蔽新静态文件（本次实测旧 reader.js 被缓存复用，`pm clear` 后才换新）。
+- 验证证据：模拟器截图证明首页/文章列表/阅读页均正常渲染，顶栏 V5.23.3、`/api/health` 返回 `nlp.state=ready`；本地全量 3037 passed / 3044 executed（5 skipped + 1 xfailed + 1 failed=GBK 环境）。
+- 另外：`test_android_packaging.py` 会扫 `android/app/build/outputs/apk/{device,emulator}/debug/*.apk`，本地 debug 包未做 zipalign ⇒ 报「本地头不连续」17 处死区。发版前删掉本地 debug 产物即可（不是产品缺陷，但别把这条红当成回归）。
+### 2026-11-11 04:10 | deepseek-v4.1-flash | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+v5.23.3 发版收尾（模拟器点验后的修复版）。
+- 合并：PR #343 → `a6b1e45`；tag annotated `v5.23.3` 触发 `build-release.yml` run 42863417452 **success**（四平台 job + Publish 全绿）。
+- 资产（实测非零）：APK 62,283,662 B / Linux 128,340,417 B / macOS 61,663,993 B / Windows 90,740,915 B。
+- Release 正文按模板整份写入；**v5.23.1 与 v5.23.2 的正文顶部各加警示并指向 v5.23.3**（v5.23.1=白屏、v5.23.2=阅读页不可用），两者资产保留仅作追溯。
+- 工作区注意：`git add -A` 曾把**另一条并行工作线**（`fix/wb-export-real-write`：backup.py / workbench.css / workbench.html / ci_shards.py / wb_export_probe.mjs / test_wb_export_save.py 与其 work.log 条目）的未提交改动卷进发版提交。已 `git reset --soft` 撤回、只提交本任务 13 个文件，并 `--force-with-lease` 覆盖尚未合并的远端分支。教训：多 agent 共用同一工作区时禁止 `git add -A`，必须逐文件 add。
+- 遗留：arm64 真机仍未点检（模拟器为 x86_64 debug 包）；SW 缓存在冷启动瞬间可能短暂遮蔽新静态文件（实测旧 reader.js 被复用，`pm clear` 后才换新），未修，已写进 CHANGELOG 已知限制。
+### 2026-11-11 11:40 | deepseek-v4.1-flash | PITFALL
+Caps: filesystem-read, filesystem-write, shell-exec
+桌面壳导出「假成功」：文件不写盘，前端仍弹「已导出」。
+- 现象：桌面包（desktop.py + pywebview 6.2.1 / WebView2）点导出，磁盘无文件，toast 照报成功。
+- 根因：① 全仓零处设置 `webview.settings['ALLOW_DOWNLOADS']`，默认 False（`webview/__init__.py:120`）② `edgechromium.py:316-319` 在开关为假时 `args.Cancel=True` 静默取消（只订阅 `DownloadStarting` @284，无完成事件、无落盘路径回传）③ 前端 `download()` 后无条件 `toast("已导出...")`（旧 `workbench.html:2586/2594`）。
+- 解法（DECISION）：不翻开关。新增 `POST /api/wb/backup/save` 由 Python 显式落盘并返回真实 path/bytes（`delector/routes/backup.py:163`）；前端 `download()` 返回结果对象，`exportAndReport()` 只在拿到 path 时报成功（`workbench.html:2561/2605`）；失败 toast 用「⚠ + 8px 左边框 + 方角」满足 I1；Android 保持 501 回退系统下载。why：WebView 放行只会落默认下载目录且无完成回调，前端仍拿不到成功证据，等于换个地方假成功。
+- 闸：`tools/wb_export_probe.mjs`（6 场景，精确定义「无 path 不报成功」）+ `tests/test_wb_export_save.py`（8 用例）+ `tools/ci_shards.py` 登记。
+- 落盘目录：自动创建 `Path.home()/Downloads`；建不出来才退回主目录，并在返回体带 `fallback_dir/warning`，前端文案显式说明位置。
+- 验证：desktop.py 实跑，toast `已导出轻量同步文件：C:\Users\Haoyu\Downloads\wb-sync-2026-11-11.json（134 字节）`，`Get-Item` Length=134（Downloads 由本修复自动创建）。未测：冻结 exe 内的导出点击、桌面 UI 真实磁盘写失败、macOS/Linux。
+### 2026-11-11 05:20 | deepseek-v4.1-flash | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec, git
+dependabot 积压 6 个 PR 一次性处理：合 1 个批量 PR（#351），其余 6 个关闭并留言指向。
+- 现状：#345 actions/cache v4→v6；#346 typer 0.27.3→0.28.0；#347 pydantic-core 2.50.2→2.50.4；#348 click 8.5.0→8.5.1；#349 fastapi 0.162.0→0.162.2（+requirements.txt pin）；#350 typing-inspection 0.4.4→0.4.5。
+- 为什么不逐个合：5 个 pip PR 的真实改动各 1 行，却因 `.gitattributes` 的 `* text=auto eol=crlf` 把 `requirements.lock.txt` **整文件重写**（每个 83 行噪声 diff），且 5 个 PR 改同一文件 ⇒ 逐个合并要 5 轮 rebase + 5 轮 CI。合成一笔：`4b3fadd` → merge `815afe9`。
+- 顺带发现：`requirements.txt` 的 **blob 是 CRLF**（早于 .gitattributes 契约写入），`requirements.lock.txt` 与 3 个 workflow 的 blob 是 LF —— 同一仓库两种存量，任何编辑这两个方向都会触发整文件重写。本次让 `requirements.txt` 由 git `text` 属性规范化成 LF（一次性 43 行 diff，已在提交信息与 PR 正文写明），lock 与 workflow 保持 LF 零噪声。
+- 验证口径：本地 `.venv` 仍是旧版本，**没有**本地证明新依赖兼容 —— 由 CI 的 `pip install -r requirements.txt` + 全量门禁裁决。PR CI 全绿（13 项）；合并后 master push run `815afe9` 也 success（actions/cache v6 在 GH 托管 runner 上可用，8 处替换无告警）。
+- 本地补跑：CI 定义/依赖清单相关守卫 116 passed；3 个 workflow YAML 可解析（jobs 8/5/1 不变）。
+### 2026-11-11 06:05 | deepseek-v4.1-flash | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec, git
+发版 v5.23.4（判据驱动：`git diff --stat v5.23.3..origin/master -- static/` 非空 ⇒ 有用户可见面）。
+- 用户可见面来自 PR #344（桌面导出真落盘：原先 WebView2 不放行下载、请求被静默取消，前端仍报「已导出」；改为 `POST /api/wb/backup/save` 由 Python 落盘并回传真实 path/bytes）。
+- 同一区间还有 #351（批量依赖升级 + actions/cache v6）与 #352（lock 可解性修复），属内部改动，不单独构成发版理由。
+- **依赖事故（本轮新发现）**：#351 合并后 `uv pip install -r requirements.lock.txt` **不可解**——① `numpy==2.5.4` 要求 Python≥3.12 而项目 .venv 固定 3.11（dependabot 早先 a8ab228 单包 bump 引入）② `pydantic-core==2.50.4` 与 `pydantic==2.14.2` 精确要求的 2.50.2 冲突。修法：numpy→2.4.6、pydantic-core→2.50.2，并在 dependabot.yml 对 numpy 暂缓 minor/major（解除条件=最低 Python 升到 3.12）。
+- **判据缺口**：CI 只装 `requirements.txt`、**不读 lock**，所以 dependabot 把 lock 改成不可解组合时 CI 全绿。此后合并任何依赖 PR 前必须真跑 `uv pip install --dry-run -r requirements.lock.txt`（等价「锁文件可解」探针）。
+- 本地验证（项目级 .venv，不用全局 pip）：`uv pip install --python ./.venv/Scripts/python.exe -r requirements.lock.txt` 成功，实际版本 fastapi 0.162.2 / click 8.5.1 / typer 0.28.0 / typing-inspection 0.4.5 / numpy 2.4.6 / pydantic 2.14.2 + core 2.50.2；升级后全量 pytest 3040 passed / 3054 collected（2 failed + 3 errors 为本地既有噪声：GBK 解码、player_tray_probe、probe_json_contract —— 已在纯 master 上用 stash 复验同样红）。
+### 2026-11-11 07:00 | deepseek-v4.1-flash | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+v5.23.4 发版收尾。
+- 合并：PR #355 → `4e4289b`；tag annotated `v5.23.4` 触发 `build-release.yml` run 42955334647 **success**（四平台 + Publish 全绿）。
+- 资产（实测非零）：APK 62,284,439 B / Linux 128,347,681 B / macOS 61,677,611 B / Windows 90,747,260 B。
+- Release 正文按模板整份写入（含本版资产表）；v5.23.1 / v5.23.2 的警示仍指向可用版本（v5.23.3 及更早的警示文案无需再改）。
+- 依赖环境：项目级 `.venv` 已按 lock 升级（fastapi 0.162.2 / click 8.5.1 / typer 0.28.0 / typing-inspection 0.4.5 / numpy 2.4.6 / pydantic 2.14.2 + core 2.50.2）——**全部装在项目级 .venv，未动全局解释器**（用户明确要求）。
+- 遗留：桌面导出未在冻结 exe / macOS / Linux 验证；arm64 真机仍未点检；本地 2 failed + 3 errors 为既有环境噪声（GBK / player_tray_probe / probe_json_contract，纯 master 上同样红）。
