@@ -159,4 +159,39 @@ EOF
     exit 1
 fi
 
+# ── 仓库门禁（dfs-bootstrap，2026-11-16 接线）────────────────────────────────
+# 两段门禁在密钥扫描通过后运行，都是 stdlib-only，不改上面的扫描语义、
+# delector:allow-secret 豁免，也不动 core.hooksPath（本机链在 .git/local-hooks）。
+#
+# hygiene：只读暂存 blob，默认阈值下本仓库的暂存面是干净的 ⇒ 阻断有效。
+# structure：分析整张导入图；本仓库历史债务 331 项（FUNC_LEN 194 / NEST 94 /
+#   STUB 37 / CYCLE 2 / FANOUT 4）⇒ 暂为警告。不清零就转阻断会让每次 Python
+#   提交都被历史债务淹没，钩子随即被 --no-verify 绕过（skill 明令勿 day-one red）。
+PY_BIN=""
+for cand in .venv/Scripts/python.exe .venv/bin/python; do
+    if [ -x "$cand" ]; then PY_BIN="$cand"; break; fi
+done
+[ -n "$PY_BIN" ] || PY_BIN="$(command -v python3 2>/dev/null || command -v python 2>/dev/null || true)"
+
+if [ -n "$PY_BIN" ]; then
+    if [ -f scripts/check_repo_hygiene.py ]; then
+        hygiene_out="$("$PY_BIN" -B scripts/check_repo_hygiene.py --staged 2>&1)"
+        if [ $? -ne 0 ]; then
+            printf '%s\n' "$hygiene_out" >&2
+            printf '[pre-commit] 仓库卫生门禁未通过 ⇒ 阻断\n' >&2
+            exit 1
+        fi
+    fi
+
+    if [ -f scripts/check_repo_structure.py ] && \
+       [ -n "$(git diff --cached --name-only --diff-filter=ACMR -- '*.py')" ]; then
+        structure_out="$("$PY_BIN" -B scripts/check_repo_structure.py --all 2>&1)"
+        if [ $? -ne 0 ]; then
+            summary="$(printf '%s\n' "$structure_out" | grep -m1 'Structure audit found' || true)"
+            printf '[pre-commit] 结构门禁警告：%s（历史债务，暂不阻断；完整输出 python -B scripts/check_repo_structure.py --all）\n' \
+                "${summary:-发现违规但无法解析摘要}" >&2
+        fi
+    fi
+fi
+
 exit 0

@@ -1,0 +1,8 @@
+{
+  "allowed_cycle": 2,
+  "allowed_fanout": 4,
+  "allowed_func_len": 194,
+  "allowed_nest": 94,
+  "allowed_class": 0,
+  "allowed_stub": 37
+}
