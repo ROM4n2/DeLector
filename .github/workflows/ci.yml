@@ -710,9 +710,19 @@ jobs:
       # dfs-bootstrap structure gate（2026-11-17 从 pre-commit 迁来）：整图分析实测约 8s，
       # 放 CI 无人等待；本地钩子默认跳过（DFS_STRUCTURE_LOCAL=1 可显式开启）。
       # 两步必须成对：audit 按 ratchet 基线拦新增违规，guard 禁止把基线调高来"修绿"。
-      # 接线由 tests/test_ci_dfs_gate_wiring.py 钉死，删任一步该测试即红。
+      # 接线由 tests/test_ci_hardening_workflow_wiring.py 钉死，删任一步该测试即红。
       - name: Structure gate (cycles/fanout/length/nesting/stubs, ratcheted)
         run: python3 scripts/check_repo_structure.py --all
 
       - name: Structure ratchet guard (no tolerance increase)
         run: python3 scripts/check_repo_structure.py --ratchet-guard
+
+      # dfs-bootstrap hygiene gate：按 (类别 × 顶层作用域) 分桶的存量基线。未列出的桶容忍 0，
+      # 所以生产代码 delector/ 里新出现机器绝对路径会立即拦下，不会被 docs/ 的 217 条历史路径淹没。
+      # 两步成对：audit 拦新增违规，guard 禁止把桶上限调高来"修绿"；接线由
+      # tests/test_ci_hardening_workflow_wiring.py 钉死，删任一步该测试即红。
+      - name: Hygiene gate (paths/large/bloat/budget, scope-ratcheted)
+        run: python3 scripts/check_repo_hygiene.py --all
+
+      - name: Hygiene ratchet guard (no bucket increase)
+        run: python3 scripts/check_repo_hygiene.py --ratchet-guard

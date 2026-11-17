@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """发布链路与 CI 接线守卫：Windows 验包、打包面检测、前端门禁与超时护栏。"""
 
+import json
 import re
 import subprocess
 
@@ -587,3 +588,39 @@ def test_local_hook_skips_structure_by_default() -> None:
     assert '"${DFS_STRUCTURE_LOCAL:-0}" = "1"' in hook, (
         "structure 必须由 DFS_STRUCTURE_LOCAL=1 显式开启，默认关闭"
     )
+
+
+# ── dfs-bootstrap 卫生门禁的 CI 接线守卫（2026-11-17 按作用域 ratchet）────────────
+# hygiene --all 本机实测 323 条存量，全部落在 docs/WORKMEMORY/tests/tools 的具名桶里；
+# 一旦接进 CI 必须两步成对：audit 拦新增，guard 禁止把桶上限调高来"修绿"。
+# 单标识符不足以区分两个 gate（两者都有 --all / --ratchet-guard），故断言精确到脚本名。
+
+HYGIENE_GATE = "scripts/check_repo_hygiene.py"
+
+
+def test_ci_wires_hygiene_audit_step() -> None:
+    block = _job_block(CI_WORKFLOW, "static-invariants")
+    assert HYGIENE_GATE in block, "static-invariants 未接线卫生门禁"
+    assert f"{HYGIENE_GATE} --all" in block, "CI 必须跑全量卫生审计（--all）"
+
+
+def test_ci_wires_hygiene_ratchet_guard_step() -> None:
+    block = _job_block(CI_WORKFLOW, "static-invariants")
+    assert f"{HYGIENE_GATE} --ratchet-guard" in block, (
+        "卫生棘轮守卫缺失：把 ratchet 桶上限调高就能'修绿'，基线形同虚设"
+    )
+
+
+def test_hygiene_baseline_is_scope_granular() -> None:
+    """基线必须按 (类别 × 作用域) 分桶，且生产代码桶不得出现——否则新泄漏会被 docs 债务淹没。"""
+    data = json.loads(_read_guard_file(REPO_ROOT / "data" / "repo_hygiene.json"))
+    ratchet = data["ratchet"]
+    assert any(key.startswith("ABS_PATH|docs") for key in ratchet), "缺 docs 存量桶"
+    assert "ABS_PATH|delector" not in ratchet, (
+        "生产代码 delector/ 出现 ABS_PATH 容忍桶：机器路径泄漏会被基线吸收（必须与 docs 分桶且为 0）"
+    )
+    assert "ABS_PATH|static" not in ratchet, "static/ 出现 ABS_PATH 容忍桶：前端代码泄漏会被吸收"
+    for cat in ("CONFLICT", "SYMLINK", "SYNTAX", "EOL_PIN"):
+        assert not any(key.startswith(cat + "|") for key in ratchet), (
+            f"正确性类别 {cat} 出现容忍桶：合并标记/坏符号链接/语法错误永远不该被 ratchet 掉"
+        )

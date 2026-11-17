@@ -1,0 +1,19 @@
+{
+  "ratchet": {
+    "ABS_PATH|WORKMEMORY": 58,
+    "ABS_PATH|docs": 217,
+    "ABS_PATH|tests": 11,
+    "ABS_PATH|tools": 6,
+    "BLOAT|<root>": 1,
+    "BLOAT|delector": 8,
+    "BLOAT|static": 7,
+    "BLOAT|tests": 11,
+    "BLOAT|tools": 2,
+    "BUDGET|WORKMEMORY": 1,
+    "LARGE|delector": 1
+  },
+  "_provenance": {
+    "measured_at_commit": "eada74d",
+    "note": "Self-measured by --emit-baseline; each CATEGORY|scope bucket may only decrease (see --ratchet-guard). Unlisted buckets allow zero findings."
+  }
+}
