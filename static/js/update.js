@@ -10,12 +10,16 @@
  * 「System · vX.Y.Z」是用户判断「前端资源刷没刷新」的自证指标（v4.4.5 漏 bump 出过事故），
  * 更新状态只由本模块的 chip 承载，绝不污染它。
  *
+ * 应用内更新（ADR-0034）：只有用户**点击**「应用内更新」后才会请求下载端点；下载/校验/
+ * 安装的状态全部来自后端会话快照，前端只做文案映射（见 update-flow.js）。
+ *
  * 探针同步驱动依赖：initUpdateCheck 刻意用**普通可选参数**（非条件编译分支）注入
  * fetchImpl / setTimeoutFn / delayMs，从而可在 node:vm 里确定性复现四种响应路径。
  */
 "use strict";
 
 import { esc } from "./core.js";
+import { describeUpdateSnapshot } from "./update-flow.js";
 
 export function initUpdateCheck(options = {}) {
   // ── 依赖注入（探针用；浏览器走默认值）──────────────────────────────────
@@ -23,11 +27,16 @@ export function initUpdateCheck(options = {}) {
   const doFetch = options.fetchImpl || globalThis.fetch;
   const schedule = options.setTimeoutFn || globalThis.setTimeout;
   const NOTICE_MS = 3000;
+  const POLL_MS = 700;
 
   // 端点路径内联（不抽标量常量），使本函数自足、可被探针按括号配对整段切片。
   const chip = document.getElementById("update-chip");
   const trigger = document.getElementById("topbar-system");
   if (!chip || typeof doFetch !== "function" || typeof schedule !== "function") return;
+
+  let lastPageUrl = "";
+  let lastAssetPath = "";
+  let polling = false;
 
   // title 是手动入口的非侵入式状态反馈，不改写顶栏版本自证文本。
   function setTriggerTitle(text) {
@@ -49,12 +58,20 @@ export function initUpdateCheck(options = {}) {
     }
   }
 
+  function setChipText(text) {
+    chip.innerHTML = esc(text);
+    chip.hidden = false;
+  }
+
   // 所有动态值（版本号 / 链接 / 文案）都先经 esc() 再写 innerHTML：
   // esc() 同时转义引号与 &，故既能挡文本注入，也能挡 href 的属性注入（引号越狱）。
+  // 第一个 href 必须是 Release 页：探针按「第一个 href」断言回退链路。
   function showChip(latest, pageUrl) {
+    lastPageUrl = pageUrl;
     chip.innerHTML =
       '<a class="update-chip-link" href="' + esc(pageUrl) +
-      '" target="_blank" rel="noopener noreferrer">可更新 v' + esc(latest) + "</a>";
+      '" target="_blank" rel="noopener noreferrer">可更新 v' + esc(latest) + "</a>" +
+      ' <a class="update-chip-link" href="#" data-role="in-app-update">应用内更新</a>';
     chip.hidden = false;
   }
 
@@ -66,6 +83,144 @@ export function initUpdateCheck(options = {}) {
       chip.innerHTML = "";
       chip.hidden = true;
     }, NOTICE_MS);
+  }
+
+  // 失败兜底：人话 + 永久退路（Release 页），不引导卸载重装。
+  function renderFailure(reason) {
+    const view = describeUpdateSnapshot({ state: "failed", error_reason: reason });
+    const link = lastPageUrl
+      ? ' <a class="update-chip-link" href="' + esc(lastPageUrl) +
+        '" target="_blank" rel="noopener noreferrer">打开 Release 页</a>'
+      : "";
+    chip.innerHTML = esc(view.text) + link;
+    chip.hidden = false;
+  }
+
+  async function fetchStatus() {
+    try {
+      const resp = await doFetch("/api/update/download/status", {
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      });
+      if (!resp || !resp.ok) return null;
+      return await resp.json();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function postUpdateAction(path) {
+    try {
+      return await doFetch(path, {
+        method: "POST",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: "{}",
+      });
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function installUpdate() {
+    // Android：下载/校验在 Python 侧，安装必须过 Java 桥（PackageInstaller 系统确认）。
+    // 桌面：没有桥，走本机 /api/update/install 拉起安装器。
+    const bridge = globalThis.DeLectorUpdate;
+    if (bridge && typeof bridge.install === "function") {
+      if (!lastAssetPath) {
+        renderFailure("install_failed");
+        return;
+      }
+      let status = "";
+      try {
+        status = bridge.install(lastAssetPath);
+      } catch (e) {
+        status = "";
+      }
+      if (status === "PENDING_USER_ACTION") {
+        setChipText("请在系统弹窗中确认安装");
+        return;
+      }
+      if (status === "NEED_UNKNOWN_SOURCES") {
+        setChipText("请在系统设置中允许安装未知应用后重试");
+        return;
+      }
+      renderFailure("install_failed");
+      return;
+    }
+    const resp = await postUpdateAction("/api/update/install");
+    if (!resp || !resp.ok) {
+      renderFailure("install_failed");
+      return;
+    }
+    setChipText("正在安装，应用即将重启…");
+  }
+
+  async function pollUpdate() {
+    const snapshot = await fetchStatus();
+    if (!snapshot) {
+      polling = false;
+      renderFailure("network");
+      return;
+    }
+    const view = describeUpdateSnapshot(snapshot);
+    lastAssetPath = typeof snapshot.asset_path === "string" ? snapshot.asset_path : lastAssetPath;
+    if (view.showCancel) {
+      chip.innerHTML = esc(view.text) +
+        ' <a class="update-chip-link" href="#" data-role="cancel-update">取消</a>';
+      chip.hidden = false;
+    } else if (view.text) {
+      setChipText(view.text);
+    }
+    if (snapshot.state === "ready") {
+      polling = false;
+      await installUpdate();
+      return;
+    }
+    if (snapshot.state === "failed") {
+      polling = false;
+      renderFailure(snapshot.error_reason || "write_failed");
+      return;
+    }
+    if (view.terminal) {
+      polling = false;
+      return;
+    }
+    schedule(pollUpdate, POLL_MS);
+  }
+
+  async function startInAppUpdate() {
+    if (polling) return;
+    polling = true;
+    setChipText("正在准备下载…");
+    const resp = await postUpdateAction("/api/update/download");
+    if (!resp || !resp.ok) {
+      polling = false;
+      renderFailure(resp && resp.status === 403 ? "unsupported" : "network");
+      return;
+    }
+    schedule(pollUpdate, 0);
+  }
+
+  async function cancelUpdate() {
+    polling = false;
+    await postUpdateAction("/api/update/download/cancel");
+    renderFailure("cancelled");
+  }
+
+  // chip 内的动作按钮用事件委托：不依赖 querySelector，探针的 DOM 桩也能安全跳过。
+  if (typeof chip.addEventListener === "function") {
+    chip.addEventListener("click", function (event) {
+      const target = event && event.target;
+      if (!target || typeof target.getAttribute !== "function") return;
+      const role = target.getAttribute("data-role");
+      if (role === "in-app-update") {
+        event.preventDefault();
+        startInAppUpdate();
+      } else if (role === "cancel-update") {
+        event.preventDefault();
+        cancelUpdate();
+      }
+    });
   }
 
   // manual=false（自动）：非「有新版」一律不动 DOM（零可见变化）。

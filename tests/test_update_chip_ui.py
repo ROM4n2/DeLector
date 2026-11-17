@@ -44,6 +44,7 @@ _PROBE_SCENARIOS = (
     "manual_click_shows_latest",
     "manual_click_humanizes_error",
     "manual_entry_is_discoverable",
+    "installing_snapshot_is_not_failure",
     "no_unhandled_rejection",
 )
 

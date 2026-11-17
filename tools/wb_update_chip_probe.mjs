@@ -35,6 +35,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const UPDATE_JS = path.join(ROOT, "static", "js", "update.js");
+const FLOW_JS = path.join(ROOT, "static", "js", "update-flow.js");
 const CORE_JS = path.join(ROOT, "static", "js", "core.js");
 const INDEX_HTML = path.join(ROOT, "static", "index.html");
 const JSON_MODE = process.argv.includes("--json");
@@ -132,6 +133,7 @@ let sliceError = null;
 try {
   const coreSrc = fs.readFileSync(CORE_JS, "utf8");
   const updateSrc = fs.readFileSync(UPDATE_JS, "utf8");
+  const flowSrc = fs.readFileSync(FLOW_JS, "utf8").replace(/^export\s+/gm, "");
   const esc = extractFn(coreSrc, "esc");
   const initUpdateCheck = extractFn(updateSrc, "initUpdateCheck");
   // 防死测：切片必须是真实现，否则实现回退了探针照样绿。
@@ -141,7 +143,12 @@ try {
   if (!initUpdateCheck || initUpdateCheck.length < 100 || !/has_update/.test(initUpdateCheck)) {
     throw new Error("initUpdateCheck 切片异常（缺 has_update 判定）：切歪或实现回退了");
   }
-  SLICES = { esc, initUpdateCheck };
+  // 应用内更新（ADR-0034）的纯展示函数由 update.js import；沙箱里没有模块系统，
+  // 故把 update-flow.js 去掉 export 前缀后与切片一起求值，仍是**真实源码**而非重抄。
+  if (!/describeUpdateSnapshot/.test(flowSrc)) {
+    throw new Error("update-flow.js 缺少 describeUpdateSnapshot：切片源不对");
+  }
+  SLICES = { esc, initUpdateCheck, flowSrc };
   log(`[slice] esc(${esc.length}) initUpdateCheck(${initUpdateCheck.length})`);
 } catch (e) {
   sliceError = e;
@@ -210,7 +217,7 @@ function makeSandbox(fetchImpl) {
     querySelectorAll: () => [],
   };
   const ctx = vm.createContext({ console: vmConsole, document: documentStub });
-  vm.runInContext(SLICES.esc + "\n" + SLICES.initUpdateCheck + "\n", ctx, { filename: "update-slices.js" });
+  vm.runInContext(SLICES.esc + "\n" + SLICES.flowSrc + "\n" + SLICES.initUpdateCheck + "\n", ctx, { filename: "update-slices.js" });
 
   return {
     ctx,
@@ -222,6 +229,15 @@ function makeSandbox(fetchImpl) {
     },
     fireTimers() { timers.splice(0).forEach((t) => t.fn()); },
     click() { trigger.dispatch("click"); },
+    clickChip(role) {
+      const event = {
+        target: { getAttribute: (name) => name === "data-role" ? role : null },
+        defaultPrevented: false,
+        preventDefault() { event.defaultPrevented = true; },
+      };
+      chip.dispatch("click", event);
+      return event;
+    },
     keydown(key) {
       const event = {
         key,
@@ -495,6 +511,39 @@ if (sliceError) {
         " role=" + sb.trigger.getAttribute("role") +
         " tabindex=" + sb.trigger.getAttribute("tabindex") +
         " requests=" + requests + " spacePrevented=" + spaceEvent.defaultPrevented,
+    );
+  }
+
+  /* 场景 11：安装中是正常终态，不得被 terminal 分支误报成写入失败。 */
+  {
+    const installing = {
+      state: "installing",
+      platform: "windows",
+      channel: "installer",
+      version: "5.17.0",
+      downloaded_bytes: 100,
+      total_bytes: 100,
+      asset_path: "C:/tmp/Setup.exe",
+      error_reason: null,
+    };
+    const sb = makeSandbox((path) => {
+      if (path === "/api/update/check") return Promise.resolve(okResp(newerResponse()));
+      if (path === "/api/update/download") return Promise.resolve(okResp({ state: "downloading" }));
+      if (path === "/api/update/download/status") return Promise.resolve(okResp(installing));
+      throw new Error("unexpected request: " + path);
+    });
+    sb.start();
+    sb.fireTimers();
+    await flush();
+    const click = sb.clickChip("in-app-update");
+    await flush();
+    sb.fireTimers();
+    await flush();
+    const html = sb.chip.innerHTML;
+    check(
+      "installing_snapshot_is_not_failure",
+      click.defaultPrevented && html.indexOf("正在安装") !== -1 && html.indexOf("写入安装包失败") === -1,
+      "html=" + html,
     );
   }
 
