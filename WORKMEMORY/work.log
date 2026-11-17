@@ -119,3 +119,9 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 - **轮转**：最老 35 条（11-10 ×1 / 11-11 ×10 / 11-13 ×24）按日期追加进 `archive/work-2026-11-1*.log`，字节未改；前后事件头 `sort | uniq -c` 的 diff 为空。
 - **技能同步**：模板 `INDEX.md` 配置行与 `PROTOCOL.md` §5 的「默认 50」改为 15，写明反推口径，防止下次凭感觉调大；`blocks.py template` / `gates` 两块绿。
 - **口径提醒**：新事件会把热层重新推过 24KB 线（本次即 24.8KB），预算余量只有 ~1KB ⇒ 超了就轮转，别再调大保留数。
+### 2026-11-17 16:20 | codebuddy-deepseek | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+基线按实测收紧 + 指纹闸搬移豁免进技能真值。
+- **基线收紧**：`--emit-baseline` 重跑，`BUDGET|WORKMEMORY: 1` 被移除（热层轮转后实际归零），`measured_at_commit` 更新到 `81c38f6`。其余 10 个桶数值未变 ⇒ 方向只会更严；以后 work.log 再超 24KB 会直接变红。
+- **搬移豁免进真值**：新增 `templates/local-gates/fingerprint-gate.sh`（技能的规范副本）。模式改成从 `$GIT_DIR/local-gates/fingerprints.txt` 读取，模板自身不带任何本机标识——通用技能写死某台机器的路径，正是它要防的东西。判据保留 `parent_has_line`：命中行在父提交已存在 ⇒ 判搬移放行。
+- **守卫**：`test_template_quality.py` 新增 5 条（LF/BOM、搬移豁免存在、模板无盘符路径、不被 bootstrap 安装、`bash -n` 语法），模板块 17 passed。
