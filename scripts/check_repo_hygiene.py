@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# dfs-bootstrap-gate-version: 3
+# dfs-bootstrap-gate-version: 4
 """Repository hygiene gate: large files, module bloat, host paths, conflicts, and AST.
 
 Thresholds align with upstream community standards:
@@ -33,6 +33,11 @@ bucket's count stays at or under that bucket's allowance; an unlisted bucket all
 rule is the point: a single global count would let a new host path in production code hide under
 hundreds of historical docs paths, whereas a bucketed baseline holds production scopes at zero and
 ratchets only the scopes that carry real debt.
+
+``--no-git`` walks the filesystem instead of ``git ls-files`` so a non-git tree (this skill's own
+source, an unpacked archive) can self-audit without first being wrapped in a temporary git repo.
+It is incompatible with ``--staged`` and ``--ratchet-guard`` (both need git) — the CLI rejects those
+combinations rather than silently ignoring the flag.
 """
 from __future__ import annotations
 
@@ -309,6 +314,31 @@ def check_gitattributes_pins(root: Path) -> list[str]:
     return [f"[EOL_PIN] no attributes source carries pin: {pin}" for pin in pins if pin not in present]
 
 
+# Mirrors check_repo_structure.py's SKIP_DIRS. A filesystem walk (--no-git) must skip the same
+# scratch trees git would never list, or self-auditing a skill would flag its own .ruff_cache.
+SKIP_DIRS = frozenset(
+    {".git", ".venv", "venv", "node_modules", "__pycache__", ".mypy_cache", ".pytest_cache",
+     ".ruff_cache", "build", "dist", ".tox", ".eggs", "site-packages", ".worktrees"}
+)
+
+
+def _walk_paths(root: Path) -> list[str]:
+    """Filesystem enumeration for non-git trees (self-auditing the skill itself).
+
+    Returns posix-style relative paths, same shape as ``_git_paths``. Symlinks are included so a
+    broken link is still caught; scratch directories are skipped exactly like the structure gate.
+    """
+    out: list[str] = []
+    for path in sorted(root.rglob("*")):
+        if not (path.is_file() or path.is_symlink()):
+            continue
+        parts = path.relative_to(root).parts
+        if any(part in SKIP_DIRS for part in parts[:-1]):
+            continue
+        out.append(path.relative_to(root).as_posix())
+    return out
+
+
 def _git_paths(root: Path, staged: bool) -> list[str]:
     cmd = (
         ["git", "diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR"]
@@ -370,11 +400,16 @@ def _read_staged_blobs(root: Path, paths: list[str]) -> dict[str, bytes]:
     return blobs
 
 
-def collect_findings(root: Path, *, staged: bool = False) -> tuple[list[str], int]:
+def collect_findings(
+    root: Path, *, staged: bool = False, no_git: bool = False
+) -> tuple[list[str], int]:
     """Run the full audit and return (raw findings, file count).
 
     Factored out so ``--emit-baseline`` measures the SAME findings the audit sees — reimplementing
     the scan in the baseline writer would let the two drift apart and baseline a phantom debt.
+
+    ``no_git`` swaps ``git ls-files`` for a filesystem walk so a non-git tree (e.g. the skill's own
+    source, or an unpacked archive) can self-audit. Staged mode is git-only and rejected at CLI.
     """
     cfg = load_config(root)
     max_bytes = cfg.get("max_bytes")
@@ -387,8 +422,12 @@ def collect_findings(root: Path, *, staged: bool = False) -> tuple[list[str], in
     budgets = _budgets_from(cfg)
 
     failures: list[str] = []
-    failures.extend(check_gitattributes_pins(root))
-    paths = _git_paths(root, staged=staged)
+    # EOL_PIN guards git's checkout-time CRLF normalization of .githooks/. No git ⇒ no checkout ⇒
+    # no invariant to check; a plain tree has no attributes source by construction. Hook templates
+    # in such trees are covered by their own LF/no-BOM portability test instead.
+    if not no_git:
+        failures.extend(check_gitattributes_pins(root))
+    paths = _walk_paths(root) if no_git else _git_paths(root, staged=staged)
     staged_blobs = _read_staged_blobs(root, paths) if staged else {}
     for rel in paths:
         if staged:
@@ -414,7 +453,7 @@ def collect_findings(root: Path, *, staged: bool = False) -> tuple[list[str], in
     return failures, len(paths)
 
 
-def _report(failures: list[str], path_count: int, staged: bool,
+def _report(failures: list[str], path_count: int, scope: str,
             suppressed: dict[str, tuple[int, int]]) -> int:
     """Print the verdict with an auditable suppression tail and return the exit code."""
     tail = ""
@@ -426,16 +465,16 @@ def _report(failures: list[str], path_count: int, staged: bool,
         for msg in failures:
             print(f"  - {msg}", file=sys.stderr)
         return 1
-    scope = "staged" if staged else "tracked"
     print(f"[PASS] Repo hygiene verified {path_count} {scope} file(s) (size/lines/paths/conflicts/AST).{tail}")
     return 0
 
 
-def run_audit(root: Path, *, staged: bool = False) -> int:
+def run_audit(root: Path, *, staged: bool = False, no_git: bool = False) -> int:
     cfg = load_config(root)
-    findings, path_count = collect_findings(root, staged=staged)
+    findings, path_count = collect_findings(root, staged=staged, no_git=no_git)
     kept, suppressed = apply_baseline_tolerance(findings, load_ratchet(cfg))
-    return _report(kept, path_count, staged, suppressed)
+    scope = "staged" if staged else ("filesystem" if no_git else "tracked")
+    return _report(kept, path_count, scope, suppressed)
 
 
 def _git_head_sha(root: Path) -> str:
@@ -459,9 +498,9 @@ def _baseline_counts(findings: list[str]) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
-def emit_baseline(root: Path) -> int:
+def emit_baseline(root: Path, *, no_git: bool = False) -> int:
     """Write self-measured per-bucket counts into the config (human reviews the diff)."""
-    findings, _ = collect_findings(root, staged=False)
+    findings, _ = collect_findings(root, staged=False, no_git=no_git)
     buckets = _baseline_counts(findings)
     existing = load_config(root)
     payload: dict[str, object] = {
@@ -525,9 +564,9 @@ def ratchet_guard(root: Path) -> int:
     return 0
 
 
-def audit_json(root: Path) -> int:
+def audit_json(root: Path, *, no_git: bool = False) -> int:
     """Emit machine-readable hygiene findings on stdout — no human text, for trend aggregation."""
-    findings, path_count = collect_findings(root, staged=False)
+    findings, path_count = collect_findings(root, staged=False, no_git=no_git)
     ratchet = load_ratchet(load_config(root))
     kept, suppressed = apply_baseline_tolerance(findings, ratchet)
     by_class: dict[str, int] = {}
@@ -595,19 +634,25 @@ def main(argv: list[str] | None = None) -> int:
                     help="emit machine-readable findings on stdout (for trend aggregation)")
     ap.add_argument("--explain", action="store_true",
                     help="print effective config, ratchet buckets and provenance")
+    ap.add_argument("--no-git", action="store_true",
+                    help="walk the filesystem instead of `git ls-files` (for non-git trees / self-audit)")
     args = ap.parse_args(argv)
     modes = (args.emit_baseline, args.ratchet_guard, args.json, args.explain)
     if sum(bool(m) for m in modes) > 1:
         ap.error("--emit-baseline, --ratchet-guard, --json and --explain are mutually exclusive")
+    if args.no_git and args.staged:
+        ap.error("--staged reads the git index; it cannot be combined with --no-git")
+    if args.no_git and args.ratchet_guard:
+        ap.error("--ratchet-guard compares against HEAD; it cannot be combined with --no-git")
     if args.emit_baseline:
-        return emit_baseline(args.root)
+        return emit_baseline(args.root, no_git=args.no_git)
     if args.ratchet_guard:
         return ratchet_guard(args.root)
     if args.json:
-        return audit_json(args.root)
+        return audit_json(args.root, no_git=args.no_git)
     if args.explain:
         return explain_config(args.root)
-    return run_audit(args.root, staged=args.staged)
+    return run_audit(args.root, staged=args.staged, no_git=args.no_git)
 
 
 if __name__ == "__main__":
