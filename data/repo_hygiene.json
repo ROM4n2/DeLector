@@ -9,11 +9,10 @@
     "BLOAT|static": 7,
     "BLOAT|tests": 11,
     "BLOAT|tools": 2,
-    "BUDGET|WORKMEMORY": 1,
     "LARGE|delector": 1
   },
   "_provenance": {
-    "measured_at_commit": "eada74d",
+    "measured_at_commit": "81c38f6",
     "note": "Self-measured by --emit-baseline; each CATEGORY|scope bucket may only decrease (see --ratchet-guard). Unlisted buckets allow zero findings."
   }
 }
