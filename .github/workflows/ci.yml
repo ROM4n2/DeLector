@@ -706,3 +706,13 @@ jobs:
       - name: Verify requirements.lock.txt is solvable
         timeout-minutes: 2
         run: python -m pip install --dry-run --ignore-installed -r requirements.lock.txt
+
+      # dfs-bootstrap structure gate（2026-11-17 从 pre-commit 迁来）：整图分析实测约 8s，
+      # 放 CI 无人等待；本地钩子默认跳过（DFS_STRUCTURE_LOCAL=1 可显式开启）。
+      # 两步必须成对：audit 按 ratchet 基线拦新增违规，guard 禁止把基线调高来"修绿"。
+      # 接线由 tests/test_ci_dfs_gate_wiring.py 钉死，删任一步该测试即红。
+      - name: Structure gate (cycles/fanout/length/nesting/stubs, ratcheted)
+        run: python3 scripts/check_repo_structure.py --all
+
+      - name: Structure ratchet guard (no tolerance increase)
+        run: python3 scripts/check_repo_structure.py --ratchet-guard

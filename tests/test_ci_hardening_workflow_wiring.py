@@ -555,3 +555,35 @@ def test_windows_smoke_runs_pytest_before_build() -> None:
         "「测试先于构建」的顺序被破坏 —— 构建照跑、失败照常发生，提前反馈的意义荡然无存。\n"
         "修法：把 pytest 步挪回 Build Windows Portable 之前。"
     )
+
+
+# ── dfs-bootstrap 结构门禁的 CI 接线守卫（2026-11-17 责任分开）──────────────────
+# 背景：structure gate 整图分析约 8 秒，原先挂在 pre-commit（每次 Python 提交用户都要等）；
+# 迁到 CI 的 static-invariants job 后必须钉死两件事：
+#   1. audit 步存在（否则新违规静默入库）；
+#   2. ratchet-guard 步存在（否则有人把 allowed_* 调高就能把 CI 改绿）。
+# 用 _job_block 只取该 job 自己的文本 —— 别的 job 出现同名字符串不算数。
+
+STRUCTURE_GATE = "scripts/check_repo_structure.py"
+
+
+def test_ci_wires_structure_audit_step() -> None:
+    block = _job_block(CI_WORKFLOW, "static-invariants")
+    assert STRUCTURE_GATE in block, "static-invariants 未接线结构门禁"
+    assert "--all" in block, "CI 必须跑全图（--all），staged 口径会漏掉未暂存的环"
+
+
+def test_ci_wires_ratchet_guard_step() -> None:
+    block = _job_block(CI_WORKFLOW, "static-invariants")
+    assert "--ratchet-guard" in block, (
+        "棘轮守卫缺失：allowed_* 可以被调高来'修绿'，ratchet 形同虚设"
+    )
+
+
+def test_local_hook_skips_structure_by_default() -> None:
+    """本地钩子默认不跑 structure；否则责任分开白做，提交又回到 8 秒路径。"""
+    hook = _read_guard_file(REPO_ROOT / ".githooks" / "pre-commit")
+    assert "DFS_STRUCTURE_LOCAL" in hook, "钩子没有 structure 本地开关"
+    assert '"${DFS_STRUCTURE_LOCAL:-0}" = "1"' in hook, (
+        "structure 必须由 DFS_STRUCTURE_LOCAL=1 显式开启，默认关闭"
+    )

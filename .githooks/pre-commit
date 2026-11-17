@@ -163,10 +163,11 @@ fi
 # 两段门禁在密钥扫描通过后运行，都是 stdlib-only，不改上面的扫描语义、
 # delector:allow-secret 豁免，也不动 core.hooksPath（本机链在 .git/local-hooks）。
 #
-# hygiene：只读暂存 blob，默认阈值下本仓库的暂存面是干净的 ⇒ 阻断有效。
-# structure：分析整张导入图；本仓库历史债务 331 项（FUNC_LEN 194 / NEST 94 /
-#   STUB 37 / CYCLE 2 / FANOUT 4）⇒ 暂为警告。不清零就转阻断会让每次 Python
-#   提交都被历史债务淹没，钩子随即被 --no-verify 绕过（skill 明令勿 day-one red）。
+# hygiene：只读暂存 blob，默认阈值下本仓库的暂存面是干净的 ⇒ 阻断有效（秒级）。
+# structure：整图分析约 8 秒，权威执行已迁到 CI（static-invariants job 的 --all +
+#   --ratchet-guard，接线由 test_ci_dfs_gate_wiring.py 钉死）。本地默认不跑，
+#   设 DFS_STRUCTURE_LOCAL=1 可在提交前即时看到结果——每次 Python 提交都等 8 秒
+#   会训练出 --no-verify 习惯（skill 明令勿 day-one red）。
 PY_BIN=""
 for cand in .venv/Scripts/python.exe .venv/bin/python; do
     if [ -x "$cand" ]; then PY_BIN="$cand"; break; fi
@@ -183,13 +184,14 @@ if [ -n "$PY_BIN" ]; then
         fi
     fi
 
-    if [ -f scripts/check_repo_structure.py ] && \
+    if [ "${DFS_STRUCTURE_LOCAL:-0}" = "1" ] && \
+       [ -f scripts/check_repo_structure.py ] && \
        [ -n "$(git diff --cached --name-only --diff-filter=ACMR -- '*.py')" ]; then
         structure_out="$("$PY_BIN" -B scripts/check_repo_structure.py --all 2>&1)"
         if [ $? -ne 0 ]; then
-            summary="$(printf '%s\n' "$structure_out" | grep -m1 'Structure audit found' || true)"
-            printf '[pre-commit] 结构门禁警告：%s（历史债务，暂不阻断；完整输出 python -B scripts/check_repo_structure.py --all）\n' \
-                "${summary:-发现违规但无法解析摘要}" >&2
+            printf '%s\n' "$structure_out" >&2
+            printf '[pre-commit] 结构门禁未通过（DFS_STRUCTURE_LOCAL=1）⇒ 阻断\n' >&2
+            exit 1
         fi
     fi
 fi
