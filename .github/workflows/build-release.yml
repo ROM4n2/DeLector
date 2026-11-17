@@ -699,6 +699,25 @@ jobs:
           name: DeLector-Android-APK
           path: dist/
 
+      - name: Generate SHA256 checksums
+        # 应用内更新的校验和锚点（ADR-0034 D5）：每个 Release 资产必须有自己的
+        # `.sha256`。缺资产直接失败，不允许发布一个"没有校验和"的版本。
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          shopt -s nullglob
+          files=(DeLector-*.zip DeLector-*-Windows-x64-Setup.exe DeLector-*.tar.gz DeLector-*.apk)
+          if [ "${#files[@]}" -lt 5 ]; then
+            echo "expected at least 5 release assets, got ${#files[@]}" >&2
+            printf '%s\n' "${files[@]}" >&2
+            exit 1
+          fi
+          for f in "${files[@]}"; do
+            sha256sum "$f" > "$f.sha256"
+          done
+          cat ./*.sha256
+
       - name: Create or Update Release
         uses: softprops/action-gh-release@v3
         with:
@@ -707,6 +726,7 @@ jobs:
             dist/DeLector-*-Windows-x64-Setup.exe
             dist/DeLector-*.tar.gz
             dist/DeLector-*.apk
+            dist/DeLector-*.sha256
           name: DeLector ${{ github.ref_name }} — 德语学术精读与备考工作台
           # 逐版内容（本版更新 / 已知限制 / 回滚）不写在这里：它们逐版不同，写死就会立刻过期。
           # 发版后 MUST 按 `.github/release-notes-template.md` 写一份完整正文，用
