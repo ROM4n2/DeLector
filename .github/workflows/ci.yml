@@ -92,8 +92,9 @@ jobs:
           pip install pillow
 
       # ── 静态检查去重（2026-11-04，TODO-CI-01）───────────────────────────────
-      # 下面 6 步原先在 matrix 公共 steps 里，六个 pytest 分片各装各跑一遍；实测
-      # 六份累计 92s（单份约 15s），而它们的覆盖面与分片用例集合无关，属纯重复。
+      # 下面这些静态检查原先在 matrix 公共 steps 里，当时每个 pytest 分片各装各跑一遍；
+      # 当时六份累计 92s（单份约 15s），而它们的覆盖面与分片用例集合无关，属纯重复。
+      # 现分片已增至 7 个（tools/ci_shards.py），若仍留在公共 steps 就会变成七份重复。
       # 现只保留一份，挂在 `unit-2`。为什么是 unit-2：tools/ci_shards.py 的配平清单
       # 刻意把它的 pytest 负载压得比其它三个 unit 分片低（静态检查实测约 14s，
       # 加进去后仍低于关键路径）。不要为“看起来优化”把门禁挪进最慢的分片。
@@ -171,8 +172,8 @@ jobs:
       #      调用，调了未注册端点 ⇒ 非零退出。纯 Python、快、确定性强，作为**阻塞**步。
       #   ② API 边界类型（次仪器）：固定 typescript@5.6.3，只查 tsconfig.json 的**显式
       #      allowlist**（逐个文件列出，见 tsconfig.json 与 static/js/api-types.js 顶部）。
-      # TODO-CI-04：4 条前端探针与分片用例集合无关，原在 6 个分片各跑一遍（累计约 30s，
-      # 其中 cost-guards 的 5s 直接压在关键路径上）。现只挂 `unit-2`，与 Ruff/mypy 静态闸
+      # TODO-CI-04：前端探针与分片用例集合无关，原在当时的 6 个分片各跑一遍（累计约 30s，
+      # 其中 cost-guards 的 5s 直接压在关键路径上）。现为 5 条探针，只挂 `unit-2`，与 Ruff/mypy 静态闸
       # 同一宿主（该分片 pytest 负载刻意偏低，可吸收）。Node 安装仍留在公共 steps：根
       # conftest 的 pytest_sessionstart 在 CI 下要求**每个** pytest job 都有 node。
       - name: Frontend API contract gate (routes)
@@ -207,7 +208,7 @@ jobs:
         run: npx --yes -p typescript@5.6.3 tsc --noEmit
 
       # 全量门禁：Python 测试套件一个不漏。分片清单见 tools/ci_shards.py（显式列表，
-      # 保证六个分片完整且互斥）。改动分片后必须同步更新 tools/ci_shard_weights.json
+      # 保证 7 个分片完整且互斥）。改动分片后必须同步更新 tools/ci_shard_weights.json
       # 并跑 tests/test_ci_hardening_governance.py 的分区/配平守卫。
       - name: Run full pytest suite
         run: pytest -q $(python tools/ci_shards.py ${{ matrix.suite.name }})
@@ -643,13 +644,13 @@ jobs:
           # 显式指向本仓允许清单（不设时 gitleaks 也会自动读仓库根的 .gitleaks.toml）。
           GITLEAKS_CONFIG: .gitleaks.toml
 
-  # ── 纯 stdlib 机械闸（三个判定器合并为一个 job；2026-11-05，TODO-CI-04）────────────
-  # 为什么合并：silent-degradation / mock-drift / layer-invariants 每个 job 只跑一个
-  #   秒级判定器，却各占一台 runner、各付一次 checkout + setup-python（实测 job 11–13s，
-  #   其中判定器本身 1–3s）。
+  # ── 纯 stdlib 机械闸（判定器合并为一个 job；2026-11-05 首次合并 3 个，现为 4 个）────
+  # 为什么合并：silent-degradation / mock-drift / layer-invariants / docs-layout 每个
+  #   job 只跑一个秒级判定器，却各占一台 runner、各付一次 checkout + setup-python
+  #   （实测 job 11–13s，其中判定器本身 1–3s）。
   #   ci-speed-budget §3.3 明确要求「只为一个断言单开 job」应并入现有机械闸；本轮
   #   cost 分片拆分新增 1 个 job，合并这 3 个使峰值并发仍 ≤13（13 → 12）。
-  # 检查内容不变：三个判定器仍逐步执行，步骤名保留（失败可按 step 定位）。
+  # 检查内容不变：每个判定器仍逐步执行，步骤名保留（失败可按 step 定位）。
   #   本 job 及其每一步 MUST NOT 声明 continue-on-error（一加就成摆设）。
   #
   #   ① 无静默降级（C2/C8 缺陷族）：错误/降级路径不可见（except: pass、裸 except、

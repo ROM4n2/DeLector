@@ -29,6 +29,11 @@
 
 ## 1. 现状核实（master `af509dcd`，2026-11-09）
 
+> **后续进展（2026-11-18 复核）**：Step 1 已落地（v5.23.x 批次）。`POST /api/cards/vocab` 现按
+> `(lemma_key(lemma), word_key(word))` 先查后写，并用 `BEGIN IMMEDIATE` 把「查重 → 插入」收成一个
+> 写事务（`delector/routes/cards.py:188-195`）；仍**不建 UNIQUE**、**不合并存量**。本节保留 2026-11-09
+> 快照用于对照，Step 2/3 的策略选择未变。
+
 ### 1.1 写入路径（4 处生产代码）
 
 | 入口 | 位置 | 去重现状 |
