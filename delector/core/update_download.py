@@ -15,6 +15,7 @@ import hmac
 import os
 import shutil
 import threading
+from abc import abstractmethod
 from pathlib import Path
 from typing import Callable, Dict, Iterable, Optional, Protocol
 
@@ -77,14 +78,17 @@ class DownloadStream(Protocol):
 
     status_code: int
 
+    @abstractmethod
     def iter_chunks(self) -> Iterable[bytes]:
         ...
 
+    @abstractmethod
     def close(self) -> None:
         ...
 
 
 class Transport(Protocol):
+    @abstractmethod
     def __call__(self, url: str, headers: Dict[str, str]) -> DownloadStream:
         ...
 
