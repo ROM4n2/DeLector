@@ -1,7 +1,7 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v5.23.5-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v5.24.0-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License" />
 </p>
 
-<!-- Tests 徽章口径（可复算，非推算）：**v5.23.4 发布分支本地全量（2026-11-11）**；v5.23.5 **未复跑全量**（按 2026-11-13 起「只跑对点」的约束），故徽章沿用该时点数字，不得当作 v5.23.5 实测。
+<!-- Tests 徽章口径（可复算，非推算）：**v5.23.4 发布分支本地全量（2026-11-11）**；v5.23.5 与 v5.24.0 **均未复跑全量**（按 2026-11-13 起「只跑对点」的约束），故徽章沿用该时点数字，不得当作 v5.24.0 实测。
      分子 = `python -m pytest tests` 的 3040 passed；分母 = `--collect-only -q` 的 3054 collected
      （= 3040 passed + 8 skipped + 1 xfailed + 2 failed + 3 errors）。环境：Windows 11 / Python 3.11（项目级 .venv）。
      本机残留 5 条噪声，全部与本版改动无关（在未改动的 master 上同样失败）：
@@ -59,23 +59,22 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 
 ## 多平台下载发布包
 
-> **v5.23.5 最新版本亮点（2026-11-13）**：
-> - **备份还原不再抹掉你刚存的东西**：还原失败的自动回滚过去会把间隙里其它请求写入的词卡 / 工作台状态一起覆盖。现在还原期间对所有请求置写屏障，新写入直接拒绝并提示稍后重试，回滚只影响还原自身。
-> - **数据目录迁移不再静默丢学习记录**：旧版只看主库是否存在，`progress.db` 会被留在旧位置、新位置重建一个空进度库（台账 / 测验 / 模考记录全空）。现在逐库判定，缺库直接拒绝启动并打印拷贝命令。
-> - **覆盖安装后不再跑旧前端资源**：Service Worker 只从当前缓存版本回落，不会把上一版的 JS 当成本版交付。
-> - **Android 启动失败有终态**：预算耗尽后明确显示「已停止连接」并给出可点的「重试」按钮（旧版这行字点一次没反应，要点两下）。
-> - **导出失败不再假成功**：写盘失败会清掉半截文件并提示错误，不再无条件报「已导出」。
-> - **首屏演示卡不再报「本地引擎暂不可用」**：页面比本地服务早约 7 秒就绪，旧版把这段网络错误直接摊给用户（英文 `Failed to fetch`）且要手点重试；现在显示「正在启动」，服务就绪后自动补上。
+> **v5.24.0 最新版本亮点（2026-11-18）**：
+> - **应用内更新**：检查到新版本后可下载、校验并安装，不再只能跳 Release 网页。Windows 安装版与便携版、Android、Linux 四条路径均接入；macOS 继续走 Release 页。
+> - **下载先验真伪**：CI 为每个发布资产生成 `.sha256`，应用下载后先比字节数、再比 sha256；缺校验和就拒绝安装，不会退化成「无校验下载」。
+> - **失败给人话**：空间不足、安装包校验失败、下载不完整、已取消等都有明确文案，并保留 Release 页退路。
+> - **不碰学习数据**：更新只写程序目录与临时目录，`%LOCALAPPDATA%\DeLector` 下的词库与进度不动。
+> - **仍需覆盖安装的旧约束不变**：Android 含 `static/` 改动的版本必须覆盖安装，顶栏 `System · vX.Y.Z` 可用来判断前端资源是否真的刷新。
 
 > **Android 用户注意**：含 `static/` 改动的版本需**覆盖安装**才生效。
 > 完整版本变更细节见 [CHANGELOG.md](CHANGELOG.md)。
 
 | 平台               | 版本                   | 说明                                                                                                                                                                                                                                                       | 下载通道                                                                                    |
 | ------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| **Windows x64** | `v5.23.5` | 原生桌面窗口 + 系统托盘，免装 Python，解压双击 `DeLector.exe`；需 Win10+ 与 WebView2 运行时（Win11 自带；Win10 缺运行时的表现见[已知限制](#已知限制)）；首次启动把数据放到 `%LOCALAPPDATA%\DeLector`；**自下一版起另提供安装版** `DeLector-v<版本>-Windows-x64-Setup.exe`（免管理员 per-user 安装、自带开始菜单与卸载器，支持 `/VERYSILENT` 静默安装；未做代码签名 ⇒ SmartScreen 可能提示「未知发布者」）                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.23.5)     |
-| **macOS**       | `v5.23.5` | 解压后进入 `DeLector-v5.23.5-macOS/`，运行其中的裸可执行文件 `./DeLector`（不是 `.app` 包）。正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`。包未做代码签名与公证，若被 Gatekeeper 拦截请右键「打开」，或在终端执行 `xattr -d com.apple.quarantine DeLector`。 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.23.5)  |
-| **Linux x64**   | `v5.23.5` | 解压后进入 `DeLector-v5.23.5-Linux-x64/`，运行 `./DeLector`（正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`）。包在 CI 的 Ubuntu 环境构建，未在其他发行版验证。 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.23.5)  |
-| **Android**     | `v5.23.5` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；正式包只出 **arm64-v8a**，CI 用 `keytool` 校验 APK 与 keystore 的 SHA256 证书指纹一致。**arm64 真机已做覆盖安装验证**（Redmi Note 8 / Android 11，v5.23.4→v5.23.5，2026-11-13）；阅读页未在真机点开（Android 侧文本导入受 `_require_localhost` 限制，空库设备没有可读文章，属设计）。 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.23.5) |
+| **Windows x64** | `v5.24.0` | 原生桌面窗口 + 系统托盘，免装 Python，解压双击 `DeLector.exe`；需 Win10+ 与 WebView2 运行时（Win11 自带；Win10 缺运行时的表现见[已知限制](#已知限制)）；首次启动把数据放到 `%LOCALAPPDATA%\DeLector`；**同时提供安装版** `DeLector-v<版本>-Windows-x64-Setup.exe`（免管理员 per-user 安装、自带开始菜单与卸载器，支持 `/VERYSILENT` 静默安装；未做代码签名 ⇒ SmartScreen 可能提示「未知发布者」）。安装版与便携版均支持应用内更新：检测到新版后可下载、校验并自动安装。                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.24.0)     |
+| **macOS**       | `v5.24.0` | 解压后进入 `DeLector-v5.24.0-macOS/`，运行其中的裸可执行文件 `./DeLector`（不是 `.app` 包）。正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`。包未做代码签名与公证，若被 Gatekeeper 拦截请右键「打开」，或在终端执行 `xattr -d com.apple.quarantine DeLector`。 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.24.0)  |
+| **Linux x64**   | `v5.24.0` | 解压后进入 `DeLector-v5.24.0-Linux-x64/`，运行 `./DeLector`（正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`）。包在 CI 的 Ubuntu 环境构建，未在其他发行版验证；受管布局（`~/.local/share/DeLector/versions/` + `~/.local/bin/DeLector` 符号链接）下支持应用内更新。 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.24.0)  |
+| **Android**     | `v5.24.0` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；正式包只出 **arm64-v8a**，CI 用 `keytool` 校验 APK 与 keystore 的 SHA256 证书指纹一致。**arm64 真机已做覆盖安装验证**（Redmi Note 8 / Android 11，v5.23.4→v5.23.5，2026-11-13）；阅读页未在真机点开（Android 侧文本导入受 `_require_localhost` 限制，空库设备没有可读文章，属设计）。本版新增应用内更新，真机安装确认流程尚未实测。 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.24.0) |
 
 ---
 
@@ -200,9 +199,9 @@ DeLector/
 
 | 版本 | 发布日期 | 里程碑概要 |
 | :--- | :--- | :--- |
+| **v5.24.0** | 2026-11-18 | 跨平台应用内更新（Windows 安装版/便携版、Android、Linux；macOS 不变）· Release 资产 `.sha256` 校验 · 资产元数据端点与下载/取消/安装本机端点 · 更新面板人话失败提示 |
 | **v5.23.5** | 2026-11-13 | 备份还原写屏障（防并发写入被回滚抹掉）· 数据目录迁移逐库判 `progress.db`（防静默空进度库）· SW 缓存不跨版本回落 · Android 启动失败终态与可点重试 · 写路径事务边界 · 判据族从字符串断言改为行为探针 |
 | **v5.23.4** | 2026-11-11 | 桌面导出改为 Python 显式落盘（不再假成功）· 修复 requirements.lock.txt 不可解（numpy / pydantic-core 与 Python 3.11 冲突）· 依赖批量升级与 CI 缓存动作 v6 |
-| **v5.23.3** | 2026-11-11 | 修复「点开文章无反应」（阅读页模板引用已删除变量）· 修复 Android 退出重进停在 Webpage not available（就绪后补载一次）· x86_64 模拟器实测通过 |
 
 > 更早的版本（v5.14.0–v5.21.1 等）已完整迁入 [CHANGELOG.md](CHANGELOG.md)，本页只保留最近三版。
 

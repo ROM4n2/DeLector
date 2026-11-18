@@ -40,7 +40,8 @@
   - 体验层：文章详情不再在请求内同步等 spaCy 分词——有旧分词结果先返回并标 `processed_stale`，无旧结果且后台预热在加载时回 `503 nlp_loading` + `Retry-After`，前端显示「正在准备德语分词模型」并按有限退避重试；预算耗尽才降级为带「重试」按钮的常驻提示。快速切换文章不串台（占位标题在 `finally` 按令牌复原）。
   - 内部：`model_loader.get_nlp_readiness()` 零副作用探针；`/api/health` 两分支同挂 `nlp` 字段；快退只在 `prewarm_started` 为真时生效（否则保留 single-flight 同步迁移通道）。
   - 验证：本地全量 pytest 3036 passed / 3043 collected（1 failed 为本机 GBK 控制台解码问题，master 同样红，与 CI 无关）；`check_release_docs` / `check_index_html_sync` / `check_css_sync` 通过；ruff + 两档 mypy 零错；进入本版的 PR #340 全部 CI 检查通过。
-  - **最新版本：v5.23.5（2026-11-13）**：整体健康度修复落地（备份还原写屏障 / 数据目录迁移逐库判定 / SW 缓存不跨版本 / 写路径事务边界 / 判据族改行为探针）。
+  - **最新版本：v5.24.0（2026-11-18）**：跨平台应用内更新落地（Windows 安装版/便携版、Android、Linux；macOS 维持 Release 页）；Release 资产 `.sha256`、资产元数据端点、下载/取消/安装本机端点、更新面板。真机安装与真装未验证。
+  - 上一版 **v5.23.5（2026-11-13）**：整体健康度修复落地（备份还原写屏障 / 数据目录迁移逐库判定 / SW 缓存不跨版本 / 写路径事务边界 / 判据族改行为探针）。
 - **维护性改动（2026-11-17，非发版）**：① `scripts/check_repo_hygiene.py` 升到 dfs-bootstrap **门禁 v4**（PR #387，新增 `--no-git` 非 git 树自审）；② 5 个 agent 配置收敛到单真值（PR #388）——`CLAUDE.md` / `GEMINI.md` 变两行指针，`.agent-rules.md` / `.cursorrules` 删除，引用同步改写。两 PR 合并时 `work.log` 冲突已按时间序重排。门禁四档在 master 全绿（1006 files / 492 modules）。
 - **项目状态：2026-11-10 起阶段性暂停**，短期内不再推进。接手先读 [`handoff_2026-11-10-project-pause.md`](archive/handoff_2026-11-10-project-pause.md)。
 - **上一版 v5.23.0**：词卡写入幂等修复链收口 + Android 冷启动静态壳 + 桌面 B2 提前加载 + App 内已知限制。
