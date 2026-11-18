@@ -223,8 +223,26 @@ jobs:
           Write-Host "setup bytes=$((Get-Item $setup.FullName).Length)"
           $installDir = "$env:RUNNER_TEMP\DeLectorInstall"
           & $setup.FullName /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- "/DIR=$installDir" "/LOG=$env:RUNNER_TEMP\inno.log"
-          if ($LASTEXITCODE -ne 0) { throw "静默安装失败（exit=$LASTEXITCODE），日志见 inno.log" }
-          if (-not (Test-Path "$installDir\DeLector.exe")) { throw "安装目录缺 DeLector.exe" }
+          # 与安装 Inno Setup 同因：Setup.exe 把工作交给子进程后父进程即退，
+          # $LASTEXITCODE 为空。以「装出来的实物」为准，退出码只作辅助。
+          $launchExit = $LASTEXITCODE
+          Write-Host "静默安装启动退出码=$launchExit（仅辅助信息，不作成败判据）"
+
+          $timeoutSeconds = 240
+          $deadline = (Get-Date).AddSeconds($timeoutSeconds)
+          $installedExe = Join-Path $installDir "DeLector.exe"
+          while ((Get-Date) -lt $deadline -and -not (Test-Path -LiteralPath $installedExe)) {
+            Start-Sleep -Seconds 5
+          }
+          if (-not (Test-Path -LiteralPath $installedExe)) {
+            $logTail = if (Test-Path "$env:RUNNER_TEMP\inno.log") {
+              (Get-Content "$env:RUNNER_TEMP\inno.log" -Tail 20) -join "`n"
+            } else {
+              "（未生成 inno.log）"
+            }
+            throw "静默安装超时：${timeoutSeconds}s 内未出现 $installedExe（启动退出码=$launchExit）；inno.log 尾部：`n$logTail"
+          }
+          Write-Host "已安装：$installedExe"
           python tools/verify_windows_portable.py --artifact "$installDir"
 
       - name: Upload Installer Artifact
