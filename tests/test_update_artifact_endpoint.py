@@ -216,16 +216,19 @@ def test_missing_assets_field_is_asset_missing() -> None:
 
 
 @pytest.mark.parametrize(
-    "error,reason",
+    "error_factory,reason",
     [
-        (update.UpdateCheckTimeout("t"), "timeout"),
-        (update.UpdateCheckRateLimited("403"), "rate_limited"),
-        (update.UpdateCheckNotFound("404"), "not_found"),
-        (httpx.ConnectError("boom"), "network"),
+        # 用工厂而非实例：`test_update_check_endpoint.py` 有一条 importlib.reload(update)
+        # 的用例，会把模块内的异常类换掉；收集期构造的旧实例将不再被 `except UpdateCheckError`
+        # 匹配，从而误落到 network 兜底。调用期再构造即与当前模块类保持一致。
+        (lambda: update.UpdateCheckTimeout("t"), "timeout"),
+        (lambda: update.UpdateCheckRateLimited("403"), "rate_limited"),
+        (lambda: update.UpdateCheckNotFound("404"), "not_found"),
+        (lambda: httpx.ConnectError("boom"), "network"),
     ],
 )
-def test_upstream_failures_map_to_reasons(error: Exception, reason: str) -> None:
-    fetcher = FakeFetcher(error=error)
+def test_upstream_failures_map_to_reasons(error_factory: Any, reason: str) -> None:
+    fetcher = FakeFetcher(error=error_factory())
 
     body = update.check_artifact(platform="windows", channel="portable", fetcher=fetcher, now=1_000.0)
 
