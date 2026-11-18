@@ -225,3 +225,34 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 - **`origin/master` 最终验收（独立 worktree 检出 origin/master 跑）**：对点并集 **485 passed**；9 个静态闸全 exit 0；`wb_export_probe` 13/13 与 `frontend_guards_probe` 15/15 均 exit 0；`ruff check .` All checks passed；mypy 三档（`--strict delector tools` 152 文件 / `--follow-imports=skip tests` 211 文件 / win32 入口 4 文件）全部 Success。
 - 本地 `master` 已对齐 `origin/master`（此前本地合并产生的 66 个提交内容均已通过 PR 落地；重置前留有 `backup/local-merge-2026-11-13` 引用）。
 
+### 2026-11-13 20:16 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 整体健康度修复的 16 件事全部经 PR 进入远端 `master`，合并后在 `origin/master` 上完成独立验收（485 passed + 9 闸 + 2 探针 + ruff + mypy 三档）。
+Remaining work: 发布前建议在合并后的 `master` 上重跑一次 arm64 真机安装冒烟（此前的真机验证是在分支树上做的）。6 个过时的本地 dependabot 分支（pr345~350）已删除；远端仍开着 #353(pydantic 2.14.3) / #354(srsly 3.0.1) 两个 dependabot PR，与本轮无关，待单独评估。
+- 不做：不发版（无显式授权）。
+
+### 2026-11-13 20:29 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+评估并处置最后两个 dependabot PR（用 T6 新加的 lock 可解性闸做机器判定，不靠人读版本号）。
+- **#354 srsly 2.5.6→3.0.1：已关闭**。硬证据（`pip install --dry-run --ignore-installed -r requirements.lock.txt`）：`The user requested srsly==3.0.1` / `spacy 3.8.18 depends on srsly<3.0.0 and >=2.5.3`（thinc 同族 `<3.1.0`）。另 Android 面装的是 `spacy==3.8.7` + 本地供给的 `srsly-2.4.4-cp310-android_*` wheel，3.x 没对应 wheel。关闭理由已写进 PR 评论：要 srsly 3.x 得作为「spaCy 大版本升级」专项做，不是 dependabot 单项能覆盖的。
+- **#353 pydantic 2.14.2→2.14.3：修好后已合并**。dependabot 只升了 pydantic，但 `pydantic 2.14.3 depends on pydantic-core==2.50.4`，lock 仍钉 2.50.2 ⇒ ResolutionImpossible。补一个提交把它升到 2.50.4（`requirements.txt` 的 2026-11-11 批量合并注释本来就写着这条，只是 lock 没落地）→ 闸通过 → 合并。
+- 运行时证据（不只是可解）：本地装 pydantic 2.14.3 + core 2.50.4 后 `create_app()` 27 路由正常，`localhost_guard` / `server_ai_polish` / `audit_hardening` 共 **82 passed**。
+- **Android 面不受影响**：Chaquopy 侧装的是 `pydantic<2.0.0` + `fastapi<0.100.0` + `spacy==3.8.7`，两处升级都只动桌面/服务端 lock。
+- 顺手发现一处契约漂移：合并前 `requirements.lock.txt` 的 blob 是 **LF**，而 `.gitattributes` 第 13 行通用规则是 `* text=auto eol=crlf`。这次合并把它归位成 CRLF，于是产生 83 行纯 EOL 的整文件 diff（内容只变 2 个 pin）。文件现在符合契约、pip 解析与 lock 闸均正常；那 83 行噪声属于一次性 renormalize，不是回归。
+
+### 2026-11-13 20:29 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git
+Work done: 处置完最后两个 dependabot PR（#353 合并、#354 带理由关闭）；远端 `master` (`be61af7`) 上 lock 可解、无遗留开放 PR。
+Remaining work: 发布前建议在合并后的 master 上重跑一次 arm64 真机安装冒烟（此前真机验证在分支树做过）。
+- 不做：不发版（无显式授权）。
+
+### 2026-11-13 21:11 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+修复「本地引擎暂不可用」（首屏句子解剖台演示卡），PR #376 已合入 `master`。
+- **根因不是我先前猜的那样**：真机 logcat 时间线显示页面 **2.9s** 就绘制完成，而 **uvicorn 9.7s** 才 `Uvicorn running`；窗口内 `/api/syntax/analyze`、`/api/articles`、`/api/cards/counts`、`/api/settings`、`/api/companion/sessions` **全部** `TypeError: Failed to fetch`。所以是**启动顺序**（页面早于进程内服务约 7s），不是网络/地址/CORS 问题；`curl 127.0.0.1:8000/api/health` 早在 200 也印证了这一点。
+- 演示卡此前是唯一「失败只报错、不自动恢复」的首屏模块——其它模块各自有退避重试（如 `retryArticlesIfWaiting`），它没有，于是把英文 TypeError 直接摊给用户，且重试要手点（`data-retry` 是接好线的，事件委托在 `outputEl` 上）。
+- 修法（`fix/satz-lab-boot-retry` → #376，4 文件 +120/−6）：① 失败视图按「无 status ⇒ 服务还没监听」与「有 status ⇒ 服务回了错误」分开，前者显示「本地引擎正在启动，稍候自动重试…」；② 网络级失败记 `pendingRetry`，新增 `retrySatzLabIfPending()` 挂到既有 `window.notifyServerReady`（该钩子原本只给文章补试）。
+- 验证：`frontend_guards_probe` 由 15 → **22 场景**全绿（新增 7 条，含 2 条变异自证：删状态分类 / 删就绪接线都必须红）；对点 **159 passed**；ruff + `check_index_html_sync` / `check_css_sync` / `check_frontend_api_contract` / `check_frontend_layers` 全 exit 0。真机（`cdb66c`，**clean install**）：`ready_notify` 由 `"false"` → `"true"`，演示卡渲染出真实句法结果（VF 前场 / LK 左框 / 词格标注），`syntax/analyze` 失败次数 1（仅就绪前那一次，随后自动补上）。
+- **一处必须记下的观察**：覆盖安装后**首次启动**仍会显示旧的 `V5.23.4` 页面（来自 SW 缓存），此时新逻辑不生效、需要用户点「立即刷新」或再启一次；clean install 与二次启动均正常。这属于 T4 已定的「不跨 cache + 由 build-stamp/更新条提示刷新」路径，不是本次回归，但意味着「覆盖安装后第一次打开」的体验仍有旧壳。
+- 顺带确认：`api()` 的 25s 超时、`sw.js` 对 `/api/` 直通，二者都不是本次失败的原因（已排除）。
+

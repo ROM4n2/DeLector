@@ -1,34 +1,3 @@
-### 2026-11-13 20:16 | tencent-hunyuan-hy__codebuddy | WORK_END
-Caps: filesystem-read, filesystem-write, shell-exec, git
-Work done: 整体健康度修复的 16 件事全部经 PR 进入远端 `master`，合并后在 `origin/master` 上完成独立验收（485 passed + 9 闸 + 2 探针 + ruff + mypy 三档）。
-Remaining work: 发布前建议在合并后的 `master` 上重跑一次 arm64 真机安装冒烟（此前的真机验证是在分支树上做的）。6 个过时的本地 dependabot 分支（pr345~350）已删除；远端仍开着 #353(pydantic 2.14.3) / #354(srsly 3.0.1) 两个 dependabot PR，与本轮无关，待单独评估。
-- 不做：不发版（无显式授权）。
-
-### 2026-11-13 20:29 | tencent-hunyuan-hy__codebuddy | NOTE
-Caps: filesystem-read, filesystem-write, shell-exec, git
-评估并处置最后两个 dependabot PR（用 T6 新加的 lock 可解性闸做机器判定，不靠人读版本号）。
-- **#354 srsly 2.5.6→3.0.1：已关闭**。硬证据（`pip install --dry-run --ignore-installed -r requirements.lock.txt`）：`The user requested srsly==3.0.1` / `spacy 3.8.18 depends on srsly<3.0.0 and >=2.5.3`（thinc 同族 `<3.1.0`）。另 Android 面装的是 `spacy==3.8.7` + 本地供给的 `srsly-2.4.4-cp310-android_*` wheel，3.x 没对应 wheel。关闭理由已写进 PR 评论：要 srsly 3.x 得作为「spaCy 大版本升级」专项做，不是 dependabot 单项能覆盖的。
-- **#353 pydantic 2.14.2→2.14.3：修好后已合并**。dependabot 只升了 pydantic，但 `pydantic 2.14.3 depends on pydantic-core==2.50.4`，lock 仍钉 2.50.2 ⇒ ResolutionImpossible。补一个提交把它升到 2.50.4（`requirements.txt` 的 2026-11-11 批量合并注释本来就写着这条，只是 lock 没落地）→ 闸通过 → 合并。
-- 运行时证据（不只是可解）：本地装 pydantic 2.14.3 + core 2.50.4 后 `create_app()` 27 路由正常，`localhost_guard` / `server_ai_polish` / `audit_hardening` 共 **82 passed**。
-- **Android 面不受影响**：Chaquopy 侧装的是 `pydantic<2.0.0` + `fastapi<0.100.0` + `spacy==3.8.7`，两处升级都只动桌面/服务端 lock。
-- 顺手发现一处契约漂移：合并前 `requirements.lock.txt` 的 blob 是 **LF**，而 `.gitattributes` 第 13 行通用规则是 `* text=auto eol=crlf`。这次合并把它归位成 CRLF，于是产生 83 行纯 EOL 的整文件 diff（内容只变 2 个 pin）。文件现在符合契约、pip 解析与 lock 闸均正常；那 83 行噪声属于一次性 renormalize，不是回归。
-
-### 2026-11-13 20:29 | tencent-hunyuan-hy__codebuddy | WORK_END
-Caps: filesystem-read, filesystem-write, shell-exec, git
-Work done: 处置完最后两个 dependabot PR（#353 合并、#354 带理由关闭）；远端 `master` (`be61af7`) 上 lock 可解、无遗留开放 PR。
-Remaining work: 发布前建议在合并后的 master 上重跑一次 arm64 真机安装冒烟（此前真机验证在分支树做过）。
-- 不做：不发版（无显式授权）。
-
-### 2026-11-13 21:11 | tencent-hunyuan-hy__codebuddy | NOTE
-Caps: filesystem-read, filesystem-write, shell-exec, git
-修复「本地引擎暂不可用」（首屏句子解剖台演示卡），PR #376 已合入 `master`。
-- **根因不是我先前猜的那样**：真机 logcat 时间线显示页面 **2.9s** 就绘制完成，而 **uvicorn 9.7s** 才 `Uvicorn running`；窗口内 `/api/syntax/analyze`、`/api/articles`、`/api/cards/counts`、`/api/settings`、`/api/companion/sessions` **全部** `TypeError: Failed to fetch`。所以是**启动顺序**（页面早于进程内服务约 7s），不是网络/地址/CORS 问题；`curl 127.0.0.1:8000/api/health` 早在 200 也印证了这一点。
-- 演示卡此前是唯一「失败只报错、不自动恢复」的首屏模块——其它模块各自有退避重试（如 `retryArticlesIfWaiting`），它没有，于是把英文 TypeError 直接摊给用户，且重试要手点（`data-retry` 是接好线的，事件委托在 `outputEl` 上）。
-- 修法（`fix/satz-lab-boot-retry` → #376，4 文件 +120/−6）：① 失败视图按「无 status ⇒ 服务还没监听」与「有 status ⇒ 服务回了错误」分开，前者显示「本地引擎正在启动，稍候自动重试…」；② 网络级失败记 `pendingRetry`，新增 `retrySatzLabIfPending()` 挂到既有 `window.notifyServerReady`（该钩子原本只给文章补试）。
-- 验证：`frontend_guards_probe` 由 15 → **22 场景**全绿（新增 7 条，含 2 条变异自证：删状态分类 / 删就绪接线都必须红）；对点 **159 passed**；ruff + `check_index_html_sync` / `check_css_sync` / `check_frontend_api_contract` / `check_frontend_layers` 全 exit 0。真机（`cdb66c`，**clean install**）：`ready_notify` 由 `"false"` → `"true"`，演示卡渲染出真实句法结果（VF 前场 / LK 左框 / 词格标注），`syntax/analyze` 失败次数 1（仅就绪前那一次，随后自动补上）。
-- **一处必须记下的观察**：覆盖安装后**首次启动**仍会显示旧的 `V5.23.4` 页面（来自 SW 缓存），此时新逻辑不生效、需要用户点「立即刷新」或再启一次；clean install 与二次启动均正常。这属于 T4 已定的「不跨 cache + 由 build-stamp/更新条提示刷新」路径，不是本次回归，但意味着「覆盖安装后第一次打开」的体验仍有旧壳。
-- 顺带确认：`api()` 的 25s 超时、`sw.js` 对 `/api/` 直通，二者都不是本次失败的原因（已排除）。
-
 ### 2026-11-13 21:11 | tencent-hunyuan-hy__codebuddy | WORK_END
 Caps: filesystem-read, filesystem-write, shell-exec, git
 Work done: 修复首屏演示卡「本地引擎暂不可用」（#376 已合入 master），真机 clean install 验证通过；master 上探针 22/22、前端对点 18 passed。
@@ -122,3 +91,26 @@ TODO-CI-02 复现轮：只读取证采样落地 + 3 轮 `workflow_dispatch` 未�
 - **诊断**：`ci.yml` 的 windows-portable-smoke 增加两个只读步骤（Start/Dump diagnostics sampler）：每 15s 采样 `Get-Process`（Top15 + DeLector/python/pyinstaller）与 `Get-NetTCPConnection` 监听端口，写 `RUNNER_TEMP` 并在 `if: always()` 步骤打印尾部 + 当场快照；不改 Build/Verify 命令、退出码、`timeout-minutes`。commit `4b3ddf3`。
 - **复现轮**：用 `gh workflow run ci.yml --ref` 在 3 个同点分支并行触发（避免同 ref 的 concurrency 互相取消），run 44336451666 / 44336471442 / 44336489306 全部 success；Windows Smoke 作业 3m25s–3m36s，Verify 步 26–32s，未出现 >10min 或 124。采样器已捕获 Verify 期的 `DeLector` 进程（PID 1040/2720）与监听端口，取证管线可用。
 - **结论**：本次未能复现，现有证据不足以下结论；不推测根因。后续自然触发若再挂，Dump diagnostics 会留下进程/端口/停点。
+
+### 2026-11-18 23:55 | codebuddy-deepseek | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+跨平台应用内更新（ADR-0034）落地与 v5.24.2 发布（事实回读，非本轮新验证）。
+- **代码**：PR #394（merge `ce986d4`）并入实现链：`e87675f` 资产元数据+校验和、`f002f39` 平台识别+安全下载器、`55fb9a2` 单会话状态机、`dbcc75b` Windows 安装器拉起、`92d8693` Windows 便携版目录交换、`aed14e4` Linux 版本目录原子切换、`5ce6807` Android 系统安装桥、`132f967` 下载/安装本机路由、`e5df5d2` 前端流程；macOS 维持 Release 页。
+- **发布**：tag `v5.24.2`（Release 2026-11-18T11:42:19Z）产出 5 类资产 + 5 个同名 `.sha256`：Windows Setup / Windows Portable / Android apk / Linux tar.gz / macOS tar.gz。v5.24.0 与 v5.24.1 因发版脚本缺陷未产出资产，v5.24.2 为重发（PR #397–#402）。
+- **验证边界**：四平台真机/真装路径——Android 系统确认、Windows 静默覆盖安装、Windows 便携版换目录、Linux 切换后启动——**全部未验证**；只有单测、静态守卫与 CI 发版链路证据。不得写成「已完成」或「双端已验证」。
+
+### 2026-11-18 23:56 | codebuddy-deepseek | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+健康度四项收口（4→5→3→2）与第 3 项空转结论。
+- **第 4 项 dependabot**：5 个 PR #393 / #391 / #390 / #380 / #392 合并，lock 重算与 pin 一致，post-merge master CI 绿。
+- **第 5 项 #403**：FEATURES 冻结声明、README Tests 徽章时点、应用内更新未验证披露、pillow 注释对齐。
+- **第 3 项 #404**：`ci.yml` 注释 6→7 分片 / 4→5 前端探针 / 3→4 判定器；vocab 计划 Step 1 说明；docstring 口径。**空转结论**：该批四条实质项不是待办，早已由前批提交修完——写路径事务边界 `0906bac`（PR #364）、静默降级 `4a03010`、门禁清单 fail-loud `53fd74f`（PR #357）、死代码/规则 2 `ab1f6a2`（PR #357）；#404 只对齐注释数字。以后不得把这四条当未完成重做。
+- **第 2 项 #405**：`static/sw.js` 加 `MAX_CACHE_ENTRIES=160` + FIFO 逐出（补 T4 遗漏）；新增先红后绿行为探针（含变异自证）；T15 三条裁决登记进 PROJECT_OVERVIEW 活项 8 / CHANGELOG 已知限制 / `test_query_plans.py` docstring。
+
+### 2026-11-18 23:57 | codebuddy-deepseek | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+TODO-CI-02 卡死调查：本轮未复现，证据缺口与常驻采样器。
+- **历史证据**：run 41833602180 attempt 1 的 Windows Smoke 作业 `126586781728`，started 12:56:36Z / cancelled 13:31:36Z；同 run 其余 13 个 job 全绿；该作业 logs API 返回 404（BlobNotFound），attempt 1 的 jobs 明细 `steps` 为空 ⇒ 无步骤日志、无进程/端口快照。只能确认「卡在 Verify 步」，不能确认脚本内相位。
+- **采样器**：`ci.yml` 的 windows-portable-smoke 增加只读 Start/Dump diagnostics（每 15s `Get-Process` + `Get-NetTCPConnection`，`if: always()` 打印尾部与当场快照），不改命令、退出码、`timeout-minutes`；PR #406（merge `71eba6f`）已合并常驻 master。
+- **复现轮**：3 个同点分支 `workflow_dispatch` 并行触发（run 44336451666 / 44336471442 / 44336489306）全部 success；Windows Smoke 3m25s–3m36s，Verify 26–32s，未出现 124 或 10 分钟超时；采样器已捕获 Verify 期 DeLector 进程（PID 1040/2720）与监听端口。
+- **结论**：本次未能复现，现有证据不足以下结论；「runner/job worker 层停摆、置信度约 0.6」只是**未经证实的假设**，不得当结论引用。下次真实故障才有新证据。

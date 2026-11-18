@@ -2,7 +2,7 @@
 
 > **Goal**: 按 ADR-0034 的决策，把「检查到新版本 → 跳 Release 网页」升级为「检查 → 下载 → 校验 → 分平台安装」，平台顺序固定为 **Windows 安装版 → Android → Windows 便携版 → Linux**，macOS 维持现状。`GET /api/update/check` 的 7 键契约**原样冻结**，资产元数据走新增的独立端点。
 >
-> **实施状态（2026-11-17）**：M0–M5 代码已落盘；单测与静态守卫已写但**未在本机执行**（GC1/GC3）；Android 真机安装、Windows 真装/换目录、Linux 切换后启动全部按 §8 停报。
+> **实施状态（2026-11-18 同步）**：M0–M5 代码已完成并随 **v5.24.2** 发布（实现链 PR #394，发版修复 #397–#402；Release 产出 5 类资产 + 5 个同名 `.sha256`）。单测与静态守卫已由 CI 执行；Android 系统安装确认、Windows 静默覆盖安装、Windows 便携版换目录、Linux 切换后启动四条真机/真装路径**均未验证**，仍按 §8 停报——不得把「代码已发布」写成「已验证」。
 >
 > **Tech Stack**: Python 3.11 / FastAPI / httpx / pytest（无 pytest-asyncio）· 原生 JS ES Modules（`// @ts-check` + `tsc --noEmit` 窄口径）· Android Java（Chaquopy + WebView + `PackageInstaller`）· Inno Setup 6 · PyInstaller onedir · GitHub Actions。
 >
@@ -371,18 +371,18 @@
 
 | 项 | 证据类型 | 本会话状态 | 说明 |
 | --- | --- | --- | --- |
-| 7 键契约不回归 | 既有单测（零改动） | 未运行（GC3） | 用户/CI 跑 `pytest -q tests/test_update_check_endpoint.py` |
-| `/artifact` 契约与失败语义 | 新增单测 + TestClient | 未运行（GC3） | 假 fetcher，零网络 |
-| 缓存/TTL | 新增单测 | 未运行 | 与 `/check` 同口径 |
-| 下载器续传/校验/取消 | 新增单测 + 假传输 | 未运行 | 零真实网络、零资产下载 |
-| 会话状态机 | 新增单测 | 未运行 | 注入事件 |
-| 安装命令/脚本生成 | 新增单测 + 结构断言 | 未运行 | 不拉起进程 |
-| Android 权限面 | 静态测试 | 未运行 | manifest 文本/AST |
-| Android 安装运行时 | — | **不可验证** | 需真机；停止报告 |
-| Windows 静默安装真装 | CI 现有记录仅覆盖「安装器可静默装」 | **不可验证** | 应用内拉起需 Windows 机器；停止报告 |
-| Windows 便携版目录替换 | — | **不可验证** | 需 Windows 机器；停止报告 |
-| Linux 符号链接切换后启动 | — | **不可验证** | 需 Linux 机器；停止报告 |
-| 真实 `.sha256` 生成 | — | **不可验证** | 需发版（不 push）；首次发版后看 CI |
+| 7 键契约不回归 | 既有单测（零改动） | CI 已执行（PR #394） | `tests/test_update_check_endpoint.py` |
+| `/artifact` 契约与失败语义 | 新增单测 + TestClient | CI 已执行（PR #394） | 假 fetcher，零网络 |
+| 缓存/TTL | 新增单测 | CI 已执行（PR #394） | 与 `/check` 同口径 |
+| 下载器续传/校验/取消 | 新增单测 + 假传输 | CI 已执行（PR #394） | 零真实网络、零资产下载 |
+| 会话状态机 | 新增单测 | CI 已执行（PR #394） | 注入事件 |
+| 安装命令/脚本生成 | 新增单测 + 结构断言 | CI 已执行（PR #394） | 不拉起进程 |
+| Android 权限面 | 静态测试 | CI 已执行（PR #394） | manifest 文本/AST |
+| Android 安装运行时 | — | **未验证** | 需真机；与 PROJECT_OVERVIEW 活项 2 合并执行 |
+| Windows 静默安装真装 | CI 仅覆盖「安装器可静默装」 | **未验证** | 应用内拉起需 Windows 机器 |
+| Windows 便携版目录替换 | — | **未验证** | 需 Windows 机器 |
+| Linux 符号链接切换后启动 | — | **未验证** | 需 Linux 机器 |
+| 真实 `.sha256` 生成 | v5.24.2 Release 资产清单 | **已产出**（5 个 `.sha256`） | 内容未逐字节复核 |
 
 对点执行命令（用户授权后）：
 

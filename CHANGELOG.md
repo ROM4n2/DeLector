@@ -15,6 +15,25 @@
 5. README.md 的「版本历史」表只保留最近 3 版，旧版只进本文件。
 -->
 
+## 未发布 - 2026-11-18
+
+> 本段是 v5.24.2 发布后 master 上的累计改动，未打 tag、未产出 Release；下一版发版时并入正式版本段。
+
+### 修复
+
+- **SW 缓存条目无上限**：`static/sw.js` 增加 `MAX_CACHE_ENTRIES = 160` 与 FIFO 逐出，补上 v5.24.2 未包含的 T4 遗漏项；新增先红后绿的行为探针（含变异自证）。
+
+### 内部
+
+- **Windows Portable Smoke 只读取证采样**（TODO-CI-02）：Build 前每 15s 记录进程与监听端口，Verify 后 `if: always()` 打印尾部与当场快照；不改命令、退出码与 `timeout-minutes`。3 轮 `workflow_dispatch` 未复现 30 分钟卡死，采样器已常驻。
+
+### 文档
+
+- 对外口径收口（#403）：FEATURES 冻结声明、README Tests 徽章时点、应用内更新未验证披露。
+- 健康度注释与口径漂移（#404）：`ci.yml` 分片/探针/判定器数字、vocab 计划 Step 1 说明、docstring。
+
+---
+
 ## v5.24.2 - 2026-11-18
 
 ### 修复
