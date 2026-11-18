@@ -210,7 +210,9 @@ export function initUpdateCheck(options = {}) {
   // chip 内的动作按钮用事件委托：不依赖 querySelector，探针的 DOM 桩也能安全跳过。
   if (typeof chip.addEventListener === "function") {
     chip.addEventListener("click", function (event) {
-      const target = event && event.target;
+      // 探针的 DOM 桩只实现 getAttribute，不保证是 Element 实例；按鸭子类型收窄，
+      // 既保住探测路径，也满足 tsc 对 EventTarget 没有 getAttribute 的判定。
+      const target = /** @type {any} */ (event && event.target);
       if (!target || typeof target.getAttribute !== "function") return;
       const role = target.getAttribute("data-role");
       if (role === "in-app-update") {
