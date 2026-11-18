@@ -1,7 +1,7 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v5.24.1-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v5.24.2-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License" />
 </p>
 
-<!-- Tests 徽章口径（可复算，非推算）：**v5.23.4 发布分支本地全量（2026-11-11）**；v5.23.5 与 v5.24.1 **均未复跑全量**（按 2026-11-13 起「只跑对点」的约束），故徽章沿用该时点数字，不得当作 v5.24.1 实测。
+<!-- Tests 徽章口径（可复算，非推算）：**v5.23.4 发布分支本地全量（2026-11-11）**；v5.23.5 与 v5.24.2 **均未复跑全量**（按 2026-11-13 起「只跑对点」的约束），故徽章沿用该时点数字，不得当作 v5.24.2 实测。
      分子 = `python -m pytest tests` 的 3040 passed；分母 = `--collect-only -q` 的 3054 collected
      （= 3040 passed + 8 skipped + 1 xfailed + 2 failed + 3 errors）。环境：Windows 11 / Python 3.11（项目级 .venv）。
      本机残留 5 条噪声，全部与本版改动无关（在未改动的 master 上同样失败）：
@@ -59,7 +59,7 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 
 ## 多平台下载发布包
 
-> **v5.24.1 最新版本亮点（2026-11-18）**：
+> **v5.24.2 最新版本亮点（2026-11-18）**：
 > - **应用内更新**：检查到新版本后可下载、校验并安装，不再只能跳 Release 网页。Windows 安装版与便携版、Android、Linux 四条路径均接入；macOS 继续走 Release 页。
 > - **下载先验真伪**：CI 为每个发布资产生成 `.sha256`，应用下载后先比字节数、再比 sha256；缺校验和就拒绝安装，不会退化成「无校验下载」。
 > - **失败给人话**：空间不足、安装包校验失败、下载不完整、已取消等都有明确文案，并保留 Release 页退路。
@@ -71,10 +71,10 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 
 | 平台               | 版本                   | 说明                                                                                                                                                                                                                                                       | 下载通道                                                                                    |
 | ------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| **Windows x64** | `v5.24.1` | 原生桌面窗口 + 系统托盘，免装 Python，解压双击 `DeLector.exe`；需 Win10+ 与 WebView2 运行时（Win11 自带；Win10 缺运行时的表现见[已知限制](#已知限制)）；首次启动把数据放到 `%LOCALAPPDATA%\DeLector`；**同时提供安装版** `DeLector-v<版本>-Windows-x64-Setup.exe`（免管理员 per-user 安装、自带开始菜单与卸载器，支持 `/VERYSILENT` 静默安装；未做代码签名 ⇒ SmartScreen 可能提示「未知发布者」）。安装版与便携版均支持应用内更新：检测到新版后可下载、校验并自动安装。                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.24.1)     |
-| **macOS**       | `v5.24.1` | 解压后进入 `DeLector-v5.24.1-macOS/`，运行其中的裸可执行文件 `./DeLector`（不是 `.app` 包）。正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`。包未做代码签名与公证，若被 Gatekeeper 拦截请右键「打开」，或在终端执行 `xattr -d com.apple.quarantine DeLector`。 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.24.1)  |
-| **Linux x64**   | `v5.24.1` | 解压后进入 `DeLector-v5.24.1-Linux-x64/`，运行 `./DeLector`（正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`）。包在 CI 的 Ubuntu 环境构建，未在其他发行版验证；受管布局（`~/.local/share/DeLector/versions/` + `~/.local/bin/DeLector` 符号链接）下支持应用内更新。 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.24.1)  |
-| **Android**     | `v5.24.1` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；正式包只出 **arm64-v8a**，CI 用 `keytool` 校验 APK 与 keystore 的 SHA256 证书指纹一致。**arm64 真机已做覆盖安装验证**（Redmi Note 8 / Android 11，v5.23.4→v5.23.5，2026-11-13）；阅读页未在真机点开（Android 侧文本导入受 `_require_localhost` 限制，空库设备没有可读文章，属设计）。本版新增应用内更新，真机安装确认流程尚未实测。 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.24.1) |
+| **Windows x64** | `v5.24.2` | 原生桌面窗口 + 系统托盘，免装 Python，解压双击 `DeLector.exe`；需 Win10+ 与 WebView2 运行时（Win11 自带；Win10 缺运行时的表现见[已知限制](#已知限制)）；首次启动把数据放到 `%LOCALAPPDATA%\DeLector`；**同时提供安装版** `DeLector-v<版本>-Windows-x64-Setup.exe`（免管理员 per-user 安装、自带开始菜单与卸载器，支持 `/VERYSILENT` 静默安装；未做代码签名 ⇒ SmartScreen 可能提示「未知发布者」）。安装版与便携版均支持应用内更新：检测到新版后可下载、校验并自动安装。                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.24.2)     |
+| **macOS**       | `v5.24.2` | 解压后进入 `DeLector-v5.24.2-macOS/`，运行其中的裸可执行文件 `./DeLector`（不是 `.app` 包）。正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`。包未做代码签名与公证，若被 Gatekeeper 拦截请右键「打开」，或在终端执行 `xattr -d com.apple.quarantine DeLector`。 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.24.2)  |
+| **Linux x64**   | `v5.24.2` | 解压后进入 `DeLector-v5.24.2-Linux-x64/`，运行 `./DeLector`（正常 `tar -xzf` 解压会保留可执行位，若权限丢失先 `chmod +x DeLector`）。包在 CI 的 Ubuntu 环境构建，未在其他发行版验证；受管布局（`~/.local/share/DeLector/versions/` + `~/.local/bin/DeLector` 符号链接）下支持应用内更新。 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.24.2)  |
+| **Android**     | `v5.24.2` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；正式包只出 **arm64-v8a**，CI 用 `keytool` 校验 APK 与 keystore 的 SHA256 证书指纹一致。**arm64 真机已做覆盖安装验证**（Redmi Note 8 / Android 11，v5.23.4→v5.23.5，2026-11-13）；阅读页未在真机点开（Android 侧文本导入受 `_require_localhost` 限制，空库设备没有可读文章，属设计）。本版新增应用内更新，真机安装确认流程尚未实测。 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.24.2) |
 
 ---
 
@@ -199,7 +199,7 @@ DeLector/
 
 | 版本 | 发布日期 | 里程碑概要 |
 | :--- | :--- | :--- |
-| **v5.24.1** | 2026-11-18 | 跨平台应用内更新（Windows 安装版/便携版、Android、Linux；macOS 不变）· Release 资产 `.sha256` 校验 · 资产元数据端点与下载/取消/安装本机端点 · 更新面板人话失败提示 |
+| **v5.24.2** | 2026-11-18 | 跨平台应用内更新（Windows 安装版/便携版、Android、Linux；macOS 不变）· Release 资产 `.sha256` 校验 · 资产元数据端点与下载/取消/安装本机端点 · 更新面板人话失败提示 |
 | **v5.23.5** | 2026-11-13 | 备份还原写屏障（防并发写入被回滚抹掉）· 数据目录迁移逐库判 `progress.db`（防静默空进度库）· SW 缓存不跨版本回落 · Android 启动失败终态与可点重试 · 写路径事务边界 · 判据族从字符串断言改为行为探针 |
 | **v5.23.4** | 2026-11-11 | 桌面导出改为 Python 显式落盘（不再假成功）· 修复 requirements.lock.txt 不可解（numpy / pydantic-core 与 Python 3.11 冲突）· 依赖批量升级与 CI 缓存动作 v6 |
 

@@ -16,8 +16,8 @@
 ;  5. **未做代码签名**：Windows SmartScreen 会提示「未知发布者」，README 与发布正文已如实写明。
 ;
 ; CI 调用示例：
-;   iscc /DAppVersion=5.24.1 ^
-;        /DPortableDir=D:\a\DeLector-v5.24.1-Windows-x64-Portable ^
+;   iscc /DAppVersion=5.24.2 ^
+;        /DPortableDir=D:\a\DeLector-v5.24.2-Windows-x64-Portable ^
 ;        /DWebView2Setup=D:\a\MicrosoftEdgeWebview2Setup.exe ^
 ;        installer\DeLector.iss
 

@@ -15,7 +15,38 @@
 5. README.md 的「版本历史」表只保留最近 3 版，旧版只进本文件。
 -->
 
+## v5.24.2 - 2026-11-18
+
+### 修复
+
+- **发版链路三处判据缺陷**（均表现为空退出码或竞态，不是产物逻辑问题）：
+  1. `Install Inno Setup` 以 `$LASTEXITCODE -ne 0` 判定成败；安装器把工作交给子进程后父进程即退，退出码为空被判成失败。改为有界轮询 `ISCC.exe` 落盘并跑 `ISCC.exe /?` 探针，退出码只记日志；
+  2. `Verify Installer` 同样以退出码判定静默安装；改为等待完成信号（`inno.log` 的 `Installation process succeeded`，兜底为卸载器已生成 + 文件数不少于源目录且连续两次采样稳定）；
+  3. 安装完成判定曾只等 `DeLector.exe` 出现，导致验包与安装赛跑，误报缺 `_internal/webview`、`pythonnet`。根因已用分段验包证实：`dist → zip` PASS、`zip → 解压` PASS、问题在安装未完成就验包。
+- **发版工作流语法错误**：Android 的 `Derive Version from Git Tag` 步骤 `if | -z "$CODE"` 缺方括号，任何 tag 发版都会解析失败（2026-11-13 引入）。
+- **手动验证入口**：`workflow_dispatch` 增加 `target`（`all` / `windows-installer`），可在不打 tag 的前提下单独验安装器链路；发布作业仍只认真 tag。
+
+### 内部
+
+- 新增 `tools/diagnose_windows_payload.ps1`（只读）：打印 zip 条目、`_internal` 子目录计数、`webview`/`pythonnet` 的扩展名分布与 hidden/system/reparse 属性、`DeLector.iss` 的 `[Files]` 原文。
+- 新增两段验包：打包后对 zip 解包目录验一次（`dist → zip`），安装器作业在 `Expand-Archive` 后、ISCC 前验一次（`zip → 解压`）。
+- **本版为重新发版**：`v5.24.0` 与 `v5.24.1` 两个 tag 均已推送，但分别因上述脚本缺陷未产出任何 Release 资产；两版代码内容与本版一致。两个旧 tag 保留不动，不删除、不移动。
+- 版本面同步：`version.py`（`5.24.2`）、`build.gradle` fallback（`52402`）、`sw.js`、两处顶栏、installer 注释示例、钉版本测试、README、PROJECT_OVERVIEW。
+
+### 已知限制（Known Limitations）
+
+- 应用内更新的真机安装仍未验证：Android 系统确认、Windows 静默覆盖安装、便携版换目录、Linux 切换后启动均未在真实设备执行。
+- 本版只跑更新相关对点测试与版本/发版守卫，未跑全量 pytest。
+
+### 回滚（Rollback）
+
+- 同 v5.24.0：桌面重装上一版安装包或覆盖解压上一版便携包；Android 需先卸载再装旧版；Linux 受管布局把符号链接指回上一版目录。
+
+---
+
 ## v5.24.1 - 2026-11-18
+
+> **本版 tag 已推送但未产出 Release**：卡在 `Install Inno Setup` 的空退出码判据（见 v5.24.2 修复条目），资产未生成。功能内容与 v5.24.2 一致，以 v5.24.2 为准。
 
 ### 修复
 
