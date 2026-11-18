@@ -15,6 +15,37 @@
 5. README.md 的「版本历史」表只保留最近 3 版，旧版只进本文件。
 -->
 
+## v5.24.0 - 2026-11-18
+
+### 新增
+
+- **跨平台应用内更新**（ADR-0034）：检查到新版本后可下载、校验并分平台安装，不再只能跳 Release 网页。Windows 安装版拉起 Inno 安装器（静默参数 + Restart Manager 关闭占用），Windows 便携版退出后由 PowerShell helper 换目录并在失败时回滚，Linux 采用版本目录 + 符号链接原子切换并保留上一版，Android 走 `PackageInstaller` 系统确认并做包名/versionCode/签名预检。macOS 维持原状，仍只提供 Release 页。
+- **Release 校验和**：CI 为每个发布资产生成同名 `.sha256`，应用下载后先比字节数再比 sha256；缺校验和资产时报 `checksum_missing` 并拒绝下载，不降级为无校验。
+- **资产元数据端点** `GET /api/update/artifact`：按平台/形态/架构精确匹配资产名，返回独立 12 键契约与独立缓存；失败不返回任何可下载字段。
+- **更新动作端点**：`POST /api/update/download`、`GET /api/update/download/status`、`POST /api/update/download/cancel`、`POST /api/update/install`，全部挂本机闸，只接受空请求体（URL/大小/校验和由后端自行解析）。
+- **更新面板**：用户点击「应用内更新」后才出现，展示进度与可取消；失败给「空间不足 / 安装包校验失败 / 下载不完整 / 安装失败请手动安装 / 已取消」等人话，并保留 Release 页退路。顶栏 `System · vX.Y.Z` 自证串仍不承载更新状态。
+
+### 内部
+
+- 下载器为零全局状态纯函数组合：仅接受 `https://`、断点续传（206）、忽略服务端 200 的 Range、字节数与 sha256 双重校验、可取消；失败原因区分 `rate_limited` / `not_found` / `network` / `timeout`。
+- 更新会话单进程单实例，重入返回 `busy`；状态机为 `idle → downloading → verifying → ready → installing`，失败统一落 `failed`。
+- 新增测试全部登记进 `tools/ci_shards.py` 分片；前端检查走 tsc 窄口径，行为探针改用标准三键输出契约。
+- 遮蔽/占位守卫对齐：Protocol 方法标 `@abstractmethod`，两处 `except pass` 补 `silent-ok` 说明。
+
+### 已知限制（Known Limitations）
+
+- **应用内安装未做真机/真装验证**：Android 系统安装确认、Windows 静默覆盖安装、便携版目录替换、Linux 切换后启动均只由单测与静态守卫覆盖，未在真实设备执行；本版发布后需按验证方案补点验。
+- 本轮只跑更新相关对点测试与文档/前端契约闸，未跑全量 pytest；Tests badge 沿用上次全量口径，不代表本版实测。
+- 安装器与 Android 包仍未做代码签名之外的平台签名校验（Windows 未签名、APK 用固定 keystore），系统安全提示属预期。
+
+### 回滚（Rollback）
+
+- 安装版/便携版：重新运行上一版 `Setup.exe` 或解压上一版便携包覆盖即可，用户数据目录不受影响。
+- Android：安装上一版 APK 会因 versionCode 更低被系统拒绝，需先卸载再装；卸载会清应用私有数据，必要时先导出备份。
+- Linux：受管布局下把符号链接指回 `versions/<上一版>` 即可；非受管布局不受本版自动替换影响。
+
+---
+
 ## v5.23.5 - 2026-11-13
 
 ### 修复
