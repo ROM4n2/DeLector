@@ -25,6 +25,8 @@ __all__ = [
     "DownloadCancelled",
     "DownloadError",
     "NoSpaceError",
+    "NotFoundError",
+    "RateLimitedError",
     "SizeMismatchError",
     "download",
     "finalize",
@@ -48,6 +50,14 @@ class DownloadError(Exception):
 
 class NoSpaceError(DownloadError):
     reason = "no_space"
+
+
+class RateLimitedError(DownloadError):
+    reason = "rate_limited"
+
+
+class NotFoundError(DownloadError):
+    reason = "not_found"
 
 
 class SizeMismatchError(DownloadError):
@@ -214,9 +224,9 @@ def download(
     try:
         status = int(stream.status_code)
         if status in (401, 403, 429):
-            raise DownloadError("rate_limited")
+            raise RateLimitedError("rate_limited")
         if status == 404:
-            raise DownloadError("not_found")
+            raise NotFoundError("not_found")
         if status not in (200, 206):
             raise DownloadError("network")
         if status == 200:
