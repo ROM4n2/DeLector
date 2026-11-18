@@ -11,7 +11,7 @@
 #   pywebview 6.2.1  → 走系统 Edge WebView2（WinForms/EdgeChromium 后端）
 #   pystray   0.19.5 → Windows 托盘（内含 _win32 后端）
 #   pythonnet 3.2.1  → pywebview 的 Windows 后端（clr/WebView2）所必需
-#   pillow    12.3.0 → pystray 生成托盘图标
+#   pillow    13.0.0 → pystray 生成托盘图标
 #
 # 打包冻结提示（ADR-0020 §3.1，属 Task 5 的接线范围，此处仅登记）：
 #   --collect-all=webview + hidden-import（webview.platforms.edgechromium / winforms、pystray._win32）
