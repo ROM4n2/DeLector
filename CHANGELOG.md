@@ -25,6 +25,7 @@
 
 ### 内部
 
+- 依赖升级（dependabot，5 个 PR #393 / #391 / #390 / #380 / #392）：annotated-doc 0.0.6、smart-open 9.0.4、markdown-it-py 4.3.0、pyinstaller-hooks-contrib 2026.10、typer 0.29.1；lock 重算与 requirements pin 一致。
 - **Windows Portable Smoke 只读取证采样**（TODO-CI-02）：Build 前每 15s 记录进程与监听端口，Verify 后 `if: always()` 打印尾部与当场快照；不改命令、退出码与 `timeout-minutes`。3 轮 `workflow_dispatch` 未复现 30 分钟卡死，采样器已常驻。
 
 ### 文档
