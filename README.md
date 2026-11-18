@@ -7,11 +7,11 @@
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-3040%2F3054%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests%20%28v5.23.4%29-3040%2F3054%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License" />
 </p>
 
-<!-- Tests 徽章口径（可复算，非推算）：**v5.23.4 发布分支本地全量（2026-11-11）**；v5.23.5 与 v5.24.2 **均未复跑全量**（按 2026-11-13 起「只跑对点」的约束），故徽章沿用该时点数字，不得当作 v5.24.2 实测。
+<!-- Tests 徽章口径（可复算，非推算）：**v5.23.4 发布分支本地全量（2026-11-11）**；v5.23.5 与 v5.24.x **均未复跑全量**（按 2026-11-13 起「只跑对点」的约束），故徽章沿用该时点数字，并把时点写进徽章文字，避免被读成当前值。
      分子 = `python -m pytest tests` 的 3040 passed；分母 = `--collect-only -q` 的 3054 collected
      （= 3040 passed + 8 skipped + 1 xfailed + 2 failed + 3 errors）。环境：Windows 11 / Python 3.11（项目级 .venv）。
      本机残留 5 条噪声，全部与本版改动无关（在未改动的 master 上同样失败）：
@@ -20,7 +20,9 @@
        - tests/test_probe_json_contract.py 的 3 条（ERROR）
      CI（Linux）上全部通过，故分子按 passed 计、不把这些算成回归。
      本地 .venv 已按 `uv pip install -r requirements.lock.txt` 升到 fastapi 0.162.2 / click 8.5.1 /
-     typer 0.28.0 / typing-inspection 0.4.5，因此该数字覆盖了新依赖。 -->
+     typer 0.28.0 / typing-inspection 0.4.5，因此该数字覆盖了新依赖。
+     2026-11-18 起 lock 又经 dependabot 升到 typer 0.29.1 / smart-open 9.0.4 / markdown-it-py 4.3.0 /
+     pyinstaller-hooks-contrib 2026.10 / annotated-doc 0.0.6，该数字未随之复跑全量。 -->
 
 <p align="center">
   <b>专为德语学习者与歌德（A1–C1）/ 德福（TestDaF）/ DSH 备考打造的学术级伴读与句法剖析系统。</b><br/>
@@ -216,6 +218,7 @@ DeLector/
 - **Android 装不回旧版**：`versionCode` 只升不降，装错版本只能卸载重装（会清应用私有数据，请先导出备份）。
 - **Android 主路径已统一到 spaCy**：按 [ADR-0028](docs/adr/2026-11-06-adr-0028-android-main-path-spacy-lazy-load.md) 删除平台硬编码的纯 Python 降级；模型缺失/加载失败时句法专线硬失败，不返回近似结果。
 - **存量文章按需惰性重算（3.6.0 起）**：升级前落库的旧结果会在**首次打开该篇时**按需重算并回写；启动路径不扫全表、不批量重算。重算在单篇 GET 内**同步**执行，10 万字符上限级文章约 4–5s，期间只有该篇请求等待。重算失败会保留旧结果并返回 200（日志 warning，响应带 `processed_upgrade_failed: true`），`raw_text` / 生词卡 / 批注从不被改动。旧结果快照在 `processed_json_backup`，可用 `python tools/recompute_processed.py --restore` 逐字回退。
+- **应用内更新未做端到端验证**：v5.24.2 接入的四条路径（Windows 安装版 / 便携版、Android、Linux）只有构建期闸与单测 / 探针覆盖；「检测 → 下载 → 校验 `.sha256` → 安装 → 重启生效」的完整链路**尚未在真机或真实旧版上跑通**，Android 侧尤其未验证。升级失败时请回退到 Releases 页手动下载。macOS 不参与应用内更新。
 - **生词卡重复卡只做部分修复**：写入侧已改为幂等 upsert（同词重复提交不再新增），但未建 UNIQUE 索引、存量重复未合并；读侧按「共 N 张」去重显示。存量合并要等真实重复统计后再定策略。
 - **Android 真机、低端机与 iOS 均未覆盖**：本版仅完成 x86_64 模拟器（API 37）覆盖安装与 `versionCode` 检查，未启动点检；arm64 真机未安装点检，低端机内存峰值与 OOM 未测量，iOS Safari 键盘态未验证。真机与低端机不是发版前置，但不得把模拟器结果当作真机结论。
 
