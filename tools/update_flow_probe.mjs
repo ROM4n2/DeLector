@@ -5,7 +5,8 @@
  * 探针里不重抄一份实现。只做纯函数断言（无 DOM、无网络、无计时器）。
  *
  * 用法：node tools/update_flow_probe.mjs --json
- * 输出：`{ ok: true, <场景名>: "<一句人话>" }`；有失败则写 stderr 并 exit 1。
+ * 输出：标准三键 `{ cases: [{name, ok}], failures: 0, total: N }`；
+ * 有失败则写 stderr 并 exit 1。
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -19,8 +20,14 @@ const moduleUrl = "data:text/javascript;base64," + Buffer.from(src, "utf8").toSt
 const flow = await import(moduleUrl);
 
 const problems = [];
+const results = new Map();
 const check = (name, condition, detail) => {
-  if (!condition) problems.push(`${name} :: ${detail}`);
+  const previous = results.get(name) || { name, ok: true };
+  if (!condition) {
+    previous.ok = false;
+    problems.push(`${name} :: ${detail}`);
+  }
+  results.set(name, previous);
 };
 
 /* 1. 百分比边界 */
@@ -81,15 +88,11 @@ if (problems.length) {
   process.exit(1);
 }
 
+const cases = [...results.values()];
 process.stdout.write(
   JSON.stringify({
-    ok: true,
-    percent_edges: "0/50/100/越界/零总量/NaN 六组边界一致",
-    download_view: "下载中带百分比且可取消",
-    verifying_view: "校验中文案且可取消",
-    ready_view: "就绪不可取消",
-    failed_humanized: "失败给空间不足人话并保留 Release 退路",
-    unknown_reason_fallback: "未知 reason 走兜底且不回显原始串",
-    idle_view: "空闲零动作",
+    cases,
+    failures: problems.length,
+    total: cases.length,
   }),
 );
