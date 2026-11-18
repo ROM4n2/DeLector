@@ -5,6 +5,15 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      target:
+        description: "手动验证只跑构建，不发布 Release"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - windows-installer
 
 permissions:
   contents: write
@@ -12,6 +21,8 @@ permissions:
 jobs:
   build-windows:
     name: Build Windows x64 Portable
+    # 手动入口：默认全量；target=windows-installer 时只跑安装器链路依赖的这台。
+    if: github.event_name == 'push' || github.event.inputs.target == 'all' || github.event.inputs.target == 'windows-installer'
     timeout-minutes: 30
     runs-on: windows-latest
     env:
@@ -124,6 +135,10 @@ jobs:
       - name: Install Inno Setup 7.1.1 (pinned)
         # 固定 7.1.1（Inno 7.x 当前版，与本机实测一致）：`choco install innosetup` 装的是
         # **最新版**，编译器大版本一变就可能在发版期炸掉。直链下载 + 校验体积，失败即红。
+        #
+        # 成败以「实物可执行」为准，不以退出码为唯一判据：2026-11-18 两轮发版实测，
+        # `& $installer` 约 1 秒就返回且 $LASTEXITCODE 为空（安装器把工作交给子进程后
+        # 父进程即退），旧写法 `if ($LASTEXITCODE -ne 0)` 把 null 当失败直接红。
         run: |
           $ErrorActionPreference = "Stop"
           $url = "https://github.com/jrsoftware/issrc/releases/download/is-7_1_1/innosetup-7.1.1-x64.exe"
@@ -139,11 +154,36 @@ jobs:
           }
           $len = (Get-Item $installer).Length
           if ($len -lt 3000000) { throw "Inno Setup 安装包大小异常（$len 字节）" }
+
           $innoDir = "$env:RUNNER_TEMP\inno"
+          $iscc = Join-Path $innoDir "ISCC.exe"
           & $installer /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER "/DIR=$innoDir"
-          if ($LASTEXITCODE -ne 0) { throw "Inno Setup 安装失败（exit=$LASTEXITCODE）" }
-          if (-not (Test-Path "$innoDir\ISCC.exe")) { throw "找不到 ISCC.exe" }
-          "$innoDir\ISCC.exe" | Out-File -FilePath "$env:RUNNER_TEMP\iscc_path.txt" -Encoding utf8
+          $launchExit = $LASTEXITCODE
+          Write-Host "安装器启动退出码=$launchExit（仅辅助信息，不作成败判据）"
+
+          $timeoutSeconds = 180
+          $deadline = (Get-Date).AddSeconds($timeoutSeconds)
+          $probeExit = $null
+          $probeLines = 0
+          while ((Get-Date) -lt $deadline) {
+            if (Test-Path -LiteralPath $iscc) {
+              try {
+                $probe = & $iscc /? 2>&1 | Out-String
+                $probeExit = $LASTEXITCODE
+                $probeLines = @($probe.Trim() -split "`n").Count
+                if ($probe.Trim().Length -gt 0) { break }
+              } catch {
+                Write-Host "ISCC 探针暂不可执行：$($_.Exception.Message)"
+              }
+            }
+            Start-Sleep -Seconds 5
+          }
+
+          if (-not (Test-Path -LiteralPath $iscc) -or $probeLines -eq 0) {
+            throw "Inno Setup 安装超时：${timeoutSeconds}s 内未出现可执行的 $iscc（安装器启动退出码=$launchExit）"
+          }
+          Write-Host "ISCC 就绪：$iscc（探针输出 $probeLines 行，探针退出码=$probeExit 仅辅助）"
+          $iscc | Out-File -FilePath "$env:RUNNER_TEMP\iscc_path.txt" -Encoding utf8
 
       - name: Download WebView2 Evergreen Bootstrapper
         # 内嵌它：Win10 常缺 WebView2 运行时，装完即可用（见 installer/DeLector.iss 文件头约束 4）。
@@ -195,6 +235,7 @@ jobs:
 
   build-linux:
     name: Build Linux x64 Portable
+    if: github.event_name == 'push' || github.event.inputs.target == 'all'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -303,6 +344,7 @@ jobs:
 
   build-macos:
     name: Build macOS Portable
+    if: github.event_name == 'push' || github.event.inputs.target == 'all'
     runs-on: macos-latest
     timeout-minutes: 20
     steps:
@@ -411,6 +453,7 @@ jobs:
 
   build-android:
     name: Build Android Standalone APK
+    if: github.event_name == 'push' || github.event.inputs.target == 'all'
     timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:
