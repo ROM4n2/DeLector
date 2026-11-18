@@ -19,6 +19,19 @@ const CACHE_NAME = "delector-static-v5.24.2";
 // 写成缓存键，而真实请求不带查询串，永远匹配不上——留着只会让人以为预缓存生效了。
 // 实际缓存由下面的 fetch 处理器边走边填。
 
+// 缓存条目上限（2026-11-13 审计 P2 #11）：`cache.put` 只增不减，一旦请求 URL 带上
+// 变化参数（历史上带版本查询串的形态）就会单调累积。静态面固定约 110 个文件，取 160 留余量：
+// 正常使用永远碰不到上限，异常累积时按插入顺序逐出最旧条目（`Cache.keys()` 按插入序返回，
+// 即 FIFO）。导航外壳 `/` 每次导航都会重新 put（覆盖会移到队尾），不会被轻易逐出。
+const MAX_CACHE_ENTRIES = 160;
+
+async function trimCache(cache) {
+  const keys = await cache.keys();
+  const overflow = keys.length - MAX_CACHE_ENTRIES;
+  if (overflow <= 0) return;
+  await Promise.all(keys.slice(0, overflow).map((key) => cache.delete(key)));
+}
+
 self.addEventListener("install", () => {
   self.skipWaiting();
 });
@@ -87,7 +100,10 @@ async function networkFirst(event, request) {
     if (response && response.status === 200 && response.type === "basic") {
       const copy = response.clone();
       event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)),
+        caches.open(CACHE_NAME).then(async (cache) => {
+          await cache.put(request, copy);
+          await trimCache(cache);
+        }),
       );
     }
     return response;

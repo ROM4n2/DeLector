@@ -1,22 +1,3 @@
-### 2026-11-13 19:28 | tencent-hunyuan-hy__codebuddy | WORK_END
-Caps: filesystem-read, filesystem-write, shell-exec, git
-Work done: 上条 NOTE 的 2 个独立 PR。累计 **16 个独立 PR** + 1 个历史遗留混合分支，全部 PR-ready、工作树干净、未 push / 未开 PR。Ledger 16/16。
-- T14 的两条残留现在都闭合：终态 UI（上一轮真机已验证）+ 点击重试的运行时行为（本轮单击即生效，证据链完整）。新增发现并修掉「首触被 selectable 吞掉」这个此前无人知道的缺陷。
-Remaining work: 计划内 16 个 Task 与设备验证全部闭环，无未开工项。仅剩合并动作（按 PR 顺序 rebase / 合并）由用户决定。
-- 不做：不 push、不开 PR、不发版（均无显式授权）。
-
-### 2026-11-13 20:16 | tencent-hunyuan-hy__codebuddy | NOTE
-Caps: filesystem-read, filesystem-write, shell-exec, git
-**已通过 PR 落地到远端 `master`**（`2e5b9d8`）。共 16 个 PR 合并 + 1 个 fix-forward PR（#374）。
-- 直推被仓库自己的 `master` 直推范围闸拦下（白名单只允许 WORKMEMORY/ · docs/ · README · CHANGELOG · static/index.html · static/sw.js · build.gradle · version.py）。**没有用 `--no-verify` 绕过**，改走 PR。
-- PR 清单：#357 历史混合分支 → #359 T6 → #360 T8 → #361 T10-① → #362 T13 → #363 T15 → #364 T3 → #365 T7 → #366 T10-④ → #367 T10-② → #368 T10-③ → #369 T4 → #370 T14 → #371 once 注入档 → #372 重试 Button → #373 安装工具 → #374 合并集成修复。
-- #358（分片注册）被关闭：它的 base 分支随 #357 的 `--delete-branch` 被删，GitHub 拒绝 reopen；其内容已作为 #359 的祖先进入 master（实测 `f2d260e` 是 origin/master 的祖先、3 条分片登记与 `pip install pyyaml` 均在位），故无需重复合并。
-- **PR 路线暴露了文本合并不等于语义合并**：GitHub 把 T10-② 的前端探针与 T13 的 reader.js 改动合成后，沙箱缺 `_cancelReaderRetryTimer` 桩 —— `origin/master` 上 `frontend_guards_probe` 15 个场景全挂。开 #374 修复（补桩 + 两条真源码切片 + 变异锚点 + mypy tests 档 3 处 + 2 处 mock-drift 豁免）。
-- 合并期另有两处冲突在 PR 侧解决：`#360`/`#361` 的分片条目插入冲突（按并集，在分支上 `merge origin/master` 后本地解决再推）；`#370` 的 wb 探针冲突（取已合并最终版）。
-- 教训：`gh pr merge --delete-branch` 在本地有同名 worktree 时会报错（#359/#362 其实已合并成功）；`gh pr merge` 在改完 base 后立刻执行会因 mergeable 尚未重算而误报冲突，需 `sleep`。
-- **`origin/master` 最终验收（独立 worktree 检出 origin/master 跑）**：对点并集 **485 passed**；9 个静态闸全 exit 0；`wb_export_probe` 13/13 与 `frontend_guards_probe` 15/15 均 exit 0；`ruff check .` All checks passed；mypy 三档（`--strict delector tools` 152 文件 / `--follow-imports=skip tests` 211 文件 / win32 入口 4 文件）全部 Success。
-- 本地 `master` 已对齐 `origin/master`（此前本地合并产生的 66 个提交内容均已通过 PR 落地；重置前留有 `backup/local-merge-2026-11-13` 引用）。
-
 ### 2026-11-13 20:16 | tencent-hunyuan-hy__codebuddy | WORK_END
 Caps: filesystem-read, filesystem-write, shell-exec, git
 Work done: 整体健康度修复的 16 件事全部经 PR 进入远端 `master`，合并后在 `origin/master` 上完成独立验收（485 passed + 9 闸 + 2 探针 + ruff + mypy 三档）。
@@ -125,3 +106,11 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 - **基线收紧**：`--emit-baseline` 重跑，`BUDGET|WORKMEMORY: 1` 被移除（热层轮转后实际归零），`measured_at_commit` 更新到 `81c38f6`。其余 10 个桶数值未变 ⇒ 方向只会更严；以后 work.log 再超 24KB 会直接变红。
 - **搬移豁免进真值**：新增 `templates/local-gates/fingerprint-gate.sh`（技能的规范副本）。模式改成从 `$GIT_DIR/local-gates/fingerprints.txt` 读取，模板自身不带任何本机标识——通用技能写死某台机器的路径，正是它要防的东西。判据保留 `parent_has_line`：命中行在父提交已存在 ⇒ 判搬移放行。
 - **守卫**：`test_template_quality.py` 新增 5 条（LF/BOM、搬移豁免存在、模板无盘符路径、不被 bootstrap 安装、`bash -n` 语法），模板块 17 passed。
+
+### 2026-11-18 23:05 | codebuddy-deepseek | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+健康度第 2 项（前端资源治理与失败终态收口）复核结论：T13/T14/T15 的**代码项**早已随 #362/#363/#370 进入 master 且有行为探针（reader 状态机 3 条、wb_export 8 场景、负缓存 1 条）；真实剩余缺口只有 T4 的 `cache.put` 无上限与 T15 的三条裁决未登记。
+- **SW 缓存上限**（`static/sw.js`）：`MAX_CACHE_ENTRIES = 160` + FIFO 逐出（`Cache.keys()` 插入序）；静态面实测 110 个文件，正常使用碰不到上限。探针先写后改：先在 `tests/test_static_cache_fingerprint.py` 加 `test_service_worker_cache_entries_are_bounded`（假 Cache 真跑 `networkFirst`，写 cap+5 条断言停在 cap 且最旧 5 条被逐出），跑红原文 `sw.js 未定义正整数 MAX_CACHE_ENTRIES：缓存条目无上限`，再实现；变异自证由探针内删 `await trimCache(cache);` 后条目数必须涨到 cap+5。
+- **登记**：PROJECT_OVERVIEW 活项 8（索引 35.86 ms 不加索引归 Step 2/3 / 长文 DOM 无分段可接受 / Go companion 无队列仅 127.0.0.1）、CHANGELOG v5.24.2 已知限制两条、`tests/test_query_plans.py` 模块 docstring 补「未覆盖（已裁决）」。
+- **验证**：`tests/test_static_cache_fingerprint.py` 7 passed（含旧回落探针）、writer_mobile + query_plans 38 passed、`node --check static/sw.js` exit 0；未跑全量 pytest，存在未覆盖回归风险。
+- **坑**：sw.js 注释里写 `?v=` 字面量会撞 `test_writer_mobile.py` 的「缓存键不带版本查询串」守卫（它扫整个文件文本，不区分注释）——注释改成「带版本查询串的形态」。
