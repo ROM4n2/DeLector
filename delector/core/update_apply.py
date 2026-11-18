@@ -35,7 +35,7 @@ def spawn_installer(exe: Path, *, popen: Callable[..., object] = subprocess.Pope
     """
     flags = 0
     if hasattr(subprocess, "DETACHED_PROCESS"):
-        flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+        flags = subprocess.DETACHED_PROCESS | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     return popen(installer_command(exe), shell=False, close_fds=True, creationflags=flags)
 
 

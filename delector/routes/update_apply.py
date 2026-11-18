@@ -131,7 +131,7 @@ def _spawn_powershell(script: Path) -> None:
     """分离启动 helper 脚本：应用退出后仍由它完成目录交换。"""
     flags = 0
     if hasattr(subprocess, "DETACHED_PROCESS"):
-        flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+        flags = subprocess.DETACHED_PROCESS | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     subprocess.Popen(powershell_command(script), shell=False, close_fds=True, creationflags=flags)
 
 
