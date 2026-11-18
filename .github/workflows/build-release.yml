@@ -263,8 +263,13 @@ jobs:
           # 「DeLector.exe 出现」不等于装完：Inno 按 [Files] 顺序复制，主程序往往早于
           # _internal 下的原生目录落地。必须等真正的完成信号，否则验包会与安装赛跑，
           # 报出「webview/pythonnet 缺失」的假红（2026-11-18 实测）。
-          # 判据二选一：日志出现 Installation process succeeded，或卸载器已生成且文件数
-          # 连续两次采样不再变化（兜底不依赖日志措辞）。
+          # 判据二选一：日志出现 Installation process succeeded，或卸载器已生成、
+          # 文件数达到源目录水平且连续两次采样不变（兜底不依赖日志措辞）。
+          # 文件数下限不可省：Inno 先建卸载器再收尾，单看「稳定」会在复制中途误判完成
+          # （2026-11-18 实测曾在 283/1546 时就满足稳定条件）。
+          $sourceDir = (Get-Content portable/dir.txt -Raw).Trim()
+          $expectedFiles = @(Get-ChildItem -LiteralPath $sourceDir -File -Recurse -Force -ErrorAction SilentlyContinue).Count
+          Write-Host "源目录文件数=$expectedFiles"
           $lastCount = -1
           $stablePolls = 0
           $completed = $false
@@ -279,7 +284,7 @@ jobs:
                 $count = @(Get-ChildItem -LiteralPath $installDir -File -Recurse -Force -ErrorAction SilentlyContinue).Count
                 if ($count -eq $lastCount) { $stablePolls++ } else { $stablePolls = 0 }
                 $lastCount = $count
-                if ($stablePolls -ge 2) { $completed = $true; break }
+                if ($count -ge $expectedFiles -and $stablePolls -ge 2) { $completed = $true; break }
               }
             }
             Start-Sleep -Seconds 5
