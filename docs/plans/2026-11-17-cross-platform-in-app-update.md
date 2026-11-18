@@ -293,7 +293,7 @@
 
 ### T1.6 · 前端入口
 
-- **Files**：Modify `static/js/update.js`；Modify `static/js/api-types.js`（新增端点 typedef）；Add `tests/test_update_ui_state.py`（`node:vm` 探针，沿用仓内前端探针形态）
+- **Files**：Modify `static/js/update.js`；Modify `static/js/api-types.js`（新增端点 typedef）；Add `tests/test_update_flow_probe.py`（`node:vm` 探针，沿用仓内前端探针形态）
 - **行为**：`has_update === true` 时 chip 内提供「在应用内更新」按钮；点击 → `POST /api/update/download` → 轮询 `/status`；失败展示人话 + Release 页退路。无桌面能力（桥/端点 `unsupported`）时**只保留**现有链接。
 - **RED/GREEN**：状态机纯函数在 `node:vm` 中跑六条迁移；`/api/update/...` 字面量必须被 `tools/check_frontend_api_contract.py` 识别为已注册路由。
 
@@ -387,7 +387,7 @@
 对点执行命令（用户授权后）：
 
 ```powershell
-python -m pytest -q tests/test_update_check_endpoint.py tests/test_update_artifact_endpoint.py tests/test_update_host.py tests/test_update_download.py tests/test_update_session.py tests/test_update_apply_routes.py tests/test_update_apply.py tests/test_update_ui_state.py tests/test_android_update_permission.py tests/test_localhost_guard.py
+python -m pytest -q tests/test_update_check_endpoint.py tests/test_update_artifact_endpoint.py tests/test_update_host.py tests/test_update_download.py tests/test_update_session.py tests/test_update_apply_routes.py tests/test_update_apply.py tests/test_update_portable.py tests/test_update_linux.py tests/test_update_flow_probe.py tests/test_update_chip_ui.py tests/test_android_update_permission.py tests/test_localhost_guard.py
 python tools/check_docs_layout.py
 python tools/check_frontend_api_contract.py
 ```
