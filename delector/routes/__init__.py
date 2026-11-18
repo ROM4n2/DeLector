@@ -39,6 +39,7 @@ from delector.routes import (
     syntax_hard,
     tools,
     update,
+    update_apply,
     writing,
 )
 from delector.routes.sync import (
@@ -69,6 +70,7 @@ __all__ = [
     "main",
     "tools",
     "update",
+    "update_apply",
     "writing",
     "MAX_SYNC_CACHE_ENTRIES",
     "_SYNC_INSTANCE_ID",
@@ -102,6 +104,9 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(search.router)
     # update 在 main 之前：/api/update 独立前缀，遵守"分域路由在前、通用 handler 垫底"纪律。
     app.include_router(update.router)
+    # update_apply 是同一前缀下的"本机动作"路由（下载/安装），与只读的 update 分开注册：
+    # 那边不许挂本机闸，这边每条都必须挂（tests/test_localhost_guard.py 白名单同步）。
+    app.include_router(update_apply.router)
     app.include_router(settings.router)
     app.include_router(backup.router)
     app.include_router(cards.router)

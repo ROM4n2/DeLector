@@ -51,6 +51,8 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import android.speech.tts.Voice;
 
@@ -263,6 +265,43 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * 应用内更新桥（ADR-0034 D3）：只做「预检 + 拉起系统安装会话」，不在 Java 侧下载。
+     *
+     * 下载与 sha256 校验复用 Python 下载器（落 files/updates），Java 只接收绝对路径。
+     * 返回值是小写可判定的状态码，前端据此给中文提示；**不存在**任何免确认安装路径。
+     */
+    public class UpdateBridge {
+        @JavascriptInterface
+        public String install(String path) {
+            final String[] result = { "SESSION_FAILED" };
+            final CountDownLatch latch = new CountDownLatch(1);
+            // @JavascriptInterface 回调在 JavaBridge 线程，Settings 跳转与 PackageInstaller
+            // 交互都切回 UI 线程；latch 只用于把状态码同步回 JS，不阻塞 UI 线程。
+            runOnUiThread(() -> {
+                try {
+                    result[0] = ApkInstaller.install(MainActivity.this, path);
+                } catch (Throwable error) {
+                    Log.w("DeLectorUpdate", "install bridge failed", error);
+                    result[0] = "SESSION_FAILED";
+                } finally {
+                    latch.countDown();
+                }
+            });
+            try {
+                latch.await(10, TimeUnit.SECONDS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+            return result[0];
+        }
+
+        @JavascriptInterface
+        public boolean isSupported() {
+            return true;
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -292,6 +331,7 @@ public class MainActivity extends AppCompatActivity {
         nativeTTS = new NativeTTSBridge();
         webView.addJavascriptInterface(nativeTTS, "AndroidNativeTTS");
         webView.addJavascriptInterface(new StartupReportBridge(), "DeLectorStartup");
+        webView.addJavascriptInterface(new UpdateBridge(), "DeLectorUpdate");
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override

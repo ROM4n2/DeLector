@@ -15,6 +15,7 @@
 | **四、视觉换皮与设计系统** | 全仓 CSS 现状量化、横向对标 M3/HIG/Fluent2、复习状态设计 | `*-full-site-visual-reskin-research.md` · `*-wordcard-review-state-research.md` |
 | **五、随附研究原型与代码模板** | 不接入构建链的独立静态对比原型、动效辅助函数脚手架 | `*.html` · `*.css` · `*.js` |
 | **六、启动性能与本地服务架构** | 冷启动指标口径、WebView 预热、sidecar 就绪握手、Web 首屏指标在本地 HTTP 场景的可迁移性 | `*-first-screen-startup-*.md` |
+| **七、发布分发与跨平台更新** | 各平台分发形态、自更新上限、Android 三条安装路径、校验和与签名锚点 | `*-cross-platform-update-strategy.md` |
 
 ---
 
@@ -82,3 +83,10 @@
   - **核心价值**：下载 `webkit-1.16.0.aar` 读元数据实证 **`minCompileSdk=33` / `minAGP=7.2.0` / `minSdk=24`**，推翻「必须升 compileSdk 36 + AGP 8.9 + Gradle 8.11」的假设——本项目（34 / 8.4.2 / 8.6 / 24）已满足，升级只需一行依赖。同时给出 AGP↔API 36 的官方门槛、Chaquopy 15.0.1 仅支持 AGP ≤8.5（若要升 AGP 必须换 16.1）的官方版本表，以及 `startUpWebView` 的调用时机、`shouldRunUiThreadStartUpTasks(false)` 分片、失败降级与审计 API；未证实项单独列清单。
 - [2026-11-09 `startUpWebView` 预初始化 Chromium 的负结果存档](2026-11-09-android-webview-prestartup-negative-result.md)
   - **核心价值**：把「并行 WebView 初始化抵消 #320 的 +738ms」这一假设实测证伪。两轮各 7 次 TTFD（x86_64 模拟器）：基线 4095 / 3938ms，`startUpWebView` 版 4067 / 4005ms，通过线 3966ms 未达、放弃线 4166ms 未破——付出 APK +0.08%、dex 方法数 +1,292（+2.18%）的成本，换来 0 收益。归因：Python 启动与 Chromium 初始化抢同一份 CPU，且 #319 之后 TTFD 下界已不在 WebView 上。附带结论：#320 的 +19% 回退在同一构建下被吸收（≈4005ms vs 4704ms），但「挪创建位置」本身无价值；实现留档于 `archive/negative-webview-prestartup`。
+
+---
+
+## 七、 发布分发与跨平台更新（Release & In-App Update）
+
+- [2026-11-17 全平台更新机制核查与升级方案](2026-11-17-cross-platform-update-strategy.md)
+  - **核心价值**：逐平台核实 release 产物形态与「自更新」真实上限——Windows 安装版/便携版可做到接近全自动、Linux 需先建受管布局、Android 因系统包管理器独占而最少 2–3 步确认、macOS 未签名未公证故暂缓。给出 Android 三条路径的可行性判定（Play In-App Updates 不适用、静默安装对第三方应用在平台层面不成立、仅剩自建下载 + `PackageInstaller`），并沉淀校验和来源、签名自锚定与失败回退清单，催生 [ADR-0034](../adr/2026-11-17-adr-0034-cross-platform-in-app-update.md) 与 [实施计划](../plans/2026-11-17-cross-platform-in-app-update.md)。

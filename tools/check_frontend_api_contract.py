@@ -514,9 +514,12 @@ def _bootstrap_env() -> None:
     os.environ["DELECTOR_DATA_DIR"] = tmp
     os.environ["DATABASE_PATH"] = os.path.join(tmp, "delector.db")
     os.environ["PROGRESS_DB_PATH"] = os.path.join(tmp, "progress.db")
-    target_db = os.path.join(tmp, "delector.db")
-    with sqlite3.connect(target_db) as conn:
-        conn.execute("CREATE TABLE _bootstrap (id INT)")
+    # 两个库都要在新位置落非空文件：preflight_data_dir 逐库判定，只种 delector.db 时
+    # 开发者仓库根若存有旧版 progress.db，会被迁移闸判成"数据留在旧位置"而拒绝启动。
+    for name in ("delector.db", "progress.db"):
+        target_db = os.path.join(tmp, name)
+        with sqlite3.connect(target_db) as conn:
+            conn.execute("CREATE TABLE _bootstrap (id INT)")
 
 
 def _reconfigure_stdout() -> None:
