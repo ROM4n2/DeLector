@@ -11,10 +11,12 @@ from pathlib import Path
 from typing import List
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-MANIFEST = REPO_ROOT / "android" / "app" / "src" / "main" / "AndroidManifest.xml"
-MAIN_ACTIVITY = REPO_ROOT / "android" / "app" / "src" / "main" / "java" / "org" / "delector" / "app" / "MainActivity.java"
-APK_INSTALLER = REPO_ROOT / "android" / "app" / "src" / "main" / "java" / "org" / "delector" / "app" / "ApkInstaller.java"
-RESULT_RECEIVER = REPO_ROOT / "android" / "app" / "src" / "main" / "java" / "org" / "delector" / "app" / "InstallResultReceiver.java"
+ANDROID_MAIN = REPO_ROOT / "android" / "app" / "src" / "main"
+ANDROID_JAVA = ANDROID_MAIN / "java" / "org" / "delector" / "app"
+MANIFEST = ANDROID_MAIN / "AndroidManifest.xml"
+MAIN_ACTIVITY = ANDROID_JAVA / "MainActivity.java"
+APK_INSTALLER = ANDROID_JAVA / "ApkInstaller.java"
+RESULT_RECEIVER = ANDROID_JAVA / "InstallResultReceiver.java"
 
 ANDROID = "{http://schemas.android.com/apk/res/android}"
 

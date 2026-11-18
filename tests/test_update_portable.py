@@ -9,8 +9,8 @@ import pytest
 from delector.core.update_portable import (
     build_apply_script,
     is_writable_root,
-    prepare_payload,
     powershell_command,
+    prepare_payload,
 )
 
 

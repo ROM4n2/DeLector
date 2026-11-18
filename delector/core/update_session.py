@@ -223,7 +223,7 @@ class UpdateSession:
         # 下一轮 download 会按既有 .part 续传或按大小规则丢弃，故这里只吞掉 OSError。
         try:
             (self._target_dir / (name + ".part")).unlink(missing_ok=True)
-        except OSError:
+        except OSError:  # silent-ok: 句柄被下载线程占用时删不掉，下一轮按 .part 续传
             pass
 
     def _snapshot_locked(self) -> Dict[str, Any]:

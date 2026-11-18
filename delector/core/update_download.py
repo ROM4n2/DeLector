@@ -249,8 +249,8 @@ def download(
     finally:
         try:
             stream.close()
-        except Exception:
-            pass  # 关闭失败不覆盖真正的下载错误
+        except Exception:  # silent-ok: 关闭失败不得覆盖真正的下载错误
+            pass
 
     if written != expected_size:
         raise SizeMismatchError(f"下载字节数不符: {written} != {expected_size}")
