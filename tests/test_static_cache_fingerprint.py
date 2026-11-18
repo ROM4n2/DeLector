@@ -180,6 +180,123 @@ const fn = new Function('self', 'caches', 'fetch', src + '\n; return networkFirs
 """
 
 
+SW_CAPACITY_PROBE = r"""
+const fs = require('fs');
+const src = fs.readFileSync('static/sw.js', 'utf8');
+const m = src.match(/const CACHE_NAME = "([^"]+)"/);
+if (!m) { console.log(JSON.stringify({ fatal: 'CACHE_NAME not found' })); process.exit(0); }
+const nameCur = m[1];
+
+// 只实现 sw.js 真正用到的那几个 Cache 方法：put / match / keys / delete。
+// keys() 按插入顺序返回（Cache API 规范），FIFO 淘汰依赖这个顺序。
+function makeCache() {
+  const map = new Map();
+  return {
+    put: async (req) => { map.set(String(req.url || req), true); },
+    match: async (req) => (map.has(String(req.url || req)) ? { matched: true } : undefined),
+    keys: async () => [...map.keys()].map((u) => ({ url: u })),
+    delete: async (req) => map.delete(String(req.url || req)),
+    size: () => map.size,
+    has: (u) => map.has(u),
+  };
+}
+
+function compile(source) {
+  return new Function('self', 'caches', 'fetch', source + `
+; return {
+    networkFirst,
+    cap: (typeof MAX_CACHE_ENTRIES === 'undefined' ? null : MAX_CACHE_ENTRIES),
+  };`);
+}
+
+async function drive(source, count) {
+  const cache = makeCache();
+  const cachesObj = {
+    keys: async () => [nameCur],
+    delete: async () => true,
+    open: async () => cache,
+  };
+  const selfObj = {
+    addEventListener() {},
+    skipWaiting() {},
+    clients: { claim: async () => {}, matchAll: async () => [] },
+  };
+  const pending = [];
+  const event = { waitUntil: (p) => pending.push(p) };
+  const fetchOk = async () => ({ status: 200, type: 'basic', clone() { return this; } });
+  const exported = compile(source)(selfObj, cachesObj, fetchOk);
+  for (let i = 0; i < count; i += 1) {
+    await exported.networkFirst(event, { url: '/asset-' + i + '.js', mode: 'no-cors' });
+    await Promise.all(pending.splice(0));
+  }
+  return { cap: exported.cap, size: cache.size() };
+}
+
+(async () => {
+  const probe = await drive(src, 10);
+  const count = (Number.isInteger(probe.cap) && probe.cap > 0 ? probe.cap : 10) + 5;
+  const run = await drive(src, count);
+  const cacheAfter = await drive(src, count); // 仅用于稳定性：同样的输入两次结果一致
+
+  // 变异自证：删掉逐出调用后，条目数必须无上限地增长。
+  const mutated = src.replace(/^\s*await trimCache\(cache\);\s*$/m, '');
+  const mutationApplied = mutated !== src;
+  const mutatedRun = mutationApplied ? await drive(mutated, count) : null;
+
+  console.log(JSON.stringify({
+    cap: run.cap,
+    count,
+    size: run.size,
+    stable: run.size === cacheAfter.size,
+    mutationApplied,
+    mutationSize: mutatedRun ? mutatedRun.size : null,
+  }));
+})();
+"""
+
+
+def test_service_worker_cache_entries_are_bounded() -> None:
+    """行为探针：SW 缓存必须有条目上限，超限按插入顺序逐出（FIFO）。
+
+    审计 P2 #11 的 `cache.put` 无界：片段缓存只增不减。静态资源固定 ~110 个，
+    但请求 URL 一旦带上变化参数（历史上 `?v=` 的形态）就会无限累积。
+    这里在 node 里用假 Cache 真跑 `networkFirst`，连续写入 cap+5 个不同 URL，
+    正确行为是条目数停在 cap 且最旧的 5 条被逐出；变异自证（删掉逐出调用）
+    必须看到条目数涨到 cap+5。
+    """
+    node = shutil.which("node")
+    if not node:
+        if os.environ.get("CI"):
+            pytest.exit("CI 缺少 node：SW 缓存上限探针不能静默跳过", returncode=1)
+        pytest.skip("未安装 node：本探针需要 node 执行真实 networkFirst")
+    assert node is not None  # 类型收窄：pytest.skip 不被 mypy 当作 NoReturn
+    proc = subprocess.run(
+        [node, "-e", SW_CAPACITY_PROBE],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(ROOT),
+        timeout=60,
+    )
+    assert proc.returncode == 0, f"node 探针自身失败：{proc.stderr[-1500:]}"
+    payload = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert "fatal" not in payload, payload
+    assert isinstance(payload["cap"], int) and payload["cap"] > 0, (
+        "sw.js 未定义正整数 MAX_CACHE_ENTRIES：缓存条目无上限（审计 P2 #11）"
+    )
+    assert payload["stable"] is True, payload
+    assert payload["size"] == payload["cap"], (
+        f"写入 {payload['count']} 条后应停在 {payload['cap']} 条，实际 {payload['size']} 条"
+    )
+    assert payload["mutationApplied"] is True, (
+        "变异锚点缺失：sw.js 里找不到 `await trimCache(cache);` ⇒ 本探针无法证明逐出调用有效"
+    )
+    assert payload["mutationSize"] == payload["count"], (
+        "删掉逐出调用后条目数仍被限制 ⇒ 判据失效（逐出可能不在被判的路径上）"
+    )
+
+
 def test_service_worker_fallback_does_not_cross_cache_versions() -> None:
     """行为探针：旧 CACHE_NAME 里的资源不得被 catch 当离线兜底返回。
 

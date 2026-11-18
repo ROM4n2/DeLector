@@ -37,6 +37,8 @@
 
 - 应用内更新的真机安装仍未验证：Android 系统确认、Windows 静默覆盖安装、便携版换目录、Linux 切换后启动均未在真实设备执行。
 - 本版只跑更新相关对点测试与版本/发版守卫，未跑全量 pytest。
+- Companion 伴学服务无并发上限与排队：每个 `/api/companion/chat` 直接执行一次 RunLoop，服务只监听 `127.0.0.1`（ReadTimeout 60s / WriteTimeout 120s）；本机单用户、无外层反向代理，判定不加队列。
+- 阅读页对超长文稿仍一次性 `innerHTML` 渲染，DOM 节点数随分词数增长、无分段或虚拟滚动上限；本机单用户判定可接受，分层渲染另开设计稿。
 
 ### 回滚（Rollback）
 
