@@ -15,7 +15,31 @@
 5. README.md 的「版本历史」表只保留最近 3 版，旧版只进本文件。
 -->
 
+## v5.24.1 - 2026-11-18
+
+### 修复
+
+- **发版工作流语法错误**：Android 的「Derive Version from Git Tag」步骤写成 `if | -z "$CODE"`，缺方括号，bash 解析整个 `if` 复合命令时报 `syntax error near unexpected token '|'`，任何 tag 发版都会在该步中断。该笔误由 2026-11-13 的隐私清理提交引入，v5.23.5 的 tag 早于它，所以此前未暴露。现改为 `if [ -z "$CODE" ]; then`，其余分支逻辑未动。
+
+### 内部
+
+- **本版为重新发版**：v5.24.0 的 tag 已推送，但因上述缺陷未产出任何 Release 资产；本版代码内容与 v5.24.0 一致，仅补 CI 修复并重排版本号。`v5.24.0` tag 保留不动，不删除、不移动。
+- 版本面同步：`version.py`（`5.24.1`）、`build.gradle` fallback（name / code `52401`）、`sw.js` 的 `CACHE_NAME`、`index.html` 与 `layout/header.html` 顶栏、installer 注释示例；CHANGELOG 与 README 回填。
+
+### 已知限制（Known Limitations）
+
+- 与 v5.24.0 相同：Android 系统安装确认、Windows 静默覆盖安装、便携版目录替换、Linux 切换后启动均未做真机/真装验证。
+- 本版只跑更新相关对点测试与版本/发版文档守卫，未跑全量 pytest。
+
+### 回滚（Rollback）
+
+- 与 v5.24.0 相同：桌面重装上一版安装包或覆盖解压上一版便携包；Android 需先卸载再装旧版（versionCode 更低会被拒绝）；Linux 受管布局把符号链接指回上一版目录。
+
+---
+
 ## v5.24.0 - 2026-11-18
+
+> **本版 tag 已推送但未产出 Release**：CI 脚本缺陷（见 v5.24.1 的修复条目）导致发版中断，资产未生成。功能内容与 v5.24.1 一致，以 v5.24.1 为准。
 
 ### 新增
 
