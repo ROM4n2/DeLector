@@ -91,6 +91,22 @@ jobs:
             Compress-Archive -Path $_.FullName -DestinationPath "dist/$zipName" -Force
           }
 
+      - name: Diagnose Zipped Portable (dist → zip 段)
+        # 单独验「构建产物 → zip」：解回临时目录再跑同一道真启闸。
+        # 与后面的安装器作业无关，坏 zip 在这里就红，不把问题带到下游。
+        timeout-minutes: 10
+        run: |
+          $ErrorActionPreference = "Stop"
+          $zip = Get-ChildItem -Path dist -Filter "DeLector-*-Windows-x64-Portable.zip" | Select-Object -First 1
+          if (-not $zip) { throw "未产出便携版 zip" }
+          $out = "$env:RUNNER_TEMP\zipcheck"
+          if (Test-Path $out) { Remove-Item $out -Recurse -Force }
+          Expand-Archive -LiteralPath $zip.FullName -DestinationPath $out -Force
+          $dir = Get-ChildItem -Path $out -Directory -Filter "DeLector-*-Windows-x64-Portable" | Select-Object -First 1
+          if (-not $dir) { throw "解压后找不到便携版目录" }
+          & tools/diagnose_windows_payload.ps1 -Artifact $dir.FullName -Zip $zip.FullName
+          python tools/verify_windows_portable.py --artifact $dir.FullName --expect-commit ${{ github.sha }}
+
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v7
         with:
@@ -131,6 +147,17 @@ jobs:
           $dir = Get-ChildItem -Path portable -Directory -Filter "DeLector-*-Windows-x64-Portable" | Select-Object -First 1
           if (-not $dir) { throw "解压后找不到便携版目录" }
           $dir.FullName | Out-File -FilePath portable/dir.txt -Encoding utf8
+
+      - name: Diagnose Extracted Portable (zip → 解压 段)
+        # Expand-Archive 之后、ISCC 之前：单独验「zip → 解压目录」。
+        # 这段红了说明问题在压缩/解压，不必再怀疑 Inno 的整目录复制。
+        timeout-minutes: 10
+        run: |
+          $ErrorActionPreference = "Stop"
+          $dir = (Get-Content portable/dir.txt -Raw).Trim()
+          if (-not (Test-Path -LiteralPath $dir)) { throw "解压目录不存在：$dir" }
+          & tools/diagnose_windows_payload.ps1 -Artifact $dir
+          python tools/verify_windows_portable.py --artifact $dir --expect-commit ${{ github.sha }}
 
       - name: Install Inno Setup 7.1.1 (pinned)
         # 固定 7.1.1（Inno 7.x 当前版，与本机实测一致）：`choco install innosetup` 装的是
