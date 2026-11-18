@@ -114,3 +114,11 @@ Caps: filesystem-read, filesystem-write, shell-exec, git
 - **登记**：PROJECT_OVERVIEW 活项 8（索引 35.86 ms 不加索引归 Step 2/3 / 长文 DOM 无分段可接受 / Go companion 无队列仅 127.0.0.1）、CHANGELOG v5.24.2 已知限制两条、`tests/test_query_plans.py` 模块 docstring 补「未覆盖（已裁决）」。
 - **验证**：`tests/test_static_cache_fingerprint.py` 7 passed（含旧回落探针）、writer_mobile + query_plans 38 passed、`node --check static/sw.js` exit 0；未跑全量 pytest，存在未覆盖回归风险。
 - **坑**：sw.js 注释里写 `?v=` 字面量会撞 `test_writer_mobile.py` 的「缓存键不带版本查询串」守卫（它扫整个文件文本，不区分注释）——注释改成「带版本查询串的形态」。
+
+### 2026-11-18 23:40 | codebuddy-deepseek | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git
+TODO-CI-02 复现轮：只读取证采样落地 + 3 轮 `workflow_dispatch` 未复现 30 分钟卡死。
+- **历史证据边界**：run 41833602180 attempt 1 的 Windows Smoke 作业 started 12:56:36Z / cancelled 13:31:36Z，其余 13 个 job 全绿；该作业 logs API 返回 404（BlobNotFound），attempt 1 的 jobs 明细 `steps` 为空 ⇒ 无步骤日志、无进程/端口快照。既有描述只能确认「卡在 Verify 步」，不能确认脚本内相位。
+- **诊断**：`ci.yml` 的 windows-portable-smoke 增加两个只读步骤（Start/Dump diagnostics sampler）：每 15s 采样 `Get-Process`（Top15 + DeLector/python/pyinstaller）与 `Get-NetTCPConnection` 监听端口，写 `RUNNER_TEMP` 并在 `if: always()` 步骤打印尾部 + 当场快照；不改 Build/Verify 命令、退出码、`timeout-minutes`。commit `4b3ddf3`。
+- **复现轮**：用 `gh workflow run ci.yml --ref` 在 3 个同点分支并行触发（避免同 ref 的 concurrency 互相取消），run 44336451666 / 44336471442 / 44336489306 全部 success；Windows Smoke 作业 3m25s–3m36s，Verify 步 26–32s，未出现 >10min 或 124。采样器已捕获 Verify 期的 `DeLector` 进程（PID 1040/2720）与监听端口，取证管线可用。
+- **结论**：本次未能复现，现有证据不足以下结论；不推测根因。后续自然触发若再挂，Dump diagnostics 会留下进程/端口/停点。
