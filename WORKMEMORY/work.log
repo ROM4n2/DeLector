@@ -1,16 +1,3 @@
-### 2026-11-13 21:11 | tencent-hunyuan-hy__codebuddy | WORK_END
-Caps: filesystem-read, filesystem-write, shell-exec, git
-Work done: 修复首屏演示卡「本地引擎暂不可用」（#376 已合入 master），真机 clean install 验证通过；master 上探针 22/22、前端对点 18 passed。
-Remaining work: 覆盖安装后首次启动仍是旧壳（需刷新一次），若要彻底消除需在解包后用新 SW 强制导航——属另一件事，未做。
-- 不做：不发版（无显式授权）。
-
-### 2026-11-13 21:21 | tencent-hunyuan-hy__codebuddy | NOTE
-Caps: filesystem-read, filesystem-write, shell-exec, git
-按用户要求做两件簿记/文档类收敛（均直推 master，未动代码）：
-- **work.log 轮转**（`b7e91d0`）：97 事件 > 阈值 75（`HOT_RETENTION_EVENTS=50` × 1.5）。按 PROTOCOL §5/§5.1 只移动不改写：保留最新 50 条，最老 47 条（11-08 的 3 条 / 11-09 的 24 条 / 11-10 00:01~19:31 的 20 条）移入 `archive/work-2026-11-08|09|10.log`。移动前现读整文件、移动后按协议跑 union 对账（`grep '^### '` 前后 `diff` 无输出、末条头不变）。INDEX-topics 与 PROJECT_OVERVIEW 里「53 事件 < 阈值 75，未轮转」的过期口径已改。
-- **CHANGELOG 精简**（`13e3885`）：931 → 412 行。v5.23.0 及之后保留完整块（修复/内部/已知限制/回滚）；v5.22.x 及更早 15 个版本压成「版本/日期/里程碑」一行表格，里程碑**直接复用各版原有 `###` 小节标题**（不重写、不概括，避免压缩失真）。完整原文仍在 git 历史与各版 Release；附录「路线图/历史已完成清单」逐项保留（`- [x]` 79 项前后一致）。`tools/check_release_docs.py` 仍 exit 0。
-- Windows installer 只做**只读评估**（未动 CI / 未加脚本）：结论与代价见对话，待用户就「签名证书 / 是否保留便携 zip / WebView2 是否内嵌 bootstrapper」决策。
-
 ### 2026-11-13 21:36 | tencent-hunyuan-hy__codebuddy | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec, git
 用户指出：仓库是 **PUBLIC**，而仓里带着个人私有知识库的表述（`Obsidian Vault 08-Projects/DeLector/01-ADR/` 等），不该上传。已清理并合入（PR #377，`5102465` → 合并提交 `3468d14`）。
@@ -114,3 +101,24 @@ TODO-CI-02 卡死调查：本轮未复现，证据缺口与常驻采样器。
 - **采样器**：`ci.yml` 的 windows-portable-smoke 增加只读 Start/Dump diagnostics（每 15s `Get-Process` + `Get-NetTCPConnection`，`if: always()` 打印尾部与当场快照），不改命令、退出码、`timeout-minutes`；PR #406（merge `71eba6f`）已合并常驻 master。
 - **复现轮**：3 个同点分支 `workflow_dispatch` 并行触发（run 44336451666 / 44336471442 / 44336489306）全部 success；Windows Smoke 3m25s–3m36s，Verify 26–32s，未出现 124 或 10 分钟超时；采样器已捕获 Verify 期 DeLector 进程（PID 1040/2720）与监听端口。
 - **结论**：本次未能复现，现有证据不足以下结论；「runner/job worker 层停摆、置信度约 0.6」只是**未经证实的假设**，不得当结论引用。下次真实故障才有新证据。
+
+### 2026-11-21 16:26 | tencent-hunyuan-hy__codebuddy | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec, web-fetch
+本轮软著补充只做四份仓库内 Markdown/声明文档（Task 1~4）；Word 提交件与 skill 的 DOCX/TXT 生成暂缓，以后另开计划说明。Why: 用户 2026-11-21 裁决；本机 OfficeCLI 1.0.151 与 Playwright CLI 0.1.20 均不在 PATH，生成 DOCX 需用户确认全局安装并重启 Codex，四份仓库文档不依赖这些产物，切新会话即可开工。
+交接（新会话入口）：计划 docs/plans/2026-11-21-soft-copyright-readiness.md（4 个 Task 的 Produces/Scaffold/Step Breakdown + Skill Contract + Deferred Gap Register）；台账 .vault-exec-ledger.json 已重初始化为该计划、4 Task 全 PENDING、0/4（旧台账是 2026-11-13 repo-health 的 16/16，已覆盖）。用 <dfs-exec>/scripts/vault_exec_state.py --workdir <repo> resume 取下一个任务；Task 1 为 AFK，Task 2/3/4 为 HITL 需先拿用户答复（权利人主体、口径方案、页数细则）。
+新事实：项目级安装 software-copyright-materials v2.6 到 .agents/skills/（已 gitignore，CodeBuddy/Claude Code 为软链）；本地把 SKILL.md 484→142 行，32/32 测试通过、quick_validate exit 0；安装报 Gen High Risk（仅 Gen Agent，Socket 0 alerts / Snyk Low Risk），脚本未改。
+不做：不跑全量 pytest、不改 README 徽章数字、不生成 Word/DOCX、不启用 Playwright 自动截图、不改写 work.log 历史事件正文。
+
+### 2026-11-21 16:49 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, web-fetch
+软著就绪度 dfs-exec 四 Task 全部交付，4 分支独立提交（均走 PR，未直推生产源码）：
+- Task 1（docs/user-guide，merge 前 eb603ca）：新增 docs/USER_GUIDE.md 六节说明书 + tests/test_writer_mobile.py 的 test_user_guide_images_exist（先 RED 后 GREEN）。踩坑：docs 布局机械闸（tools/check_docs_layout.py）禁止 docs/ 顶层新增未登记 *.md，首次漏跑该闸 ⇒ 回 Task 1 分支把 USER_GUIDE 登记进 docs/README.md §分层 + 判定器 TOP_LEVEL_FILES 同步，amend 修复；覆盖 check_docs_layout.py 的 3 个测试模块 30 passed 全绿。
+- Task 2（docs/copyright-holder，a18c2c4）：HITL 确认著作权人为自然人席皓宇；README 许可证段 + LICENSE:189 同步署名，逐字一致；writer_mobile 32 passed。
+- Task 3（docs/features-current，91ee04a）：HITL 裁决「重写全文按 v5.24.2 更新」而非保守两行；FEATURES 头部冻结自损措辞改为当前口径、补 v5.23.0~v5.24.2 五条能力里程碑、versionCode 51700→标注时点+当前 52402；同步 USER_GUIDE 版本引用、ADR INDEX 加「仓内副本可作设计演进说明」。数字纪律：实测类（体积/启动耗时）保留原时点标注不编造当前值。
+- Task 4（docs/source-index，dcc6ef8）：通用前后各 30 页源码鉴别清单，30 路径 + 16 ADR 编号逐个存在性核验通过；排除 android 7797 py / 7379 pyc 第三方运行时。
+验证：task1 修复后 docs 布局闸 30 passed + release docs exit 0 + writer_mobile/ADR 守卫 60 passed；全程只对点测试，未跑全量 pytest（守 2026-11-13 裁决）。未改 README 徽章数字、未生成 Word/DOCX、未启 Playwright 自动截图。
+台账 .vault-exec-ledger.json 4/4 COMPLETED。Deviation Table 见计划文档。下一步：4 个分支逐一开 PR 合入 master（features-current 依赖 user-guide，须 user-guide 先合），不 push 长轮询。
+
+### 2026-11-21 17:20 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+隐私占位化留痕（不改事件事实）：本执行链前置 DECISION 事件（16:26）的 `--workdir` 参数含本机绝对路径（工作区根），触发仓库卫生闸 ABS_PATH 棘轮（58→59）⇒ master 合入闸红。按 PROTOCOL §1.6「禁止敏感信息」，把该参数路径占位化为 `<repo>`——只改路径写法，事件的所有事实与语义不变（本 NOTE 亦不重录该字面量，否则计数又被顶回）。基线 data/repo_hygiene.json 未动，ABS_PATH|WORKMEMORY 回到 58/58；check_repo_hygiene 的 --all 与 --ratchet-guard 均 exit 0。Why: 棘轮闸禁止抬基线来容纳新路径，而隐私要求本机路径不得入库。How to apply: 此类「事件里含本机绝对路径」一律占位化并留 NOTE，不改基线、不改事件结论，且 NOTE 自身不得复述该字面量。
