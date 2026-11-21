@@ -200,4 +200,6 @@
 
 | plan text | what was actually built | why |
 |---|---|---|
-| — | — | —（执行后填写；无偏差则写"无偏差"） |
+| Task 3「改 `FEATURES.md:7` 与 `docs/adr/INDEX.md:3` 两行」（Decisions So Far 的保守方案） | 重写 FEATURES 头部口径、补 v5.23.0~v5.24.2 五条能力里程碑、versionCode 51700 改为带时点表述并补当前 52402；同步 USER_GUIDE 版本引用 | HITL 复核时用户两次明确选择「按 v5.24.2 重写全文」而非保守两行，故按裁决执行；实测类数字保留原时点标注，不编造当前值 |
+| Task 1 Files 仅列 `docs/USER_GUIDE.md` + `tests/test_writer_mobile.py` | 另改 `docs/README.md` §分层与 `tools/check_docs_layout.py` 的 `TOP_LEVEL_FILES`，把 USER_GUIDE 登记为顶层常青文档 | docs 布局机械闸拒绝顶层未登记的 `*.md`；这是让 Task 1 产物过闸的必要登记（README 是规则源、判定器同步），非放宽判据；amend 进 Task 1 提交 |
+| Task 3 Branch「每个 Task 各自从 master 切分支」 | `docs/features-current` 从 `docs/user-guide` 切（携带 USER_GUIDE），rebase 纳入 Task 1 的门禁修复 | Task 3 Produces 要求同步修正 USER_GUIDE 的数字引用，故须以 Task 1 分支为基线；合并顺序上 user-guide 须先合 |
