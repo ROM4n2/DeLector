@@ -106,3 +106,7 @@ Caps: filesystem-read, filesystem-write, shell-exec, web-fetch
 ### 2026-11-21 19:58 | tencent-hunyuan-hy__codebuddy | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 WORKMEMORY 轮转：轮转前 18 事件 / 24758 bytes 超 24KB(24576) 上下文预算，触发协议 §5 体积条件。移出最老 3 事件（均 2026-11-13：21:36 WORK_END、22:17 NOTE、22:17 WORK_END）字节级追加进 archive/work-2026-11-13.log，保留最新 15 条 / 20902 bytes。守恒对账（轮转前后 union 事件集合 diff）零输出、末条头不变；归档分片 11-13 由 34→37 条。INDEX-topics 第 41 行指针由「work.log HOT（保留最新 50 条）」修正为「archive/work-2026-11-13.log（2026-11-21 全部 WARM 化）」——该段已无 HOT 事件。Why: 体积超预算必须轮转，且移动不得丢/改事件。How to apply: 轮转后 MUST 跑卫生双闸（本轮 --all 与 --ratchet-guard 均 exit 0，ratchet 桶未抬基线）。
+
+### 2026-11-21 20:05 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+上游 dfs-bootstrap 升 0.5.0（真身 21:09，改 SKILL.md / anchors.py / templates/workmemory/PROTOCOL.md；gate 版本仍 4、skill-dev 无新提交）。用户裁决：同步仓库注入物到通用化文本，保留 DeLector 4 类特有裁决。落地：AGENTS.md 的 WORKMEMORY 锚点按 anchors.py 的 workmemory_anchor_text() 正文逐字同步（读序尾部 50 行→非只读/状态变更读 ≤15 条 + boundary 行 + search_vault/dfs-save 沉淀，比对 BODY_MATCH=True）；PROTOCOL.md 以仓库版为底吸收通用化（≤15 条读序、24KB 轮转触发、WARM 增 INDEX-topics.md/notes/、事件表新增「本次被纠正」= 恢复 ADR-0004 §4.1-7 本项目旧约定、PITFALL vault 蒸馏），4 类裁决（隐私占位化 / 三类直推 / 轮转双闸 / 禁抬基线）逐条保留。刻意不吸收：上游 §6 的 {{VAULT_ROOT}}→$WIKI_PATH 与 vault://（公开仓隐私红线），保留「本机知识库，不随仓库分发」口径，仅吸收蒸馏登记节位置修正 INDEX.md→INDEX-topics.md（与仓库现状一致）。核验：4 类与通用化逐条命中、隐私字面量 0 命中、卫生 --all 与 --ratchet-guard 均 exit 0。Why: 通用版模板删掉 DeLector ratchet 机制依赖的裁决，照搬会回退；锚点用工具名而非外部路径。How to apply: 上游模板同步一律以「吸收通用化 + 保留项目裁决 + 过滤隐私字面量」合并，不整文件覆盖。
