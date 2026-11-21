@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """CI 工作流核心门禁：触发、go cache、dependabot、Ruff / Mypy、静态检查去重与容器入口。"""
 
+import ast
 import re
 
 from _ci_hardening_support import (
@@ -374,4 +375,39 @@ def test_dockerfile_uvicorn_entrypoint_points_to_real_module():
     src = module_file.read_text(encoding="utf-8")
     assert re.search(rf"^{re.escape(attr)}\s*=", src, re.MULTILINE), (
         f"{module_file} 未在模块级定义 `{attr}`：Dockerfile CMD 期望 {module}:{attr} 可被 uvicorn 加载。"
+    )
+
+
+# ── 棘轮状态函数声明守卫（HITL 裁决：work.log 冲突裁决顺序）────────────────────
+# 背景：work.log 轮转会把含本机绝对路径的历史事件移出热层，卫生闸计数随之漂移；
+# 正解是占位化 + NOTE（不改基线、不改事件结论），而不是重测基线把债合法化。
+# 本守卫钉住 ratchet_guard 文档里的口径声明，防止"重新测量基线"重新变成默认修法。
+HYGIENE_SCRIPT = REPO_ROOT / "scripts" / "check_repo_hygiene.py"
+RATCHET_STATE_FUNCTION_MARKER = "counter is a state function"
+RATCHET_NO_REMEASURE_MARKER = "never re-measure baseline to accommodate new paths"
+
+
+def _ratchet_guard_docstring() -> str:
+    """从 AST 取 ratchet_guard 的 docstring；不 import 脚本，避免执行其 main 副作用。"""
+    tree = ast.parse(_read_guard_file(HYGIENE_SCRIPT))
+    guards = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "ratchet_guard"
+    ]
+    assert guards, f"{HYGIENE_SCRIPT} 找不到 ratchet_guard 函数定义：门禁被删或改名"
+    return ast.get_docstring(guards[0]) or ""
+
+
+def test_ratchet_guard_docstring_declares_counter_is_state_function() -> None:
+    """ratchet_guard 文档 MUST 声明计数是状态函数，且不得为容纳新路径重测基线。"""
+    doc = _ratchet_guard_docstring()
+
+    assert RATCHET_STATE_FUNCTION_MARKER in doc, (
+        f"{HYGIENE_SCRIPT} 的 ratchet_guard docstring 缺少 {RATCHET_STATE_FUNCTION_MARKER!r}："
+        "轮转导致的历史路径计数漂移是状态函数的必然结果，抬基线修法会把棘轮变成单向松弛。"
+    )
+    assert RATCHET_NO_REMEASURE_MARKER in doc, (
+        f"{HYGIENE_SCRIPT} 的 ratchet_guard docstring 缺少 {RATCHET_NO_REMEASURE_MARKER!r}："
+        "没有这句禁令，下次有人会用 --emit-baseline 重测来容纳新路径。"
     )

@@ -527,6 +527,11 @@ def ratchet_guard(root: Path) -> int:
 
     Unlike the structure gate's fixed keys, buckets are dynamic: a newly added bucket with a
     positive allowance is itself a tolerance increase (from implicit zero) and must be caught.
+
+    The counter is a state function of (committed baseline, current tree findings), not a score to
+    be re-measured: never re-measure baseline to accommodate new paths. When work.log rotation moves
+    historical host paths out of the hot layer the count drifts; placeholder those paths in the
+    event and append a NOTE instead of raising the allowance.
     """
     try:
         proc = subprocess.run(
@@ -627,7 +632,8 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--all", action="store_true", help="Inspect all tracked files (default, for CI)")
     ap.add_argument("--root", type=Path, default=ROOT, help="Repository root")
     ap.add_argument("--emit-baseline", action="store_true",
-                    help="Measure current per-bucket counts into the config (self-measured)")
+                    help="Measure current per-bucket counts into the config (self-measured; "
+                         "counter is a state function — never re-measure baseline to accommodate new paths)")
     ap.add_argument("--ratchet-guard", action="store_true",
                     help="CI mode: fail if any bucket allowance rose above the value at HEAD")
     ap.add_argument("--json", action="store_true",
