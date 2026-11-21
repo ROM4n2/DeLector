@@ -226,4 +226,6 @@ DeLector/
 
 ## 许可证
 
+著作权所有 © 2026 席皓宇。
+
 本项目采用 [Apache License 2.0](LICENSE) 开源许可证。欢迎提 PR 或 Issue 参与共建。
