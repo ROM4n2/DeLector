@@ -97,6 +97,23 @@ mkdir -p data && cp delector.db data/delector.db   # progress.db 同理
 `origin` 已指向 `ssh://git@ssh.github.com:443/ROM4n2/DeLector.git`（22 端口时通时不通，443 稳定）。
 `gh` CLI 走自己的 HTTPS API 认证，不受影响。
 
+### 推送认证 fallback（SSH 不可用时）
+
+**适用**：本机 `origin` 走 SSH（见上），但 ssh-agent 里没有可用密钥、ed25519 私钥的 passphrase
+拿不到，或 push 报 `Permission denied (publickey)`。`gh` CLI 自带 HTTPS API 认证不受影响，用它取
+token 做**一次性 HTTPS URL push** 即可（`<owner>` / `<repo>` / `<branch>` 是占位符，按实际替换）：
+
+```bash
+TOKEN=$(gh auth token)
+git push "https://x-access-token:${TOKEN}@github.com/<owner>/<repo>.git" <branch>:refs/heads/<branch>
+```
+
+**MUST 边界**：
+- **只做这一次性 URL push**：不改 remote、**不改 config / 不写配置**；token 仅在命令中展开，
+  **不持久化**（不留 credential、不写任何本地配置文件）。
+- **不得用 `-c user.*` 给自己签 commit** 来绕过提交身份检查；提交身份沿用仓库既有配置。
+- pre-push 钩子**照常运行**（**指纹闸 / master 范围闸**），这条 fallback **不绕过任何推送前守卫**。
+
 ---
 
 ## 内容分发：桌面 → 手机（WiFi 拉取）
