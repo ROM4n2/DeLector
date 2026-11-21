@@ -116,3 +116,7 @@ Caps: filesystem-read, filesystem-write, shell-exec
 ### 2026-11-21 17:35 | tencent-hunyuan-hy__codebuddy | WORK_END
 Caps: filesystem-read, filesystem-write, shell-exec
 软著就绪度 5 个 PR 全部合并入 master（#407 基线 → #408 说明书 / #409 署名 / #410 源码清单 → #411 FEATURES 口径）。合并中发现 #411 的 head 基于 rebase 前的 user-guide tip，直接合会回退其他 Task 改动；用 cherry-pick 把 Task 3 净改动（3 文件 / 10+4-）重放到最新 master 生成 88f57e2，强推后 PR diff 收敛为 3 文件才合并。master 终点 db3d818。交付物核验：USER_GUIDE.md 7293B、source-index.md 6948B、README/LICENSE 署名「席皓宇」逐字一致。未等待 CI 长轮询（守 2026-11-13 裁决）；本地物理证据已覆盖改动文件全部门禁。
+
+### 2026-11-21 20:15 | tencent-hunyuan-hy__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+基础设施加固计划执行：4 任务完成（上游 A/B 串行 + 仓库 3 任务并行 worktree）。仓库：Task1 28ba5df 棘轮协议裁决、Task2 73b313e 推送 fallback 文档、Task3 55980ed PR 防回退闸（均 TDD 变异自证通过）；skill 侧 bootstrap 初始化装本机 gate（.git 私有态、不入库、幂等）+ 指纹闸禁列裸目录名测试，全量 199 passed/1 skipped，SKILL.md 保持四层披露（仅摘要+指针，细节进 reference）。踩坑：①反引号经 shell -c 被命令替换吞掉，reference 段落写成残缺，改用编辑工具修复；②计划误判仓库 gate 无 marker（实测有 v4），登记 Deviation；③计划 Task A 三次改方向（doctor→pre-push→bootstrap）。三分支已本地提交，push 因 GitHub 全通道网络故障（SSH/HTTPS/REST 均 EOF）未成，待网络恢复后推送开 PR。台账 3/3 完成。
