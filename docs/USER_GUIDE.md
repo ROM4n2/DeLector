@@ -1,7 +1,7 @@
 # 用户操作指南
 
 > 本指南面向直接使用 DeLector 的学习者，按真实界面入口讲清"从哪进、点什么、得到什么"。
-> 功能口径来自 [FEATURES.md](FEATURES.md)（v5.22.1 冻结快照），逐版变化以 [CHANGELOG.md](../CHANGELOG.md) 为准。
+> 功能口径来自 [FEATURES.md](FEATURES.md)（能力口径对应 v5.24.2），逐版变化以 [CHANGELOG.md](../CHANGELOG.md) 为准。
 > 本文所引数字均逐字取自 FEATURES.md，并在括号内标注出处，不另造统计值。
 
 ## 一分钟认识 DeLector
