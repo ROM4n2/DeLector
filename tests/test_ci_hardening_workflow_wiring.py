@@ -698,3 +698,28 @@ def test_find_deleted_paths_returns_only_deleted_path(tmp_path: Path) -> None:
         f"find_deleted_paths('HEAD~1', 'HEAD') 应只返回被删文件 "
         f"['will_delete.txt']，got {deleted!r}"
     )
+
+
+def test_find_deleted_paths_raises_ref_unavailable_on_bad_ref(tmp_path: Path) -> None:
+    """base/head 对象不存在（shallow clone 场景）必须抛 RefUnavailable，不裸崩。"""
+    module = _load_no_deletion_module()
+    with pytest.raises(module.RefUnavailable):
+        module.find_deleted_paths("deadbeef0000", "HEAD", tmp_path)
+
+
+def test_main_warns_through_on_unavailable_refs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """环境不可用 ⇒ exit 2 + 警告，不抛 traceback（与项目 warn-through 惯例一致）。"""
+    module = _load_no_deletion_module()
+    monkeypatch.chdir(tmp_path)
+    assert module.main(["--base", "deadbeef0000", "--head", "HEAD"]) == 2
+
+
+def test_static_invariants_checkout_fetches_full_depth_for_pr_diff() -> None:
+    """PR net-diff 闸需要 base.sha 对象；static-invariants 的 checkout 必须 fetch-depth: 0。
+
+    PR #415 实测：shallow clone 下 git diff base..head exit 128，整个静态闸崩。
+    """
+    block = _ci_job_block("static-invariants")
+    assert "fetch-depth: 0" in block, (
+        "static-invariants job 的 checkout 必须 fetch-depth: 0，否则 PR 防回退闸取不到 base 对象"
+    )
