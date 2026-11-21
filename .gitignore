@@ -114,8 +114,8 @@ config.yml
 config.local.yaml
 
 # Skills CLI 的项目级安装产物（第三方 skill 本体 + 本地锁定状态，均为本机工具态，不入库）。
-# 安装本体在 ./.agents/skills/；.claude/skills/ 与 .codebuddy/skills/ 下的符号链接
-# 已分别被上面的 .claude/ 与 .codebuddy/ 规则覆盖。
+# 安装本体在 ./.agents/skills/；CodeBuddy 与 Claude 的技能目录符号链接已分别被上面的
+# 对应工具目录规则覆盖，无需重复列出。
 .agents/
 skills-lock.json
 
