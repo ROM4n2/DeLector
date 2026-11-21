@@ -112,3 +112,13 @@ WORKMEMORY/session-snapshot.md
 config.yaml
 config.yml
 config.local.yaml
+
+# Skills CLI 的项目级安装产物（第三方 skill 本体 + 本地锁定状态，均为本机工具态，不入库）。
+# 安装本体在 ./.agents/skills/；.claude/skills/ 与 .codebuddy/skills/ 下的符号链接
+# 已分别被上面的 .claude/ 与 .codebuddy/ 规则覆盖。
+.agents/
+skills-lock.json
+
+# 软著申报资料：含权利人身份/联系方式与生成的 Word/TXT 成品，是提交材料而非源码，
+# 公开仓不入库（沿用 PR #377 的隐私口径）。
+软件著作权申请资料/

@@ -114,3 +114,10 @@ TODO-CI-02 卡死调查：本轮未复现，证据缺口与常驻采样器。
 - **采样器**：`ci.yml` 的 windows-portable-smoke 增加只读 Start/Dump diagnostics（每 15s `Get-Process` + `Get-NetTCPConnection`，`if: always()` 打印尾部与当场快照），不改命令、退出码、`timeout-minutes`；PR #406（merge `71eba6f`）已合并常驻 master。
 - **复现轮**：3 个同点分支 `workflow_dispatch` 并行触发（run 44336451666 / 44336471442 / 44336489306）全部 success；Windows Smoke 3m25s–3m36s，Verify 26–32s，未出现 124 或 10 分钟超时；采样器已捕获 Verify 期 DeLector 进程（PID 1040/2720）与监听端口。
 - **结论**：本次未能复现，现有证据不足以下结论；「runner/job worker 层停摆、置信度约 0.6」只是**未经证实的假设**，不得当结论引用。下次真实故障才有新证据。
+
+### 2026-11-21 16:26 | tencent-hunyuan-hy__codebuddy | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec, web-fetch
+本轮软著补充只做四份仓库内 Markdown/声明文档（Task 1~4）；Word 提交件与 skill 的 DOCX/TXT 生成暂缓，以后另开计划说明。Why: 用户 2026-11-21 裁决；本机 OfficeCLI 1.0.151 与 Playwright CLI 0.1.20 均不在 PATH，生成 DOCX 需用户确认全局安装并重启 Codex，四份仓库文档不依赖这些产物，切新会话即可开工。
+交接（新会话入口）：计划 docs/plans/2026-11-21-soft-copyright-readiness.md（4 个 Task 的 Produces/Scaffold/Step Breakdown + Skill Contract + Deferred Gap Register）；台账 .vault-exec-ledger.json 已重初始化为该计划、4 Task 全 PENDING、0/4（旧台账是 2026-11-13 repo-health 的 16/16，已覆盖）。用 <dfs-exec>/scripts/vault_exec_state.py --workdir d:/Code/DeLector resume 取下一个任务；Task 1 为 AFK，Task 2/3/4 为 HITL 需先拿用户答复（权利人主体、口径方案、页数细则）。
+新事实：项目级安装 software-copyright-materials v2.6 到 .agents/skills/（已 gitignore，CodeBuddy/Claude Code 为软链）；本地把 SKILL.md 484→142 行，32/32 测试通过、quick_validate exit 0；安装报 Gen High Risk（仅 Gen Agent，Socket 0 alerts / Snyk Low Risk），脚本未改。
+不做：不跑全量 pytest、不改 README 徽章数字、不生成 Word/DOCX、不启用 Playwright 自动截图、不改写 work.log 历史事件正文。
