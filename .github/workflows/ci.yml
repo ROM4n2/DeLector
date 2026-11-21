@@ -774,3 +774,10 @@ jobs:
 
       - name: Hygiene ratchet guard (no bucket increase)
         run: python3 scripts/check_repo_hygiene.py --ratchet-guard
+
+      # PR 净 diff 无删除闸（Task 3）：head 删掉 base 已有的任何文件即红，防 stale-based
+      # 分支抹掉别人刚加的文件（PR #411 险情）。只在 PR 事件跑：push/dispatch 没有
+      # pull_request.base/head.sha 上下文。接线由 tests/test_ci_hardening_workflow_wiring.py 钉死。
+      - name: PR net-diff no-deletion guard
+        if: github.event_name == 'pull_request'
+        run: python3 scripts/check_pr_no_regression.py --base ${{ github.event.pull_request.base.sha }} --head ${{ github.event.pull_request.head.sha }}

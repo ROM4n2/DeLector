@@ -4,6 +4,7 @@
 import json
 import re
 import subprocess
+from pathlib import Path
 
 import pytest
 from _ci_hardening_support import (
@@ -624,3 +625,76 @@ def test_hygiene_baseline_is_scope_granular() -> None:
         assert not any(key.startswith(cat + "|") for key in ratchet), (
             f"正确性类别 {cat} 出现容忍桶：合并标记/坏符号链接/语法错误永远不该被 ratchet 掉"
         )
+
+
+# ── PR 净 diff 无删除闸的 CI 接线守卫（Task 3：防 stale-based 分支抹掉他人文件）──────
+# 背景：PR #411 险些让基于过期 base 的分支把 base 已有文件（别的任务刚加的）删掉。
+# 机械闸只做一件事：base..head 的 diff 里任何 status 以 'D' 开头的路径都拦下，不做语义猜测。
+# 接线由本节钉死：删掉 CI step 或改掉 run 行的完整调用形式，测试即红。
+
+NO_DELETION_SCRIPT = "scripts/check_pr_no_regression.py"
+NO_DELETION_STEP_NAME = "PR net-diff no-deletion guard"
+# 锚定完整调用形式（不是"出现过脚本名"就算数）：base/head 必须来自 PR 事件上下文。
+NO_DELETION_RUN = (
+    "python3 scripts/check_pr_no_regression.py "
+    "--base ${{ github.event.pull_request.base.sha }} "
+    "--head ${{ github.event.pull_request.head.sha }}"
+)
+
+
+def test_ci_wires_pr_no_deletion_guard_with_full_call() -> None:
+    """static-invariants 必须有 PR 无删除闸 step，且其 run 是带 PR base/head 的完整调用。"""
+    block = _job_block(CI_WORKFLOW, "static-invariants")
+    step = _step_using(block, NO_DELETION_STEP_NAME)
+    assert NO_DELETION_RUN in step, (
+        f"{CI_WORKFLOW} 的 {NO_DELETION_STEP_NAME!r} 步 run 行不是完整调用形式：\n"
+        f"期望：{NO_DELETION_RUN}\n"
+        f"实际 step：\n{step}"
+    )
+
+
+def _load_no_deletion_module():
+    """按文件路径加载被测脚本（与 _load_sync_module 同构，避免污染 sys.modules）。"""
+    import importlib.util
+
+    path = REPO_ROOT / NO_DELETION_SCRIPT
+    spec = importlib.util.spec_from_file_location("check_pr_no_regression", path)
+    assert spec is not None and spec.loader is not None, f"无法加载 {path}"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_find_deleted_paths_returns_only_deleted_path(tmp_path: Path) -> None:
+    """临时 git 仓库：base 提交一个文件，head 删掉它并顺手改/加别的文件。
+
+    只返回被删路径 —— head 里的 M/A 必须被 'D' 过滤掉。这样"摘掉 D 过滤"的变异会
+    把 M/A 路径一起返回，本测试即红（否则只有一个 D 时摘掉过滤也照样绿）。
+    """
+    module = _load_no_deletion_module()
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    def _git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=str(repo), capture_output=True, check=True)
+
+    _git("init", "-q")
+    _git("config", "user.email", "t@t.t")
+    _git("config", "user.name", "t")
+    (repo / "will_delete.txt").write_text("base\n", encoding="utf-8")
+    (repo / "kept.txt").write_text("v1\n", encoding="utf-8")
+    _git("add", ".")
+    _git("commit", "-qm", "base")
+
+    (repo / "will_delete.txt").unlink()
+    (repo / "kept.txt").write_text("v2\n", encoding="utf-8")
+    (repo / "added.txt").write_text("new\n", encoding="utf-8")
+    _git("add", "-A")
+    _git("commit", "-qm", "head deletes one, modifies one, adds one")
+
+    deleted = module.find_deleted_paths("HEAD~1", "HEAD", repo)
+    assert deleted == ["will_delete.txt"], (
+        f"find_deleted_paths('HEAD~1', 'HEAD') 应只返回被删文件 "
+        f"['will_delete.txt']，got {deleted!r}"
+    )
