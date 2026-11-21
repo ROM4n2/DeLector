@@ -3,17 +3,16 @@
 > protocol-version: 1
 
 > 本文件是协议本体，所有能读写文件的 AI agent（Claude Code / Codex / OpenCode / Antigravity / Gemini CLI / CodeBuddy / …）一律遵守。
-> 协议铁律的规范层属于**本机私有知识库**，不随仓库分发；仓库内只保留本文的工程约定。
+> 协议铁律规范层：优先用 `search_vault` MCP 检索 `CROSS-AGENT-MEMORY`（工具自解析知识库根，不依赖任何环境变量路径）；无外部知识库时以本文件为自包含真源。
 
 ---
 
 ## 1. 铁律（MUST）
 
-1. **读序**：每次会话开始处理用户请求前，按序读取：
-   `INDEX.md` → `PROJECT_OVERVIEW.md` → `work.log` 最后 50 行。
+1. **读序**：非只读或涉及状态变更时，按序读取：
+   `INDEX.md` → `PROJECT_OVERVIEW.md` → `work.log` 最新 ≤15 条事件（纯只读问答/审计可按需跳过）。
 2. **发现未闭合 WORK_START 必须先询问用户**：「上一任务 '<X>' 未收尾，继续还是重开？」——禁止自行默默继续或忽略。
 3. **追加制**：`work.log` 只允许追加（append-only），禁止读改写历史事件；唯一例外是 §5 轮转。
-   - **缺时刻的严格解析例外**：仅当旧事件头缺 `HH:MM`，导致严格解析器把相邻事件合并成一条时，可由用户明确批准后，按相邻事件或对应 git 提交时间补齐时刻。此类补时刻不算改写内容，事件正文必须一字不动，并记录推定依据；不得作为随意修改事件头或正文的先例。
    - **历史事件的本机绝对路径冲突裁决（2026-11-21 用户裁决）**：历史 `work.log` 事件若含机器本地绝对路径，一律占位化为 `<repo>` / `<user>`，并另起一条 `NOTE` 留痕；**NOTE 自身不得复述该字面量**（否则一行新的字面量又把卫生闸计数顶回基线之上）。占位只改路径写法：不改基线、不改事件事实与结论。Why: 隐私要求本机路径不得入库，棘轮闸又禁止抬基线容纳新路径；两者冲突时以「占位 + 留痕」同时满足，而不是二选一或改写历史结论。
 4. **事件 ≤ 4KB**：单事件超限时正文写入独立文件（`NOTES-<slug>.md`）并在事件体里只留一行链接。
 5. **UTF-8 写入**：所有 WORKMEMORY 文件一律 UTF-8；Windows 下禁止依赖控制台默认编码（GBK 陷阱）。
@@ -31,7 +30,6 @@
 
 ```markdown
 ### YYYY-MM-DD HH:MM | <agent-id> | <EVENT_TYPE>
-
 <body>
 ```
 
@@ -39,15 +37,15 @@
 - 事件头下一行 MUST 附能力声明一行：`Caps: filesystem-read, filesystem-write, shell-exec, web-fetch …`（vendor-neutral 通用词，不写各家工具名）。
 - `EVENT_TYPE` 最小集：
 
-| 类型               | 用途                                                                                                                                                               |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `WORK_START`       | 开始一段有明确目标的任务；收尾时必须有配对 `WORK_END`。推荐附「不做范围」一行（本任务明确排除的功能/重构/顺手修改），对抗 scope creep                              |
-| `WORK_END`         | 任务收尾：做了什么、验证方式（测试命令+结果）、产出物路径。推荐做「回写检查」：稳定结论已回写（vault/模块文档/INDEX）？临时产物（日志/真实数据/凭据/截图）未入库？ |
-| `DECISION`         | 架构/实现决策，MUST 含 why 一句话                                                                                                                                  |
-| `PITFALL`          | 踩坑：现象 + 根因 + 解法各一句；成熟后走 知识蒸馏                                                                                                                  |
-| `HANDOFF`          | 交接包已写：指向 `handoff_<topic>.md`                                                                                                                              |
-| `HANDOFF_RECEIVED` | 接收方确认收到并响应                                                                                                                                               |
-| `NOTE`             | 其他一切（并行声明、补充、勘误）                                                                                                                                   |
+| 类型 | 用途 |
+| --- | --- |
+| `WORK_START` | 开始一段有明确目标的任务；收尾时必须有配对 `WORK_END`。推荐附「不做范围」一行（本任务明确排除的功能/重构/顺手修改），对抗 scope creep |
+| `WORK_END` | 任务收尾：做了什么、验证方式（测试命令+结果）、产出物路径。推荐做「回写检查」：稳定结论已回写（vault/模块文档/INDEX）？临时产物（日志/真实数据/凭据/截图）未入库？可选附一行「本次被纠正: <1 行>」（ADR-0004 §4.1-7 措辞，零额外步骤）。 |
+| `DECISION` | 架构/实现决策，MUST 含 why 一句话 |
+| `PITFALL` | 踩坑：现象 + 根因 + 解法各一句；成熟后走 vault 蒸馏 |
+| `HANDOFF` | 交接包已写：指向 `handoff_<topic>.md` |
+| `HANDOFF_RECEIVED` | 接收方确认收到并响应 |
+| `NOTE` | 其他一切（并行声明、补充、勘误） |
 
 ### 标准追加命令（Windows Git Bash 模板）
 
@@ -66,13 +64,13 @@ EOF
 
 新会话的固定动作：
 
-1. 读 `INDEX.md`（**HOT 索引**：配置 + 文件清单 + Active/已归档 handoffs）——MUST 保持极小。
-   主题索引与蒸馏登记已下沉到 `INDEX-topics.md`（WARM 层，按需加载）。
+1. 读 `INDEX.md`（**HOT 索引**：配置 + 文件清单 + Active/已归档 handoffs）。**本文件 MUST 保持极小**——
+   主题索引与蒸馏登记已下沉到 `INDEX-topics.md`（WARM 层，按需加载），别把它塞回热层。
 2. 读 `PROJECT_OVERVIEW.md`（项目 primer，60 秒建立全局认知）。
-3. `tail -n 50 WORKMEMORY/work.log`（最近事件流）；**顺手 `grep -c '^### ' WORKMEMORY/work.log`，若计数 > `HOT_RETENTION_EVENTS × 1.5` 就先按 §5 轮转再做别的**（把轮转变成读序的第一步，别等有人想起来才做）。
-4. 查旧主题：`grep -i "<关键词>" WORKMEMORY/INDEX-topics.md` → 按索引只加载命中的 archive 文件，禁止通读全部历史。（2026-10-17 起主题索引不在 `INDEX.md`，避免热层膨胀。）
+3. 读取 `WORKMEMORY/work.log` 最新 ≤15 条事件（如 `tail -n 50 WORKMEMORY/work.log`）；**顺手 `grep -c '^### ' WORKMEMORY/work.log`，若计数 > `HOT_RETENTION_EVENTS × 1.5` 或体积超 24KB 就先按 §5 轮转再做别的**（把轮转变成读序的第一步，别等有人想起来才做）。
+4. 查旧主题：`grep -i "<关键词>" WORKMEMORY/INDEX-topics.md` → 按索引只加载命中的 archive 文件，禁止通读全部历史。（主题索引**不在** `INDEX.md`，热层只留清单与 handoffs。）
 
-## 4. 交接包（handoff\_\*.md）
+## 4. 交接包（handoff_*.md）
 
 ```markdown
 ---
@@ -83,15 +81,10 @@ role: IMPLEMENT | REVIEW | INSPECT | TEST | VERIFY | FIX（可组合）
 required_capability: <如 image-input / android-build；无则省略>
 status: open
 ---
-
 # Handoff: <主题>
-
 ## 任务上下文
-
 ## 已完成（含证据：测试命令与结果）
-
 ## 未完成 / 下一步
-
 ## 风险与坑
 ```
 
@@ -103,7 +96,9 @@ status: open
 - **HOT**：`work.log`，保留最近 `HOT_RETENTION_EVENTS` 条（配置行在 INDEX.md，默认 15——按「单事件 ≤4KB、热层总量 ≤ 卫生门禁的 24KB 上下文预算」反推，2026-11-17 由 50 下调）。
 - **轮转触发**（满足任一即触发）：① 事件数超 `HOT_RETENTION_EVENTS × 1.5`；② **`work.log` 体积超 24KB 上下文预算**（卫生门禁 `BUDGET` 口径）。触发后由**下一个开始工作的 agent** 顺手执行：最老事件移入 `archive/work-YYYY-MM-DD.log`（按事件日期分片），并更新 INDEX 主题索引。
   - ② 的存在理由：单事件 ≤4KB 时，光看条数会在撞到 15×1.5=23 条之前就先撞破 24KB（15 条均值就有 ~24KB），条数不是体积的可靠代理。
-- **WARM**：`archive/`，只经 INDEX 索引按需加载。
+- **WARM**：`archive/`（按日分片）+ **`INDEX-topics.md`**（主题索引 / 蒸馏登记），只经索引按需加载。
+- **超限事件正文**：放 `notes/NOTES-<日期>-<时间>-<slug>.md`（事件正文 >4KB 时外置；事件里按文件名引用，
+  若该文件被移入子目录，按名检索仍可命中——事件正文按追加制不回改）。
 - **COLD**：`cold/digest-YYYY-MM.md`，仅在用户显式要求（"把上月总结成 digest"）时由 agent 蒸馏生成，并同步刷新 PROJECT_OVERVIEW.md。
 
 ### 5.1 并发守卫（轮转 = 移动，不是改写）
@@ -129,8 +124,8 @@ status: open
 
 ## 6. 与 vault 的蒸馏联动
 
-- WORKMEMORY 只存**状态与轨迹**；vault（（本机知识库，不随仓库分发）
-- 会话收尾（`/dfs-save` 或 agent 主动判定）时：work.log 中成熟的 PITFALL/DECISION → 按 vault 摄取流程沉淀（`save_inbox_draft` 或直写 私有笔记库）→ 在 INDEX.md 蒸馏登记节标注 `私有笔记库`（用 `私有笔记库` 前缀说明性文字，不写 私有笔记库 wikilink，避免跨库断链）。
+- WORKMEMORY 只存**状态与轨迹**；vault（本机知识库，不随仓库分发）只存**规范与结论**。
+- 会话收尾（`/dfs-save` 或 agent 主动判定）时：work.log 中成熟的 PITFALL/DECISION → 按 vault 摄取流程沉淀（`save_inbox_draft` 或直写 私有笔记库）→ 在 INDEX-topics.md 蒸馏登记节标注 `私有笔记库`（用 `私有笔记库` 前缀说明性文字，不写 私有笔记库 wikilink，避免跨库断链）。
 - 反向：vault 规范更新若影响本项目工作方式，当前 agent 记一条 `NOTE` 指向 vault 路径。
 
 ## 7. 多机 / 云同步附录（默认不启用）
