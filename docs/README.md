@@ -14,7 +14,7 @@
 | `reviews/` | 审计 / 评审报告（一次性、带日期；分类导引见 `reviews/README.md`） | — |
 | `research/` | **可复用技术调研**（设计经验、外部产品对标、交互动效与排版实测、独立原型与模板） | 无归档层（调研经验长期有效） |
 | `agents/` | 面向 agent 的常青文档：`architecture.md`（架构与跨端契约）、`ops.md`（运维）、`ci-speed-budget.md`（CI 闸门成本/并发预算）、以及需人工/agent 逐项填写的复测清单 | — |
-| 顶层 `*.md` | 跨领域的常青规范：`design-system.md`（设计系统；token / 排印现值以 `static/css/tokens.css` 为准）、`svg-character-spec.md`（角色 SVG 规格）、`USER_GUIDE.md`（面向最终用户的操作说明书，软著申报材料之一） | — |
+| 顶层 `*.md` | 跨领域的常青规范：`design-system.md`（设计系统；token / 排印现值以 `static/css/tokens.css` 为准）、`svg-character-spec.md`（角色 SVG 规格）、`USER_GUIDE.md`（面向最终用户的操作说明书，软著申报材料之一）、`soft-copyright-source-index.md`（软著申报源代码鉴别材料清单，长期有效） | — |
 
 ## 放置规则（速查）
 

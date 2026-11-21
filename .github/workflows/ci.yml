@@ -725,6 +725,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          # PR net-diff 闸要 `git diff base.sha..head.sha`；shallow clone 取不到 base 对象 ⇒ exit 128
+          # （PR #415 实测）。全深度只加在本 job，不影响其他分片。
+          fetch-depth: 0
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v7
