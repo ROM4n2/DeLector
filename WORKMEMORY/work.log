@@ -105,7 +105,7 @@ TODO-CI-02 卡死调查：本轮未复现，证据缺口与常驻采样器。
 ### 2026-11-21 16:26 | tencent-hunyuan-hy__codebuddy | DECISION
 Caps: filesystem-read, filesystem-write, shell-exec, web-fetch
 本轮软著补充只做四份仓库内 Markdown/声明文档（Task 1~4）；Word 提交件与 skill 的 DOCX/TXT 生成暂缓，以后另开计划说明。Why: 用户 2026-11-21 裁决；本机 OfficeCLI 1.0.151 与 Playwright CLI 0.1.20 均不在 PATH，生成 DOCX 需用户确认全局安装并重启 Codex，四份仓库文档不依赖这些产物，切新会话即可开工。
-交接（新会话入口）：计划 docs/plans/2026-11-21-soft-copyright-readiness.md（4 个 Task 的 Produces/Scaffold/Step Breakdown + Skill Contract + Deferred Gap Register）；台账 .vault-exec-ledger.json 已重初始化为该计划、4 Task 全 PENDING、0/4（旧台账是 2026-11-13 repo-health 的 16/16，已覆盖）。用 <dfs-exec>/scripts/vault_exec_state.py --workdir d:/Code/DeLector resume 取下一个任务；Task 1 为 AFK，Task 2/3/4 为 HITL 需先拿用户答复（权利人主体、口径方案、页数细则）。
+交接（新会话入口）：计划 docs/plans/2026-11-21-soft-copyright-readiness.md（4 个 Task 的 Produces/Scaffold/Step Breakdown + Skill Contract + Deferred Gap Register）；台账 .vault-exec-ledger.json 已重初始化为该计划、4 Task 全 PENDING、0/4（旧台账是 2026-11-13 repo-health 的 16/16，已覆盖）。用 <dfs-exec>/scripts/vault_exec_state.py --workdir <repo> resume 取下一个任务；Task 1 为 AFK，Task 2/3/4 为 HITL 需先拿用户答复（权利人主体、口径方案、页数细则）。
 新事实：项目级安装 software-copyright-materials v2.6 到 .agents/skills/（已 gitignore，CodeBuddy/Claude Code 为软链）；本地把 SKILL.md 484→142 行，32/32 测试通过、quick_validate exit 0；安装报 Gen High Risk（仅 Gen Agent，Socket 0 alerts / Snyk Low Risk），脚本未改。
 不做：不跑全量 pytest、不改 README 徽章数字、不生成 Word/DOCX、不启用 Playwright 自动截图、不改写 work.log 历史事件正文。
 
@@ -118,3 +118,7 @@ Caps: filesystem-read, filesystem-write, shell-exec, web-fetch
 - Task 4（docs/source-index，dcc6ef8）：通用前后各 30 页源码鉴别清单，30 路径 + 16 ADR 编号逐个存在性核验通过；排除 android 7797 py / 7379 pyc 第三方运行时。
 验证：task1 修复后 docs 布局闸 30 passed + release docs exit 0 + writer_mobile/ADR 守卫 60 passed；全程只对点测试，未跑全量 pytest（守 2026-11-13 裁决）。未改 README 徽章数字、未生成 Word/DOCX、未启 Playwright 自动截图。
 台账 .vault-exec-ledger.json 4/4 COMPLETED。Deviation Table 见计划文档。下一步：4 个分支逐一开 PR 合入 master（features-current 依赖 user-guide，须 user-guide 先合），不 push 长轮询。
+
+### 2026-11-21 17:20 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+隐私占位化留痕（不改事件事实）：本执行链前置 DECISION 事件（16:26）的 `--workdir` 参数含本机绝对路径（工作区根），触发仓库卫生闸 ABS_PATH 棘轮（58→59）⇒ master 合入闸红。按 PROTOCOL §1.6「禁止敏感信息」，把该参数路径占位化为 `<repo>`——只改路径写法，事件的所有事实与语义不变（本 NOTE 亦不重录该字面量，否则计数又被顶回）。基线 data/repo_hygiene.json 未动，ABS_PATH|WORKMEMORY 回到 58/58；check_repo_hygiene 的 --all 与 --ratchet-guard 均 exit 0。Why: 棘轮闸禁止抬基线来容纳新路径，而隐私要求本机路径不得入库。How to apply: 此类「事件里含本机绝对路径」一律占位化并留 NOTE，不改基线、不改事件结论，且 NOTE 自身不得复述该字面量。
