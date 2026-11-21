@@ -183,6 +183,26 @@ def test_readme_first_screen_images_exist():
         assert img.stat().st_size > 1024, f"截图疑似空文件/占位图（<1KB）：{ref}"
 
 
+def test_user_guide_images_exist():
+    """用户操作说明书必须存在，且其中引用的每张截图都真实在库。
+
+    USER_GUIDE.md 是软著申报的说明书材料：图片链接失效不会让构建报错，只会让
+    提交材料裂图，与 README 首屏截图同类静默腐烂。断言说明书存在、至少引用一张
+    截图、每张引用文件存在且非空；「至少一张」防止说明书或截图区块被整块删掉后
+    守卫假绿。文件在测试内部读取——模块导入期读取会让整模块在 RED 阶段收集失败，
+    掩盖真正要红的那一测。
+    """
+    guide_path = ROOT / "docs" / "USER_GUIDE.md"
+    assert guide_path.is_file(), "用户操作说明书 docs/USER_GUIDE.md 不存在：软著说明书材料缺失"
+    guide = guide_path.read_text(encoding="utf-8")
+    refs = re.findall(r'<img src="(docs/images/[^"]+)"', guide)
+    assert len(refs) >= 1, "USER_GUIDE.md 未引用任何截图：说明书缺少界面呈现材料"
+    for ref in refs:
+        img = ROOT / ref
+        assert img.is_file(), f"USER_GUIDE.md 引用的截图不存在：{ref}"
+        assert img.stat().st_size > 1024, f"截图疑似空文件/占位图（<1KB）：{ref}"
+
+
 def test_android_reunpacks_static_assets_on_version_change():
     """APK 覆盖安装不清 getFilesDir()，而 copyAssetFile() 见目标已存在就跳过，
     于是升级后旧前端永远不被覆盖 —— 只有卸载重装才好（v4.4.5 修的就是这个）。
