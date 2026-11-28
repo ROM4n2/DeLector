@@ -1,0 +1,199 @@
+#!/usr/bin/env bash
+#
+# 提交前扫描暂存内容里的密钥。
+#
+# 为什么扫"暂存文件全文"而不只扫 diff 新增行：按行 diff 会漏掉"把含密钥的行
+# 从一个文件挪到另一个文件"这类改动。本仓库历史已确认干净（2026-08-19 全量扫过
+# 可达提交与 git fsck 悬空对象），所以全文扫描不会带出历史遗留的噪声。
+#
+# 启用方式（clone 后必做一次，钩子目录不随 clone 生效）：
+#   git config core.hooksPath .githooks
+#
+# 误报处理：在该行加注释 `delector:allow-secret`，让豁免留在 diff 里可被审阅。
+# 不要用 `git commit --no-verify` 整体跳过。
+#
+# 用 bash 而非 sh：依赖 `read -d ''` 处理含空格的文件名。
+#
+# 性能（2026-08-30 优化）：原先对每个暂存文件 × 每条模式各起一条
+# printf|grep|grep|cut 管道——Windows Git Bash 下进程派生昂贵，19 个文件
+# 要派生近千个子进程，单文件 >30s。现改为：每文件 `git show` 只落盘一次到
+# 临时文件，一次 grep 带全部 -e 模式做「是否命中」判定；仅当确有命中行时才
+# 逐模式回查标签（正常提交 0 命中，该路径不触发）。拦截规则、豁免语义与输出
+# 格式与原版完全一致；顺带修正：原版经 shell 变量转存内容会截断 NUL 字节，
+# 使二进制文件的 grep -I 跳过失效，现直接对原始字节流扫描。
+
+set -u
+
+PRAGMA='delector:allow-secret'
+HITS="$(mktemp)"
+RAW_TMP="$(mktemp)"
+trap 'rm -f "$HITS" "$RAW_TMP"' EXIT
+
+# 每项为 "名称|正则"。正则是 POSIX ERE（grep -E），\d、\w 之类不可用。
+#
+# keystore 那两条 base64 magic 把首字母写成字符组（`[O]`）或转义（`\+`），
+# 是为了让正则不匹配自己这行 —— 否则本钩子一提交就自我拦截，
+# 而 PATTERNS 在引号内，加不了 delector:allow-secret 豁免注释。
+PATTERNS='OpenAI/Anthropic 风格 key|sk-[A-Za-z0-9]{20,}
+AWS Access Key ID|AKIA[A-Z0-9]{16}
+GitHub PAT (classic)|ghp_[A-Za-z0-9]{36}
+GitHub PAT (fine-grained)|github_pat_[A-Za-z0-9_]{20,}
+Google API Key|AIza[A-Za-z0-9_-]{30,}
+Slack token|xox[baprs]-[A-Za-z0-9-]{10,}
+JWT|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}
+私钥 PEM 块|-----BEGIN [A-Z ]*PRIVATE KEY-----
+Java keystore 的 base64 (JKS)|/u3\+7Q
+Java keystore 的 base64 (JCEKS)|zs7[O]z'
+
+# PATTERNS 是静态常量：把全部模式预组装成一组 -e 参数，供组合 grep 使用。
+GREP_ARGS=()
+while IFS='|' read -r label regex; do
+    [ -n "${regex:-}" ] || continue
+    GREP_ARGS+=(-e "$regex")
+done <<< "$PATTERNS"
+
+while IFS= read -r -d '' path; do
+    case "$path" in
+        *.example|*.sample|*.template) ;;
+        .env|*/.env|*.secret|*credentials*|*.pem|*.key|*id_rsa*|*id_ed25519*)
+            printf 'NAME\t%s\t密钥文件不应入库\n' "$path" >> "$HITS"
+            ;;
+    esac
+
+    # 安卓签名材料单列一条：泄露 = 任何人都能签出冒充本 App 的更新包。
+    case "$path" in
+        *.jks|*.jks.b64|*.keystore|*.p12|*.pfx|signing.properties|*/signing.properties|keystore.properties|*/keystore.properties)
+            printf 'NAME\t%s\t签名 keystore 不应入库\n' "$path" >> "$HITS"
+            ;;
+    esac
+
+    # 文件可能在暂存后被删；取不到内容就跳过。原始字节落临时文件一次，
+    # 后续 magic 头、模式扫描、PKCS12 检测全部复用这份拷贝。
+    if ! git show ":$path" > "$RAW_TMP" 2>/dev/null; then
+        continue
+    fi
+
+    # 按文件头再认一次 keystore：下面的内容扫描用 grep -I 跳过二进制，
+    # 而文件名黑名单改个后缀就能绕开 —— 二者都拦不住 `cp x.jks assets/blob.bin`。
+    # PKCS12 那条不能只认 `3082`（任何 DER 都是），要连上 `020103`
+    # （PKCS12 的 version INTEGER 3），否则公开的 .der 证书会被误拦，
+    # 而文件名类命中没有 delector:allow-secret 豁免路径、只能改名绕开。
+    magic="$(head -c 7 "$RAW_TMP" | od -An -tx1 | tr -d ' \n')"
+    case "$magic" in
+        feedfeed*|cececece*|3082????020103)
+            printf 'NAME\t%s\tkeystore（按文件头认出）不应入库\n' "$path" >> "$HITS"
+            ;;
+    esac
+
+    # 组合判定：一次 grep 带全部 -e 模式（必须用 -e 传正则——PEM 那条以 "-"
+    # 开头，作为位置参数会被 grep 当成选项，于是私钥永远检不出来）。
+    # grep -I 跳过二进制内容；命中行先过 delector:allow-secret 豁免。
+    matched_lines="$(grep -nIE "${GREP_ARGS[@]}" "$RAW_TMP" 2>/dev/null \
+        | grep -v -- "$PRAGMA" \
+        | cut -d: -f1)"
+
+    # 罕见路径：确有命中行时才逐模式回查标签，保持逐条 LINE 报告。
+    # 只报位置与类型，不回显密钥本身——钩子输出会进终端记录和 CI 日志。
+    if [ -n "$matched_lines" ]; then
+        while IFS='|' read -r label regex; do
+            [ -n "${regex:-}" ] || continue
+            printf '%s\n' "$matched_lines" | while IFS= read -r lineno; do
+                if sed -n "${lineno}p" "$RAW_TMP" | grep -qE -e "$regex" 2>/dev/null; then
+                    printf 'LINE\t%s:%s\t%s\n' "$path" "$lineno" "$label" >> "$HITS"
+                fi
+            done
+        done <<< "$PATTERNS"
+    fi
+
+    # ── PKCS12 Base64 内容检测（最小充分判定；不靠通用 MII 前缀） ──
+    # 单纯 MII... 太通用（公开证书也是），必须解码后命中 PKCS12 文件头才算。
+    # 复用主链的白名单与行内豁免：.example/.sample/.template 整体跳过，
+    # 含 delector:allow-secret 的行先过滤。
+    case "$path" in
+        *.example|*.sample|*.template) ;;
+        *)
+            filtered_b64="$(grep -v -- "$PRAGMA" "$RAW_TMP" | tr -d '\r\n\t ' || true)"
+            if printf '%s' "$filtered_b64" | grep -qE 'MII[A-Za-z0-9+/]{200,}' 2>/dev/null; then
+                _hit=1
+                for py in python python3; do
+                    if printf '%s' "$filtered_b64" | "$py" -c '
+import sys, base64, re
+data = sys.stdin.read()
+for m in re.finditer(r"MII[A-Za-z0-9+/]{200,}={0,2}", data):
+    s = m.group(0)
+    try:
+        padded = s + "=" * (-len(s) % 4)
+        raw = base64.b64decode(padded, validate=False)
+    except Exception:
+        continue
+    if len(raw) >= 7 and raw[0]==0x30 and raw[1]==0x82 and raw[4]==0x02 and raw[5]==0x01 and raw[6]==0x03:
+        sys.exit(0)
+sys.exit(1)
+' 2>/dev/null; then
+                        _hit=0
+                        break
+                    fi
+                done
+                if [ "$_hit" -eq 0 ]; then
+                    printf 'LINE\t%s:1\tPKCS12 Base64 内容疑似 keystore（解码后命中 PKCS12 头）\n' "$path" >> "$HITS"
+                fi
+            fi
+            ;;
+    esac
+done < <(git diff --cached --name-only --diff-filter=ACM -z)
+
+if [ -s "$HITS" ]; then
+    printf '\n[pre-commit] 检测到疑似密钥/密钥文件，提交已阻止：\n\n'
+    while IFS=$'\t' read -r _kind where what; do
+        printf '  %-26s %s\n' "$what" "$where"
+    done < "$HITS"
+    cat <<'EOF'
+
+处理方式：
+  1. 密钥走环境变量或已被 .gitignore 忽略的本地配置，不要硬编码；
+  2. 若确认是占位符/测试数据造成的误报，在该行加注释 delector:allow-secret；
+  3. 若密钥已经推送过，删文件或改历史都消不掉——必须立即轮换该密钥。
+
+不要用 git commit --no-verify 跳过本检查。
+EOF
+    exit 1
+fi
+
+# ── 仓库门禁（dfs-bootstrap，2026-11-16 接线）────────────────────────────────
+# 两段门禁在密钥扫描通过后运行，都是 stdlib-only，不改上面的扫描语义、
+# delector:allow-secret 豁免，也不动 core.hooksPath（本机链在 .git/local-hooks）。
+#
+# hygiene：只读暂存 blob，默认阈值下本仓库的暂存面是干净的 ⇒ 阻断有效（秒级）。
+# structure：整图分析约 8 秒，权威执行已迁到 CI（static-invariants job 的 --all +
+#   --ratchet-guard，接线由 test_ci_dfs_gate_wiring.py 钉死）。本地默认不跑，
+#   设 DFS_STRUCTURE_LOCAL=1 可在提交前即时看到结果——每次 Python 提交都等 8 秒
+#   会训练出 --no-verify 习惯（skill 明令勿 day-one red）。
+PY_BIN=""
+for cand in .venv/Scripts/python.exe .venv/bin/python; do
+    if [ -x "$cand" ]; then PY_BIN="$cand"; break; fi
+done
+[ -n "$PY_BIN" ] || PY_BIN="$(command -v python3 2>/dev/null || command -v python 2>/dev/null || true)"
+
+if [ -n "$PY_BIN" ]; then
+    if [ -f scripts/check_repo_hygiene.py ]; then
+        hygiene_out="$("$PY_BIN" -B scripts/check_repo_hygiene.py --staged 2>&1)"
+        if [ $? -ne 0 ]; then
+            printf '%s\n' "$hygiene_out" >&2
+            printf '[pre-commit] 仓库卫生门禁未通过 ⇒ 阻断\n' >&2
+            exit 1
+        fi
+    fi
+
+    if [ "${DFS_STRUCTURE_LOCAL:-0}" = "1" ] && \
+       [ -f scripts/check_repo_structure.py ] && \
+       [ -n "$(git diff --cached --name-only --diff-filter=ACMR -- '*.py')" ]; then
+        structure_out="$("$PY_BIN" -B scripts/check_repo_structure.py --all 2>&1)"
+        if [ $? -ne 0 ]; then
+            printf '%s\n' "$structure_out" >&2
+            printf '[pre-commit] 结构门禁未通过（DFS_STRUCTURE_LOCAL=1）⇒ 阻断\n' >&2
+            exit 1
+        fi
+    fi
+fi
+
+exit 0
