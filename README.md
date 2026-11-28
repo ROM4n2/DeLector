@@ -84,7 +84,6 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 
 | 需要什么 | 去哪 |
 | --- | --- |
-| 项目状态 / 红线 / 待办 | `WORKMEMORY/PROJECT_OVERVIEW.md` |
 | AI Agent 入口（纯路由） | `AGENTS.md` |
 | 产品特性全览 | `FEATURES.md` |
 | 架构细节（技术栈 / NLP / DB / API / 前端拓扑） | `docs/agents/architecture.md` |
@@ -182,7 +181,6 @@ DeLector/
 ├── tests/             # 自动化测试套件：194 个 test_*.py + 行为探针与迁移哨兵
 ├── tools/             # 架构与视觉守卫工具链（契约/分层/同步/静默降级/视觉/工作台闸）+ 构建装配工具
 ├── docs/              # 仓库文档中枢：agents/(架构·运维) · specs/(设计) · plans/archive/(已归档计划) · adr/ · reviews/
-├── WORKMEMORY/        # 共享工作记忆系统：PROJECT_OVERVIEW.md · work.log · PROTOCOL.md
 ├── start.py           # 跨平台智能启动脚本（Android 回环 / 桌面 0.0.0.0）
 ├── desktop.py         # Windows 原生桌面壳（pywebview + 托盘 + splash）
 ├── package_windows.py # Windows 绿色免安装便携版打包脚本
