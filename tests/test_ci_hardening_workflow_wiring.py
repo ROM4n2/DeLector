@@ -714,6 +714,86 @@ def test_main_warns_through_on_unavailable_refs(tmp_path: Path, monkeypatch: pyt
     assert module.main(["--base", "deadbeef0000", "--head", "HEAD"]) == 2
 
 
+def _make_two_deletion_repo(tmp_path: Path) -> Path:
+    """临时 git 仓库：base 有两个可删文件，head 同时删掉它们并改另一个文件。"""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    def _git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=str(repo), capture_output=True, check=True)
+
+    _git("init", "-q")
+    _git("config", "user.email", "t@t.t")
+    _git("config", "user.name", "t")
+    for name in ("will_delete.txt", "also_delete.txt", "keep.txt"):
+        (repo / name).write_text("base\n", encoding="utf-8")
+    _git("add", ".")
+    _git("commit", "-qm", "base")
+
+    (repo / "will_delete.txt").unlink()
+    (repo / "also_delete.txt").unlink()
+    (repo / "keep.txt").write_text("head\n", encoding="utf-8")
+    _git("add", "-A")
+    _git("commit", "-qm", "head deletes two")
+    return repo
+
+
+def _write_deletion_allowlist(repo: Path, entries: list[dict[str, str]]) -> None:
+    scripts = repo / "scripts"
+    scripts.mkdir(exist_ok=True)
+    (scripts / "pr_no_regression_allowlist.json").write_text(
+        json.dumps({"version": "1.0.0", "entries": entries}), encoding="utf-8"
+    )
+
+
+def test_main_allows_documented_deletions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """登记在册且带理由的两处删除放行，理由逐条打印（fail-loud 透明）。"""
+    module = _load_no_deletion_module()
+    repo = _make_two_deletion_repo(tmp_path)
+    _write_deletion_allowlist(
+        repo,
+        [
+            {"path": "will_delete.txt", "reason": "有意删除 A"},
+            {"path": "also_delete.txt", "reason": "有意删除 B"},
+        ],
+    )
+    monkeypatch.chdir(repo)
+    assert module.main(["--base", "HEAD~1", "--head", "HEAD"]) == 0
+    out = capsys.readouterr().out
+    assert "有意删除 A" in out and "有意删除 B" in out
+
+
+def test_main_still_blocks_undocumented_deletion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """白名单只放行登记项；漏登记的另一处删除必须仍红（不是全局绕过开关）。"""
+    module = _load_no_deletion_module()
+    repo = _make_two_deletion_repo(tmp_path)
+    _write_deletion_allowlist(repo, [{"path": "will_delete.txt", "reason": "有意删除 A"}])
+    monkeypatch.chdir(repo)
+    assert module.main(["--base", "HEAD~1", "--head", "HEAD"]) == 1
+    out = capsys.readouterr().out
+    assert "undocumented path(s)" in out and "also_delete.txt" in out
+    assert "will_delete.txt ::" in out
+
+
+def test_main_config_error_on_empty_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """白名单条目理由为空 ⇒ exit 2 配置错误，不放行也不裸崩。"""
+    module = _load_no_deletion_module()
+    repo = _make_two_deletion_repo(tmp_path)
+    _write_deletion_allowlist(repo, [{"path": "will_delete.txt", "reason": "  "}])
+    monkeypatch.chdir(repo)
+    assert module.main(["--base", "HEAD~1", "--head", "HEAD"]) == 2
+
+
 def test_static_invariants_checkout_fetches_full_depth_for_pr_diff() -> None:
     """PR net-diff 闸需要 base.sha 对象；static-invariants 的 checkout 必须 fetch-depth: 0。
 

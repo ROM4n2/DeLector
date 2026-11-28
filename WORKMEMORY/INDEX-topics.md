@@ -23,7 +23,7 @@
 | **2026 年 11 月上旬**（v5.20.0~v5.22.0 六次发版 / ADR-0025~0030 决策链 / 伴学 Agent 双内核与多动作 HITL / Android spaCy 主路径定案 / 前端去 Emoji 与动效生机 / 视觉回归基建 / 存量重算 3.6.0） | **`cold/digest-2026-11.md`**（COLD 层蒸馏；覆盖 2026-10-31 ~ 11-08） |
 | 2026-09-28 起（Docker/WAL 修复、ADR-0016 统一池 Phase 3 等，未发版）        | `work.log`（HOT；09-28 起的记录缺口由 10-02 的 2 条 `NOTE(gap-backfill-1/2)` 补记；细节见 `docs/reviews/2026-09-28-swarm-audit-master.md`） |
 | **2026-11-11~11-13**（v5.23.1~v5.23.5 五次修复发版 / Windows 安装器与独立 CI job / 门禁与 CI 职责分离 / 公开仓私有路径清理 #377） | `archive/work-2026-11-11.log` · `archive/work-2026-11-12.log` · `archive/work-2026-11-13.log` |
-| **2026-11-17**（dfs-bootstrap 门禁 v3→v4 #387 / 5 个 agent 配置收敛到单真值 #388 / 技能自身分块重构） | `work.log`（HOT；同日两条 `NOTE`） |
+| **2026-11-17**（dfs-bootstrap 门禁 v3→v4 #387 / 5 个 agent 配置收敛到单真值 #388 / 技能自身分块重构） | `archive/work-2026-11-17.log`（WARM；14:20 NOTE 于 2026-11-28 轮转）· `work.log`（HOT；同日剩余 3 条） |
 | ADR-0023 交互层「验证驱动 agent 循环」Task 0~6（Go 门禁三红灯 / LLM 收口 / 循环内核 / 工具白名单 / 契约+前端） | `archive/work-2026-10-14.log` · `work.log`（10-15~10-16 段）· 计划正本 `docs/plans/2026-10-14-interactive-agent-loop.md` · PR #136 |
 | Fog 清空（2/3/4）+ v5.16.0 发版 + search 高亮递延项（2026-10-06）            | `archive/work-2026-10-06.log`（2026-10-16 WARM 化） |
 | ADR-0017 Android 更新可见性（/dfs-grill）+ 实施（2026-10-08）                | `archive/work-2026-10-08.log` · `work.log`（10-08 11:12 EXEC 那条） |
