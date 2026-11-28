@@ -1,11 +1,3 @@
-### 2026-11-17 14:20 | codebuddy-deepseek | NOTE
-Caps: filesystem-read, filesystem-write, shell-exec, git
-跑 `dfs-bootstrap`（owner 模式）收敛仓库与本机技能模板的漂移，分支 `chore/hygiene-gate-v4`。
-- **门禁升级 v3 → v4**（`scripts/check_repo_hygiene.py`）：v4 相对 v3 纯增量——新增 `--no-git` 文件系统遍历模式（非 git 树自审），`--staged`/`--ratchet-guard` 与之互斥时直接 CLI 报错；git 路径的审计语义未变（`check_gitattributes_pins` 仅在 `no_git` 时跳过）。升级由 bootstrap 的印记机制自动完成（`.dfsbak` 本地留档后已删，v3 在 git 历史里可回取）。
-- **未采纳：AGENTS.md 追加 DFS 规则锚点**。技能的 `rule_anchor_text()` 会写入 `$WIKI_PATH/AGENTS.md`、`$WIKI_PATH/99-Inbox/`；这与 `5102465`（PR #377）的公开仓隐私决定直接冲突——那次正是把这些私有目录路径从 5 个 agent 配置文件里清掉的。改为保留现有中性表述（AGENTS.md 路由行 + CLAUDE.md §工程规范与本机知识库），并把追加的 176 字节回退。
-- **未动**：`.githooks/pre-commit` 是项目自有钩子（无 DFS 版本印记），doctor 报 EOL 检查 / upstream chain 两项能力缺口；`scripts/check_repo_structure.py` 同为项目自有版，均按技能约定不覆盖。
-- **校验**（本机实测）：`check_repo_hygiene.py --all` exit 0（1008 files，11 桶基线）、`--ratchet-guard` exit 0；`check_repo_structure.py --all` exit 0（492 modules）、`--ratchet-guard` exit 0；`ruff check scripts/check_repo_hygiene.py` clean；`pytest tests/test_ci_hardening_workflow_wiring.py tests/test_source_hygiene.py` 27 passed。
-
 ### 2026-11-17 14:55 | codebuddy-deepseek | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec, git
 按用户裁决把根目录 5 个 agent 配置文件收敛到 dfs-bootstrap 最新规范，分支 `chore/agent-config-convergence`。
@@ -118,3 +110,7 @@ Caps: filesystem-read, filesystem-write, shell-exec
 ### 2026-11-28 13:30 | tencent-hunyuan-hy__codebuddy | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 PR #423 全绿经授权合并；首次 gh pr merge 遇 GraphQL EOF，原样重试成功。master 到 3b958bf，开放 PR 归零。How to apply: REST EOF 先原样重试一次再考虑 no-ff fallback。
+
+### 2026-11-28 13:35 | tencent-hunyuan-hy__codebuddy | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec
+用户裁决（选项 2）：软著专属计划与源码清单移出公开 GitHub 仓，备份到 gitignored 的 软件著作权申请资料/仓库移出文档/；保留 docs/USER_GUIDE.md 作为产品文档、README/LICENSE 的公开署名不变。落地分支 docs/soft-copyright-private-move：git rm 两份文档，同步 docs/README.md 顶层登记与 tools/check_docs_layout.py TOP_LEVEL_FILES，并把 USER_GUIDE 守卫文案去软著化。Why: 公开远端不应承载申报材料。How to apply: 后续软著材料只留本地/私有仓；新增软著相关文档前先确认可公开性；合并走 PR，不擅自改 master。核验：docs-layout 静态闸 exit 0、test_docs_layout_gate 12 passed、USER_GUIDE 守卫 1 passed、ruff/mypy 两档与发布文档闸全绿。

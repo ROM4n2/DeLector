@@ -56,8 +56,7 @@ TOP_LEVEL_DIRS: frozenset[str] = frozenset(
 
 #: docs/README.md §分层 列出的顶层 *.md（README.md 自身是索引，不再要求登记）。
 TOP_LEVEL_FILES: frozenset[str] = frozenset(
-    {"README.md", "design-system.md", "svg-character-spec.md", "USER_GUIDE.md",
-     "soft-copyright-source-index.md"}
+    {"README.md", "design-system.md", "svg-character-spec.md", "USER_GUIDE.md"}
 )
 
 #: docs/README.md §分层 的命名式（逐条对应，别在这里“放宽”）。
