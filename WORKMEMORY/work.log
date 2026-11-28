@@ -114,3 +114,7 @@ Caps: filesystem-read, filesystem-write, shell-exec
 ### 2026-11-28 13:27 | tencent-hunyuan-hy__codebuddy | WORK_END
 Caps: filesystem-read, filesystem-write, shell-exec
 处理 5 个开放 dependabot PR。master 同步到 6aff7d4。绿灯 #418/#419/#422（typer/annotated-doc/smart-open）逐个 uv dry-run exit=0 后合并，master 到 d60056c。红灯 #420/#421（pydantic-core 2.50.5、pydantic 2.14.4）CI 日志确认系 lock 第 50/51 行精确 pin 成对锁定致 ResolutionImpossible，带说明关闭；开分支成对升（9eb653a），dry-run exit=0，开 PR #423（CI pending，未轮询未合并）。Why: 单包升级不做整体求解。How to apply: pydantic 系升级须成对改 lock + dry-run，CI 绿且用户明确授权才合。
+
+### 2026-11-28 13:30 | tencent-hunyuan-hy__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+PR #423 全绿经授权合并；首次 gh pr merge 遇 GraphQL EOF，原样重试成功。master 到 3b958bf，开放 PR 归零。How to apply: REST EOF 先原样重试一次再考虑 no-ff fallback。
