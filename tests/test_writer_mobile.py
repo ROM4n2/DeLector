@@ -186,14 +186,14 @@ def test_readme_first_screen_images_exist():
 def test_user_guide_images_exist():
     """用户操作说明书必须存在，且其中引用的每张截图都真实在库。
 
-    USER_GUIDE.md 是软著申报的说明书材料：图片链接失效不会让构建报错，只会让
-    提交材料裂图，与 README 首屏截图同类静默腐烂。断言说明书存在、至少引用一张
+    USER_GUIDE.md 是面向最终用户的操作说明书：图片链接失效不会让构建报错，只会让
+    文档裂图，与 README 首屏截图同类静默腐烂。断言说明书存在、至少引用一张
     截图、每张引用文件存在且非空；「至少一张」防止说明书或截图区块被整块删掉后
     守卫假绿。文件在测试内部读取——模块导入期读取会让整模块在 RED 阶段收集失败，
     掩盖真正要红的那一测。
     """
     guide_path = ROOT / "docs" / "USER_GUIDE.md"
-    assert guide_path.is_file(), "用户操作说明书 docs/USER_GUIDE.md 不存在：软著说明书材料缺失"
+    assert guide_path.is_file(), "用户操作说明书 docs/USER_GUIDE.md 不存在"
     guide = guide_path.read_text(encoding="utf-8")
     refs = re.findall(r'<img src="(docs/images/[^"]+)"', guide)
     assert len(refs) >= 1, "USER_GUIDE.md 未引用任何截图：说明书缺少界面呈现材料"
