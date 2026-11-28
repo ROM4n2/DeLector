@@ -3,18 +3,12 @@
 > **每次开新 agent 对话时，第一步必须读这个文件。** 本文件是 agent 的唯一入口与规则真值（`CLAUDE.md` / `GEMINI.md` 仅为指向本文件的指针）：
 > 项目状态、架构、惯例、待办全在下游文档——从这里重建完整 context 不超过 60 秒。
 
-## 共享工作记忆 (WORKMEMORY)
 
-- `AGENTS.md` 只记录稳定规则与事实；问题、决策、踩坑和交接优先写入 WORKMEMORY。
-- 非只读或涉及状态变更时，按 `WORKMEMORY/INDEX.md` 读 `PROJECT_OVERVIEW.md` 与 `work.log` 最新 ≤15 条事件；发现未闭合 WORK_START 先询问用户。
-- 工作中：决策/踩坑/交接 MUST 以 ≤4KB 事件追加 WORKMEMORY/work.log（schema 见 WORKMEMORY/PROTOCOL.md）。
-- 稳定经验再通过 `search_vault` / `dfs-save` 沉淀到知识库。
 
 ## 文档路由
 
 | 需要什么                                                                                                     | 去哪                                                                                                |
 | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| 当前状态 / 红线速查 / 开放待办 / 项目定位                                                                    | `WORKMEMORY/PROJECT_OVERVIEW.md`                                                                    |
 | 架构细节：技术栈 / NLP 降级 / Android 互锁 / DB schema / API 全览 / 前端拓扑 / LAN 同步 / FSRS / 完形 / 切句 | `docs/agents/architecture.md`                                                                       |
 | 安全守卫 / 本机环境 / 打包 / Agent 工作惯例                                                                  | `docs/agents/ops.md`                                                                                |
 | 视觉回归：截图矩阵 / computed-style 基线 / 颜色与对比度闸                                                    | `docs/agents/visual-regression.md`                                                                  |
@@ -24,7 +18,6 @@
 | 安全策略与漏洞报告                                                                                           | `SECURITY.md`                                                                                       |
 | 产品特性全览 / 设计与实施计划                                                                                | `FEATURES.md`；`docs/specs/`（设计稿）、`docs/plans/`（在途计划；已交付的进 `docs/plans/archive/`） |
 | 文档该放哪 / docs 目录约定（分层与归档规则）                                                                 | `docs/README.md`                                                                                    |
-| 本机知识库（规范 / 避坑 / 沉淀）                                                                             | 本机 MCP（`search_vault` / `save_inbox_draft`）或 `/dfs-save`；**仓库不含其路径与内容**             |
 | agent 规则入口                                                                                               | 唯一真值是本文件；`CLAUDE.md` / `GEMINI.md` 仅是指向本文件的指针，勿写第三份副本                     |
 
 ---

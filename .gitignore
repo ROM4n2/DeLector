@@ -88,25 +88,20 @@ keystore.properties
 
 # 本地 git worktree（隔离开发用，路径约定 `.worktrees/<name>`）。
 # 不忽略的话，一次 `git add -A` 会把整棵工作树当普通目录塞进来。
-.worktrees/
 
 # 临时调试脚本与开发沙盒（Scratchpad & Agent Caches）
 scratch/
 .workbuddy/
 
 # vault-exec 执行状态机（会话态，不入库）
-.vault-exec-ledger.json
 
 # CodeBuddy 代理数据目录（记忆/会话态，不入库）
 .codebuddy/
 
-# WORKMEMORY/ 是跨 agent 共享工作记忆，MUST 入库随 git 同步（PROTOCOL §7），勿加入忽略规则。
 agent/delector.exe
 agent/coverage*
 
 # 唯一例外：compact 现场快照由 PreCompact hook 自动追加（每次压缩一条，属工作态
-# 而非共享状态），入库只会制造持续 diff 噪音。WORKMEMORY/ 其余文件仍 MUST 入库。
-WORKMEMORY/session-snapshot.md
 
 # Sensitive credentials & secrets
 config.yaml
