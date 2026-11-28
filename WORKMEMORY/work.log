@@ -1,12 +1,3 @@
-### 2026-11-17 14:55 | codebuddy-deepseek | NOTE
-Caps: filesystem-read, filesystem-write, shell-exec, git
-按用户裁决把根目录 5 个 agent 配置文件收敛到 dfs-bootstrap 最新规范，分支 `chore/agent-config-convergence`。
-- **规范口径**（读 `bootstrap.py` 常量）：`AGENTS.md` = 唯一规则源；`CLAUDE.md` = `POINTER_BODY` 两行 `@AGENTS.md` 指针；`.agent-rules.md` / `.cursorrules` 属 `LEGACY_ALIAS_FILES`，脚本不再生成、只报「consider deleting」；`GEMINI.md` 属 `WM_ANCHOR_FILES`（append-only 注入 WORKMEMORY 锚点），仍保留。
-- **落地**：`CLAUDE.md` 改成与 `POINTER_BODY` 逐字一致的两行指针（dry-run 报 `[OK] CLAUDE.md is a 2-line @AGENTS.md pointer`）；删除 `.agent-rules.md` 与 `.cursorrules`（与 AGENTS.md 重复的副本，正是技能列为反模式的 rule duplication）；`GEMINI.md` 收成同样的两行指针，注释行保留 `WORKMEMORY/INDEX.md` 字样以命中 `WM_MARKER`，否则 bootstrap 每次都会往它重新追加 WORKMEMORY 段（会形成注入漂移环）。
-- **同步修引用**：`AGENTS.md` 头部「（同 CLAUDE.md 形态）」改成「唯一入口与规则真值（CLAUDE.md / GEMINI.md 为指针）」，路由表「工程规范与避坑检索（3 行锚点）→ CLAUDE.md / .agent-rules.md / .cursorrules」改成「agent 规则入口 → 唯一真值是本文件」。删文件不改引用就是漂移指针。`docs/reviews/`、`docs/plans/archive/`、`WORKMEMORY/cold/` 里的历史引用按惯例不动。
-- **校验**：`bootstrap --dry-run` 的 legacy alias 告警归零、CLAUDE.md 指针 OK；`check_repo_hygiene.py --all` exit 0（1008 files）；`pytest test_docs_layout_gate / test_source_hygiene / test_release_docs_gate` 25 passed；活跃文档（AGENTS/CLAUDE/GEMINI/docs/README/CONTRIBUTING/docs/agents）`.agent-rules|cursorrules` 零残留。
-- **下一步（用户指定）：修 skill 自身缺陷** —— `rule_anchor_text()` 把私有目录名写死成 `$WIKI_PATH/AGENTS.md` 与 `$WIKI_PATH/99-Inbox/`（`RULE_ANCHOR_TOKENS` 也依赖 `$WIKI_PATH/AGENTS.md` 字面量来判定锚点是否存在）。这对任何不自带私有 vault 目录结构（尤其公开仓）的仓库都是错的：要么 sink 目录可配置（参数/环境变量），要么改成不写目录名的中性表述，同时给 `has_rule_anchor()` 换一个与私有目录解耦的判据。本轮未改 skill。
-
 ### 2026-11-17 15:40 | codebuddy-deepseek | DECISION
 Caps: filesystem-read, filesystem-write, shell-exec, git
 `HOT_RETENTION_EVENTS` 50 → 15（用户裁决）并按新阈值轮转；技能模板同步改到 15。
@@ -118,3 +109,7 @@ Caps: filesystem-read, filesystem-write, shell-exec
 ### 2026-11-28 13:40 | tencent-hunyuan-hy__codebuddy | DECISION
 Caps: filesystem-read, filesystem-write, shell-exec
 PR #424 被 PR 净 diff 无删除闸拦下（有意删除两份软著文档）。为不关闭闸，给 scripts/check_pr_no_regression.py 增加 scripts/pr_no_regression_allowlist.json 显式删除登记：路径+理由，缺文件=零豁免、坏配置=exit 2、未登记删除仍红；本机用 origin/master..origin/docs/soft-copyright-private-move 复算 exit 0 并打印两条理由。Why: 有意移出公开仓需要可审计的放行通道，不能靠关闸或全局绕过。How to apply: 后续有意删除须先在白名单登记理由；机械闸仍拦一切未登记删除。
+
+### 2026-11-28 14:05 | tencent-hunyuan-hy__codebuddy | HANDOFF
+Caps: filesystem-read, filesystem-write, shell-exec
+软著推进到「本地私有草稿全套完成、Word 提交件暂缓」并交接。用户裁决：到此为止，不再生成 DOCX、不装 OfficeCLI。产物全在 gitignored 的 软件著作权申请资料/：环境检查/确认、analysis/project.json、草稿（业务理解+证据、代码前后各30页、申请表信息、8模块操作手册四轮自检 0 问题、各门禁确认）、正式资料/申请表信息.txt、截图（user-supplied 复用两张仓库真实截图）与 仓库移出文档（两份已从公开仓移出的软著文档备份）。申请表字段按用户确认：全称 DeLector · 德语欧标沉浸精读与考点剖析系统 / V5.24.2 / 完成与首发 2026-11-18 / 已发表 / 席皓宇自然人 / 源程序量 86726 / 页数 60；证件号未写入本地材料，留用户申报官网自填。Why: 公开仓不承载申报材料（用户 2026-11-28 裁决），本机快轨只出 Markdown/TXT。How to apply: 接手若需正式提交，先装全局 officecli 1.0.151 并重启 Codex，再从已确认草稿生成 Word 并做三轮验证；产物不得入库。本轮 work.log 轮转 1 条最老事件进 archive/work-2026-11-17.log，守恒对账零输出。
