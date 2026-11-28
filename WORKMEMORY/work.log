@@ -114,3 +114,7 @@ PR #423 全绿经授权合并；首次 gh pr merge 遇 GraphQL EOF，原样重�
 ### 2026-11-28 13:35 | tencent-hunyuan-hy__codebuddy | DECISION
 Caps: filesystem-read, filesystem-write, shell-exec
 用户裁决（选项 2）：软著专属计划与源码清单移出公开 GitHub 仓，备份到 gitignored 的 软件著作权申请资料/仓库移出文档/；保留 docs/USER_GUIDE.md 作为产品文档、README/LICENSE 的公开署名不变。落地分支 docs/soft-copyright-private-move：git rm 两份文档，同步 docs/README.md 顶层登记与 tools/check_docs_layout.py TOP_LEVEL_FILES，并把 USER_GUIDE 守卫文案去软著化。Why: 公开远端不应承载申报材料。How to apply: 后续软著材料只留本地/私有仓；新增软著相关文档前先确认可公开性；合并走 PR，不擅自改 master。核验：docs-layout 静态闸 exit 0、test_docs_layout_gate 12 passed、USER_GUIDE 守卫 1 passed、ruff/mypy 两档与发布文档闸全绿。
+
+### 2026-11-28 13:40 | tencent-hunyuan-hy__codebuddy | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec
+PR #424 被 PR 净 diff 无删除闸拦下（有意删除两份软著文档）。为不关闭闸，给 scripts/check_pr_no_regression.py 增加 scripts/pr_no_regression_allowlist.json 显式删除登记：路径+理由，缺文件=零豁免、坏配置=exit 2、未登记删除仍红；本机用 origin/master..origin/docs/soft-copyright-private-move 复算 exit 0 并打印两条理由。Why: 有意移出公开仓需要可审计的放行通道，不能靠关闸或全局绕过。How to apply: 后续有意删除须先在白名单登记理由；机械闸仍拦一切未登记删除。
